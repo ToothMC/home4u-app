@@ -10,7 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { AuthMenu } from "@/components/auth/AuthMenu";
-import { ListingCard } from "@/components/dashboard/ListingCard";
+import { ListingRow } from "@/components/dashboard/ListingRow";
+import { SearchRow } from "@/components/dashboard/SearchRow";
 import { MatchSections } from "@/components/dashboard/MatchSections";
 import { DashboardViewTabs } from "@/components/dashboard/DashboardViewTabs";
 import { getAuthUser } from "@/lib/supabase/auth";
@@ -34,7 +35,8 @@ export default async function DashboardPage({
 
   let listings: Listing[] = [];
   let profiles: SearchProfile[] = [];
-  const listingRequestCounts: Record<string, number> = {};
+  const listingRequestCounts: Record<string, number> = {}; // neu (offen)
+  const listingHandledCounts: Record<string, number> = {}; // bearbeitet
   const profileMatchCounts: Record<string, number> = {};
 
   if (supabase) {
@@ -57,19 +59,24 @@ export default async function DashboardPage({
     listings = (listingRes.data ?? []) as Listing[];
     profiles = (profileRes.data ?? []) as SearchProfile[];
 
-    // Anfragen pro Listing (seeker_interest=true)
+    // Anfragen pro Listing — getrennt nach neu (owner_decided_at IS NULL)
+    // und bearbeitet (owner_decided_at IS NOT NULL)
     if (listings.length > 0) {
+      const ids = listings.map((l) => l.id);
       const { data: matchRows } = await supabase
         .from("matches")
-        .select("listing_id")
-        .in(
-          "listing_id",
-          listings.map((l) => l.id)
-        )
+        .select("listing_id, owner_decided_at")
+        .in("listing_id", ids)
         .eq("seeker_interest", true);
       for (const m of matchRows ?? []) {
-        listingRequestCounts[m.listing_id] =
-          (listingRequestCounts[m.listing_id] ?? 0) + 1;
+        const key = m.listing_id as string;
+        listingRequestCounts[key] = listingRequestCounts[key] ?? 0;
+        listingHandledCounts[key] = listingHandledCounts[key] ?? 0;
+        if (m.owner_decided_at) {
+          listingHandledCounts[key] += 1;
+        } else {
+          listingRequestCounts[key] += 1;
+        }
       }
     }
 
@@ -134,7 +141,8 @@ export default async function DashboardPage({
         ) : (
           <ProviderView
             listings={listings}
-            requestCounts={listingRequestCounts}
+            newCounts={listingRequestCounts}
+            handledCounts={listingHandledCounts}
           />
         )}
 
@@ -180,45 +188,14 @@ function SeekerView({
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {profiles.map((p) => {
-            const count = matchCounts[p.id] ?? 0;
-            return (
-              <Card key={p.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-base">{p.location}</CardTitle>
-                    {count > 0 ? (
-                      <Link
-                        href="/chat"
-                        className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25"
-                        title="Sophie zeigt dir die passenden Inserate"
-                      >
-                        {count} passende Inserate →
-                      </Link>
-                    ) : (
-                      <span className="text-[10px] text-[var(--muted-foreground)]">
-                        0 Treffer
-                      </span>
-                    )}
-                  </div>
-                  <CardDescription className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                    {p.rooms ? <span>{p.rooms} Zimmer</span> : null}
-                    {p.budget_max ? (
-                      <span>
-                        bis {Number(p.budget_max).toLocaleString("de-DE")} €
-                      </span>
-                    ) : null}
-                    {p.move_in_date ? <span>ab {p.move_in_date}</span> : null}
-                    {p.household ? <span>{p.household}</span> : null}
-                    <span className="uppercase tracking-wider text-[10px]">
-                      {p.active ? "aktiv" : "pausiert"}
-                    </span>
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            );
-          })}
+        <div className="space-y-2">
+          {profiles.map((p) => (
+            <SearchRow
+              key={p.id}
+              profile={p}
+              matchCount={matchCounts[p.id] ?? 0}
+            />
+          ))}
         </div>
       )}
     </section>
@@ -227,10 +204,12 @@ function SeekerView({
 
 function ProviderView({
   listings,
-  requestCounts,
+  newCounts,
+  handledCounts,
 }: {
   listings: Listing[];
-  requestCounts: Record<string, number>;
+  newCounts: Record<string, number>;
+  handledCounts: Record<string, number>;
 }) {
   return (
     <section className="mt-6">
@@ -251,12 +230,13 @@ function ProviderView({
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {listings.map((l) => (
-            <ListingCard
+            <ListingRow
               key={l.id}
               listing={l}
-              requestCount={requestCounts[l.id] ?? 0}
+              newCount={newCounts[l.id] ?? 0}
+              handledCount={handledCounts[l.id] ?? 0}
             />
           ))}
         </div>
