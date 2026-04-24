@@ -1,7 +1,10 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
-type SearchProfileInsert = {
-  anonymousId: string;
+type OwnerKey =
+  | { userId: string; anonymousId?: string | null }
+  | { userId?: null; anonymousId: string };
+
+type SearchProfileInsert = OwnerKey & {
   location: string;
   budget_min?: number;
   budget_max?: number;
@@ -13,22 +16,32 @@ type SearchProfileInsert = {
   free_text?: string;
 };
 
+/**
+ * Upsertet ein aktives Suchprofil für den eindeutigen Owner:
+ * bei eingeloggtem User → user_id als Schlüssel (anonymous_id wird auf null gesetzt)
+ * bei anonymem Besucher  → anonymous_id als Schlüssel
+ */
 export async function upsertSearchProfile(
   input: SearchProfileInsert
 ): Promise<{ id: string } | null> {
   const supabase = createSupabaseServiceClient();
   if (!supabase) return null;
 
+  const keyColumn = input.userId ? "user_id" : "anonymous_id";
+  const keyValue = input.userId ?? input.anonymousId!;
+
   const { data: existing } = await supabase
     .from("search_profiles")
     .select("id")
-    .eq("anonymous_id", input.anonymousId)
+    .eq(keyColumn, keyValue)
     .eq("active", true)
+    .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   const payload = {
-    anonymous_id: input.anonymousId,
+    user_id: input.userId ?? null,
+    anonymous_id: input.userId ? null : (input.anonymousId ?? null),
     location: input.location,
     budget_min: input.budget_min ?? null,
     budget_max: input.budget_max ?? 0,
@@ -67,7 +80,7 @@ export async function upsertSearchProfile(
 }
 
 export async function updateSearchProfileField(
-  anonymousId: string,
+  ctx: { userId?: string | null; anonymousId?: string | null },
   field: string,
   value: unknown
 ): Promise<boolean> {
@@ -87,10 +100,14 @@ export async function updateSearchProfileField(
   const supabase = createSupabaseServiceClient();
   if (!supabase) return false;
 
+  const keyColumn = ctx.userId ? "user_id" : "anonymous_id";
+  const keyValue = ctx.userId ?? ctx.anonymousId;
+  if (!keyValue) return false;
+
   const { error } = await supabase
     .from("search_profiles")
     .update({ [field]: value })
-    .eq("anonymous_id", anonymousId)
+    .eq(keyColumn, keyValue)
     .eq("active", true);
   if (error) {
     console.error("[search_profiles] field update failed", error);

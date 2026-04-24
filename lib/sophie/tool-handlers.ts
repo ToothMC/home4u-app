@@ -24,14 +24,18 @@ type Handler = (
 
 const handlers: Record<string, Handler> = {
   async create_search_profile(input, ctx) {
-    if (!ctx.anonymousId) {
+    if (!ctx.userId && !ctx.anonymousId) {
       return { ok: false, error: "missing_session" };
     }
     const location = String(input.location ?? "").trim();
     if (!location) return { ok: false, error: "location_required" };
 
+    const ownerKey = ctx.userId
+      ? { userId: ctx.userId }
+      : { anonymousId: ctx.anonymousId as string };
+
     const result = await upsertSearchProfile({
-      anonymousId: ctx.anonymousId,
+      ...ownerKey,
       location,
       budget_min: asNumber(input.budget_min),
       budget_max: asNumber(input.budget_max) ?? 0,
@@ -57,12 +61,14 @@ const handlers: Record<string, Handler> = {
   },
 
   async update_search_profile(input, ctx) {
-    if (!ctx.anonymousId) return { ok: false, error: "missing_session" };
+    if (!ctx.userId && !ctx.anonymousId) {
+      return { ok: false, error: "missing_session" };
+    }
     const field = String(input.field ?? "");
     if (!field) return { ok: false, error: "field_required" };
 
     const ok = await updateSearchProfileField(
-      ctx.anonymousId,
+      { userId: ctx.userId, anonymousId: ctx.anonymousId },
       field,
       input.value
     );
