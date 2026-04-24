@@ -2,6 +2,27 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 export const SOPHIE_TOOLS: Anthropic.Tool[] = [
   {
+    name: "set_user_role",
+    description:
+      "Legt die Rolle des aktuellen Nutzers fest, sobald sie aus dem Gespräch eindeutig hervorgeht. 'seeker' = jemand sucht selbst eine Immobilie. 'owner' = jemand möchte die eigene Immobilie inserieren. 'agent' = Makler, der mehrere Objekte für Kunden vermarktet. Nur einmal setzen oder wenn der Nutzer explizit wechselt. Anonyme Nutzer werden informiert, dass sie sich zuerst anmelden müssen.",
+    input_schema: {
+      type: "object",
+      properties: {
+        role: {
+          type: "string",
+          enum: ["seeker", "owner", "agent"],
+          description: "Rolle des Nutzers",
+        },
+        reason: {
+          type: "string",
+          description: "Kurz nachvollziehbar, warum du diese Rolle setzt (z. B. 'Nutzer hat gesagt: \"ich vermiete meine Wohnung\"')",
+        },
+      },
+      required: ["role", "reason"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "create_search_profile",
     description:
       "Legt ein neues Suchprofil für einen Wohnungssuchenden an, sobald Lage und Budget feststehen. Andere Felder dürfen leer bleiben und später per update_search_profile ergänzt werden.",

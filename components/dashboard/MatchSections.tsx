@@ -50,33 +50,39 @@ type OutboxRow = {
   owner_contact: { channel?: string; email?: string } | null;
 };
 
-export function MatchSections() {
+export function MatchSections({
+  role,
+}: {
+  role: "seeker" | "provider";
+}) {
   const [inbox, setInbox] = useState<InboxRow[] | null>(null);
   const [outbox, setOutbox] = useState<OutboxRow[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
-    const [inRes, outRes] = await Promise.all([
-      fetch("/api/matches/inbox", { cache: "no-store" }),
-      fetch("/api/matches/outbox", { cache: "no-store" }),
-    ]);
-    if (inRes.ok) {
-      const d = await inRes.json();
-      setInbox(d.matches ?? []);
+    if (role === "provider") {
+      const inRes = await fetch("/api/matches/inbox", { cache: "no-store" });
+      if (inRes.ok) {
+        const d = await inRes.json();
+        setInbox(d.matches ?? []);
+      } else {
+        setInbox([]);
+      }
     } else {
-      setInbox([]);
-    }
-    if (outRes.ok) {
-      const d = await outRes.json();
-      setOutbox(d.matches ?? []);
-    } else {
-      setOutbox([]);
+      const outRes = await fetch("/api/matches/outbox", { cache: "no-store" });
+      if (outRes.ok) {
+        const d = await outRes.json();
+        setOutbox(d.matches ?? []);
+      } else {
+        setOutbox([]);
+      }
     }
   }
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role]);
 
   async function respond(matchId: string, accept: boolean) {
     setBusyId(matchId);
@@ -89,10 +95,9 @@ export function MatchSections() {
     load();
   }
 
-  return (
-    <div className="grid gap-6 md:grid-cols-2 mt-8">
-      {/* Owner-Inbox */}
-      <section>
+  if (role === "provider") {
+    return (
+      <section className="mt-8">
         <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
           <Inbox className="size-4" />
           Anfragen an dich ({inbox?.length ?? "…"})
@@ -192,70 +197,72 @@ export function MatchSections() {
           </div>
         )}
       </section>
+    );
+  }
 
-      {/* Seeker-Outbox */}
-      <section>
-        <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
-          <Send className="size-4" />
-          Meine Anfragen ({outbox?.length ?? "…"})
-        </h2>
-        {outbox === null ? (
-          <p className="text-xs text-[var(--muted-foreground)]">Lädt…</p>
-        ) : outbox.length === 0 ? (
-          <Card>
-            <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
-              Noch keine Anfragen gesendet. Bitte Sophie im Chat, ein Match
-              anzufragen.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {outbox.map((m) => (
-              <Card key={m.match_id}>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    {m.listing_city}
-                    {m.listing_district ? ` · ${m.listing_district}` : ""}
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    {m.listing_rooms ?? "?"} Zi ·{" "}
-                    {Number(m.listing_price).toLocaleString("de-DE")} €
-                    {m.listing_size_sqm ? ` · ${m.listing_size_sqm} m²` : ""}
-                    {m.connected_at ? (
-                      <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-300">
-                        <Handshake className="size-3" /> verbunden
-                      </span>
-                    ) : m.owner_interest === false ? (
-                      <span className="ml-2 text-[10px] uppercase tracking-wider text-[var(--destructive)]">
-                        abgelehnt
-                      </span>
-                    ) : (
-                      <span className="ml-2 text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
-                        wartet
-                      </span>
-                    )}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-xs">
-                  {m.connected_at && m.owner_contact?.email ? (
-                    <p className="rounded bg-[var(--accent)] px-2 py-1">
-                      Kontakt: {m.owner_contact.email}
-                      {m.owner_contact.channel
-                        ? ` · ${m.owner_contact.channel}`
-                        : ""}
-                    </p>
-                  ) : !m.connected_at && m.owner_interest !== false ? (
-                    <p className="text-[var(--muted-foreground)]">
-                      Wir warten auf die Bestätigung des Anbieters. Du wirst
-                      hier informiert sobald es weitergeht.
-                    </p>
-                  ) : null}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
+  // role === "seeker" → nur Outbox
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
+        <Send className="size-4" />
+        Meine Anfragen ({outbox?.length ?? "…"})
+      </h2>
+      {outbox === null ? (
+        <p className="text-xs text-[var(--muted-foreground)]">Lädt…</p>
+      ) : outbox.length === 0 ? (
+        <Card>
+          <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
+            Noch keine Anfragen gesendet. Bitte Sophie im Chat, ein Match
+            anzufragen.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {outbox.map((m) => (
+            <Card key={m.match_id}>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {m.listing_city}
+                  {m.listing_district ? ` · ${m.listing_district}` : ""}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {m.listing_rooms ?? "?"} Zi ·{" "}
+                  {Number(m.listing_price).toLocaleString("de-DE")} €
+                  {m.listing_size_sqm ? ` · ${m.listing_size_sqm} m²` : ""}
+                  {m.connected_at ? (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-300">
+                      <Handshake className="size-3" /> verbunden
+                    </span>
+                  ) : m.owner_interest === false ? (
+                    <span className="ml-2 text-[10px] uppercase tracking-wider text-[var(--destructive)]">
+                      abgelehnt
+                    </span>
+                  ) : (
+                    <span className="ml-2 text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+                      wartet
+                    </span>
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 text-xs">
+                {m.connected_at && m.owner_contact?.email ? (
+                  <p className="rounded bg-[var(--accent)] px-2 py-1">
+                    Kontakt: {m.owner_contact.email}
+                    {m.owner_contact.channel
+                      ? ` · ${m.owner_contact.channel}`
+                      : ""}
+                  </p>
+                ) : !m.connected_at && m.owner_interest !== false ? (
+                  <p className="text-[var(--muted-foreground)]">
+                    Wir warten auf die Bestätigung des Anbieters. Du wirst
+                    hier informiert sobald es weitergeht.
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

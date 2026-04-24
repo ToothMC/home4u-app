@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
   const ctx: ToolContext = {
     anonymousId: session.anonymousId,
     userId: authUser?.id,
+    role: authUser?.role ?? null,
     conversationId,
   };
 
@@ -124,6 +125,22 @@ export async function POST(req: NextRequest) {
           cache_control: { type: "ephemeral" },
         },
       ];
+      // Rolle-Context: persistierte Rolle (eingeloggte User) oder 'unknown'.
+      // Anonyme User mit flow-Query-Param bekommen einen weichen Hint.
+      const roleTag = authUser?.role
+        ? authUser.role
+        : body.flow === "owner"
+          ? "owner_intent_anonymous"
+          : body.flow === "agent"
+            ? "agent_intent_anonymous"
+            : body.flow === "seeker"
+              ? "seeker_intent_anonymous"
+              : "unknown";
+      systemBlocks.push({
+        type: "text",
+        text: `<user_role>${roleTag}</user_role>\nLeite davon ab, welche Tools du nutzen darfst. Bei 'unknown' oder '*_intent_anonymous' setze die Rolle via set_user_role (nur für eingeloggte Nutzer persistent).`,
+      });
+
       if (body.region) {
         systemBlocks.push({
           type: "text",
