@@ -1,6 +1,7 @@
 import { ChatView } from "@/components/chat/ChatView";
+import { regionBySlug } from "@/lib/regions";
 
-type SearchParams = Promise<{ flow?: string }>;
+type SearchParams = Promise<{ flow?: string; region?: string }>;
 
 export default async function ChatPage({
   searchParams,
@@ -8,5 +9,6 @@ export default async function ChatPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
-  return <ChatView flow={params.flow} />;
+  const region = regionBySlug(params.region);
+  return <ChatView flow={params.flow} region={region} />;
 }

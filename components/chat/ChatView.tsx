@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, ArrowLeft, Wrench, Check, X } from "lucide-react";
+import {
+  Send,
+  Loader2,
+  ArrowLeft,
+  Wrench,
+  Check,
+  X,
+  MapPin,
+} from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { AuthMenu } from "@/components/auth/AuthMenu";
+import type { Region } from "@/lib/regions";
 
 type ToolCall = {
   id: string;
@@ -21,23 +31,33 @@ type ChatMessage = {
 
 const SEED_MESSAGE: Record<string, string> = {
   seeker:
-    "Hi, ich bin Sophie. Ich helfe dir, in Limassol eine Wohnung zu finden, die wirklich passt. Erzähl mir kurz: Suchst du zur Miete oder zum Kauf, und in welcher Gegend?",
+    "Hi, ich bin Sophie. Ich helfe dir, eine Wohnung zu finden, die wirklich passt. Erzähl mir kurz: In welcher Stadt oder Region suchst du — und zur Miete oder zum Kauf?",
   owner:
-    "Hi, ich bin Sophie. Du möchtest deine Wohnung vermieten? Beschreib sie mir kurz — Lage, Zimmer und ab wann sie verfügbar wäre.",
+    "Hi, ich bin Sophie. Du möchtest deine Wohnung vermieten? Beschreib sie mir kurz — wo sie liegt, Zimmer und ab wann sie verfügbar wäre.",
   agent:
-    "Hi, ich bin Sophie. Schön, dass du dich für den Makler-Beirat interessierst. In welcher Gegend arbeitest du aktuell, und wie viele Inserate hast du typischerweise parallel?",
+    "Hi, ich bin Sophie. Schön, dass du dich für den Makler-Beirat interessierst. In welcher Stadt oder Region arbeitest du aktuell, und wie viele Inserate hast du typischerweise parallel?",
   default:
-    "Hi, ich bin Sophie — die KI-Assistentin von Home4U. Ich helfe Suchenden, Eigentümern und Maklern in Limassol. Wobei kann ich dich unterstützen?",
+    "Hi, ich bin Sophie — die KI-Assistentin von Home4U. Ich helfe Suchenden, Eigentümern und Maklern. In welcher Stadt oder Region soll ich dich unterstützen?",
 };
 
-export function ChatView({ flow }: { flow?: string }) {
-  const seed = SEED_MESSAGE[flow ?? "default"] ?? SEED_MESSAGE.default;
+export function ChatView({
+  flow,
+  region,
+}: {
+  flow?: string;
+  region?: Region;
+}) {
+  const baseSeed = SEED_MESSAGE[flow ?? "default"] ?? SEED_MESSAGE.default;
+  const seed = region
+    ? `Hi, ich bin Sophie. Ich arbeite gerade für dich in ${region.label}. Was kann ich tun?`
+    : baseSeed;
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: seed },
   ]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -68,7 +88,14 @@ export function ChatView({ flow }: { flow?: string }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: payloadMessages }),
+        body: JSON.stringify({
+          messages: payloadMessages,
+          conversationId,
+          flow,
+          region: region
+            ? { slug: region.slug, label: region.label }
+            : undefined,
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -105,7 +132,9 @@ export function ChatView({ flow }: { flow?: string }) {
             continue;
           }
 
-          if (evt.type === "text" && typeof evt.delta === "string") {
+          if (evt.type === "conversation" && typeof evt.id === "string") {
+            setConversationId(evt.id);
+          } else if (evt.type === "text" && typeof evt.delta === "string") {
             assistantText += evt.delta;
           } else if (
             evt.type === "tool_use_start" &&
@@ -174,6 +203,17 @@ export function ChatView({ flow }: { flow?: string }) {
             Home4U · KI-Assistentin
           </p>
         </div>
+        {region && (
+          <Link
+            href="/#region"
+            className="flex items-center gap-1 text-xs text-[var(--muted-foreground)] rounded-full border px-3 py-1.5 hover:bg-[var(--accent)]"
+            aria-label="Region wechseln"
+          >
+            <MapPin className="size-3" />
+            {region.city}
+          </Link>
+        )}
+        <AuthMenu compact />
       </header>
 
       <div className="flex-1 overflow-y-auto">

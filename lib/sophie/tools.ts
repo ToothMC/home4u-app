@@ -11,7 +11,7 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
         location: {
           type: "string",
           description:
-            "Stadt und optional Viertel/Umkreis, z. B. 'Limassol Tourist Area' oder 'Limassol'",
+            "Stadt und optional Viertel/Umkreis, z. B. 'Paphos Kato' oder 'Nicosia Zentrum' — Freitext, wird später normalisiert",
         },
         budget_min: {
           type: "number",

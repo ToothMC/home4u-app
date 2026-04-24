@@ -8,6 +8,12 @@ import {
 } from "@/lib/sophie/system-prompt";
 import { SOPHIE_TOOLS } from "@/lib/sophie/tools";
 import { executeTool, type ToolContext } from "@/lib/sophie/tool-handlers";
+import { getOrCreateAnonymousSession } from "@/lib/session";
+import {
+  appendMessage,
+  createConversation,
+  logLlmUsage,
+} from "@/lib/repo/conversations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,8 +23,18 @@ const MessageSchema = z.object({
   content: z.string(),
 });
 
+const RegionSchema = z
+  .object({
+    slug: z.string().min(1),
+    label: z.string().min(1),
+  })
+  .optional();
+
 const BodySchema = z.object({
+  conversationId: z.string().uuid().optional(),
+  flow: z.string().optional(),
   messages: z.array(MessageSchema).min(1).max(40),
+  region: RegionSchema,
 });
 
 const MAX_TOOL_ROUNDS = 4;
@@ -47,7 +63,33 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const ctx: ToolContext = {};
+  const session = await getOrCreateAnonymousSession();
+
+  // Conversation: weiterführen oder neu anlegen
+  let conversationId = body.conversationId;
+  if (!conversationId) {
+    const created = await createConversation({
+      anonymousId: session.anonymousId,
+      flow: body.flow,
+      regionSlug: body.region?.slug,
+      regionLabel: body.region?.label,
+    });
+    conversationId = created?.id;
+  }
+
+  // Letzte User-Message persistieren (die älteren sind aus dem Client-State)
+  const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
+  if (conversationId && lastUser) {
+    await appendMessage(conversationId, {
+      role: "user",
+      content: lastUser.content,
+    });
+  }
+
+  const ctx: ToolContext = {
+    anonymousId: session.anonymousId,
+    conversationId,
+  };
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -56,23 +98,36 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
       };
 
+      if (conversationId) {
+        send({ type: "conversation", id: conversationId });
+      }
+
       const conversation: AnthropicMessage[] = body.messages.map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
+      const systemBlocks: Anthropic.Messages.TextBlockParam[] = [
+        {
+          type: "text",
+          text: SOPHIE_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ];
+      if (body.region) {
+        systemBlocks.push({
+          type: "text",
+          text: `<user_context>\nDer Nutzer hat im Landing-Page-Picker die Region "${body.region.label}" (slug: ${body.region.slug}) gewählt. Frage nicht nochmal nach Land/Stadt, arbeite mit dieser Region als Default. Bei Wunsch nach anderer Region darf der Nutzer jederzeit wechseln.\n</user_context>`,
+        });
+      }
+
       try {
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+          const startedAt = Date.now();
           const response = anthropic.messages.stream({
             model: MODEL_SONNET,
             max_tokens: 1024,
-            system: [
-              {
-                type: "text",
-                text: SOPHIE_SYSTEM_PROMPT,
-                cache_control: { type: "ephemeral" },
-              },
-            ],
+            system: systemBlocks,
             tools: SOPHIE_TOOLS,
             messages: conversation,
             metadata: { user_id: `prompt_version=${SOPHIE_PROMPT_VERSION}` },
@@ -104,12 +159,33 @@ export async function POST(req: NextRequest) {
           }
 
           const finalMessage = await response.finalMessage();
+          const latency = Date.now() - startedAt;
 
-          // Assistant-Turn in Konversation aufnehmen
           conversation.push({
             role: "assistant",
             content: finalMessage.content,
           });
+
+          // Assistant-Turn persistieren
+          const assistantText = finalMessage.content
+            .filter((b): b is Anthropic.Messages.TextBlock => b.type === "text")
+            .map((b) => b.text)
+            .join("");
+          if (conversationId) {
+            if (assistantText) {
+              await appendMessage(conversationId, {
+                role: "assistant",
+                content: assistantText,
+                usage: finalMessage.usage,
+              });
+            }
+            await logLlmUsage({
+              conversationId,
+              model: MODEL_SONNET,
+              usage: finalMessage.usage,
+              latencyMs: latency,
+            });
+          }
 
           if (finalMessage.stop_reason !== "tool_use") {
             send({
@@ -121,7 +197,6 @@ export async function POST(req: NextRequest) {
             return;
           }
 
-          // Tool-Calls ausführen und Results an Claude zurückgeben
           const toolUses = finalMessage.content.filter(
             (block): block is Anthropic.Messages.ToolUseBlock =>
               block.type === "tool_use"
@@ -138,6 +213,15 @@ export async function POST(req: NextRequest) {
               data: result.data,
               error: result.error,
             });
+            if (conversationId) {
+              await appendMessage(conversationId, {
+                role: "tool",
+                content: null,
+                toolName: tu.name,
+                toolInput: tu.input,
+                toolResult: result,
+              });
+            }
             toolResults.push({
               type: "tool_result",
               tool_use_id: tu.id,
@@ -147,7 +231,6 @@ export async function POST(req: NextRequest) {
           }
 
           conversation.push({ role: "user", content: toolResults });
-          // nächste Runde startet automatisch
         }
 
         send({
