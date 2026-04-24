@@ -25,23 +25,6 @@ type Handler = (
   ctx: ToolContext
 ) => Promise<ToolResult>;
 
-function wrongRole(
-  current: UserRole,
-  expected: string
-): ToolResult {
-  return {
-    ok: false,
-    error: "wrong_role",
-    data: {
-      current_role: current,
-      expected,
-      message: current
-        ? `Dein aktueller Account ist als ${current} aktiv. Für diese Aktion wäre ${expected} nötig. Sag mir kurz Bescheid, wenn ich die Rolle wechseln soll — ich nutze dann set_user_role.`
-        : "Wir wissen noch nicht, ob du suchen oder anbieten willst. Bitte erzähl kurz was du vorhast, dann setze ich die Rolle.",
-    },
-  };
-}
-
 const handlers: Record<string, Handler> = {
   async set_user_role(input, ctx) {
     const role = String(input.role ?? "");
@@ -89,11 +72,6 @@ const handlers: Record<string, Handler> = {
     if (!ctx.userId && !ctx.anonymousId) {
       return { ok: false, error: "missing_session" };
     }
-    // Rolle erzwingen, wenn User eingeloggt ist. Anonyme dürfen ohne role ein
-    // Suchprofil starten (Role wird bei Login gesetzt via set_user_role).
-    if (ctx.userId && ctx.role && ctx.role !== "seeker") {
-      return wrongRole(ctx.role, "seeker");
-    }
     const location = String(input.location ?? "").trim();
     if (!location) return { ok: false, error: "location_required" };
 
@@ -131,9 +109,6 @@ const handlers: Record<string, Handler> = {
     if (!ctx.userId && !ctx.anonymousId) {
       return { ok: false, error: "missing_session" };
     }
-    if (ctx.userId && ctx.role && ctx.role !== "seeker") {
-      return wrongRole(ctx.role, "seeker");
-    }
     const field = String(input.field ?? "");
     if (!field) return { ok: false, error: "field_required" };
 
@@ -163,9 +138,6 @@ const handlers: Record<string, Handler> = {
             "Zum Inserieren bitte oben rechts 'Anmelden' klicken und E-Mail bestätigen. Danach kannst du das Inserat direkt anlegen.",
         },
       };
-    }
-    if (ctx.role && !["owner", "agent"].includes(ctx.role)) {
-      return wrongRole(ctx.role, "owner");
     }
     const supabase = createSupabaseServiceClient();
     if (!supabase) {
@@ -247,9 +219,6 @@ const handlers: Record<string, Handler> = {
     if (!ctx.anonymousId && !ctx.userId) {
       return { ok: false, error: "missing_session" };
     }
-    if (ctx.userId && ctx.role && ctx.role !== "seeker") {
-      return wrongRole(ctx.role, "seeker");
-    }
     const limit = Math.min(10, Math.max(1, Number(input.limit) || 3));
     const matches = await findMatchesForSession(
       { anonymousId: ctx.anonymousId, userId: ctx.userId },
@@ -274,9 +243,6 @@ const handlers: Record<string, Handler> = {
   },
 
   async confirm_match_request(input, ctx) {
-    if (ctx.userId && ctx.role && ctx.role !== "seeker") {
-      return wrongRole(ctx.role, "seeker");
-    }
     const listingId = asString(input.listing_id);
     if (!listingId) {
       return { ok: false, error: "missing_listing_id" };

@@ -4,18 +4,18 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
   {
     name: "set_user_role",
     description:
-      "Legt die Rolle des aktuellen Nutzers fest, sobald sie aus dem Gespräch eindeutig hervorgeht. 'seeker' = jemand sucht selbst eine Immobilie. 'owner' = jemand möchte die eigene Immobilie inserieren. 'agent' = Makler, der mehrere Objekte für Kunden vermarktet. Nur einmal setzen oder wenn der Nutzer explizit wechselt. Anonyme Nutzer werden informiert, dass sie sich zuerst anmelden müssen.",
+      "Markiert die primäre Absicht des Nutzers fürs Dashboard: 'seeker' = sucht, 'owner' = bietet eigene Immobilie an, 'agent' = Makler. Das ist NUR ein Dashboard-Fokus — technisch darf der Nutzer jederzeit beides machen (suchen UND inserieren). Nutze das Tool, sobald die Hauptabsicht klar ist, damit das Dashboard auf die passende Ansicht voreingestellt ist. Bei Wechsel der Hauptabsicht einfach neu setzen.",
     input_schema: {
       type: "object",
       properties: {
         role: {
           type: "string",
           enum: ["seeker", "owner", "agent"],
-          description: "Rolle des Nutzers",
+          description: "Dashboard-Fokus des Nutzers",
         },
         reason: {
           type: "string",
-          description: "Kurz nachvollziehbar, warum du diese Rolle setzt (z. B. 'Nutzer hat gesagt: \"ich vermiete meine Wohnung\"')",
+          description: "Kurz nachvollziehbar, warum du diesen Fokus setzt",
         },
       },
       required: ["role", "reason"],
