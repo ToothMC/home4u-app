@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { AuthMenu } from "@/components/auth/AuthMenu";
 import type { Region } from "@/lib/regions";
 
 type ToolCall = {
@@ -212,6 +213,7 @@ export function ChatView({
             {region.city}
           </Link>
         )}
+        <AuthMenu compact />
       </header>
 
       <div className="flex-1 overflow-y-auto">

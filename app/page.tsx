@@ -3,11 +3,15 @@ import { ArrowRight, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatLink, PathCards } from "@/components/landing/PathCards";
 import { RegionPicker } from "@/components/landing/RegionPicker";
+import { AuthMenu } from "@/components/auth/AuthMenu";
 
 export default function LandingPage() {
   return (
     <main className="flex-1">
-      <section className="mx-auto max-w-5xl px-4 pt-16 pb-10 sm:pt-24 sm:pb-12 text-center">
+      <div className="mx-auto max-w-5xl px-4 pt-4 flex justify-end">
+        <AuthMenu />
+      </div>
+      <section className="mx-auto max-w-5xl px-4 pt-8 pb-10 sm:pt-16 sm:pb-12 text-center">
         <p className="text-sm uppercase tracking-widest text-[var(--muted-foreground)] mb-4">
           Home4U
         </p>
