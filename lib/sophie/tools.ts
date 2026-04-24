@@ -81,7 +81,7 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
   {
     name: "create_listing",
     description:
-      "Legt ein neues Inserat für eine Wohnung/ein Haus an, wenn der Nutzer als privater Eigentümer oder Makler etwas inserieren möchte. Pflicht: eingeloggter Nutzer, Stadt, mindestens Viertel/Postleitzahl, Preis, Zimmer, Typ (rent/sale). Bei Makler-Inseraten zusätzlich Provisionshöhe erfragen. Das Inserat ist nach Anlage sofort aktiv und kann gematcht werden.",
+      "Legt ein neues Inserat für eine Immobilie (Wohnung, Haus, Grundstück) an, wenn der Nutzer als privater Eigentümer oder Makler etwas inserieren möchte. Pflicht: eingeloggter Nutzer, Stadt, mindestens Viertel/Postleitzahl, Preis, Zimmer, Typ (rent/sale). Bei Makler-Inseraten zusätzlich Provisionshöhe erfragen. Das Inserat ist nach Anlage sofort aktiv und kann gematcht werden.",
     input_schema: {
       type: "object",
       properties: {
@@ -122,7 +122,7 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
         },
         notes: {
           type: "string",
-          description: "Kurzer Freitext: was macht die Wohnung aus, besondere Wünsche an Mieter/Käufer",
+          description: "Kurzer Freitext: was macht die Immobilie aus, besondere Wünsche an Mieter/Käufer",
         },
       },
       required: ["type", "location_city", "price", "rooms"],

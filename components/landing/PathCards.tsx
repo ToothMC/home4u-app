@@ -42,7 +42,7 @@ export function PathCards() {
           <KeyRound className="size-6 mb-2" />
           <CardTitle>Ich vermiete privat</CardTitle>
           <CardDescription>
-            Wohnung online in unter 10 Minuten. KI-Preisempfehlung,
+            Immobilie online in unter 10 Minuten. KI-Preisempfehlung,
             mehrsprachige Texte, qualifizierte Interessenten.
           </CardDescription>
         </CardHeader>
