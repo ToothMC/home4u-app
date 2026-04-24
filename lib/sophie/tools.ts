@@ -79,6 +79,21 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "find_matches",
+    description:
+      "Sucht passende Wohnungsangebote für das zuletzt angelegte Suchprofil des Nutzers. Ruft den Matching-Job in der Datenbank auf und liefert die Top-Treffer zurück (Stadt, Lage, Preis, Zimmer, Größe). Nutze dieses Tool, sobald genug Informationen für ein Profil erfasst sind — idealerweise direkt nach create_search_profile oder wenn der Nutzer nach 'was hast du für mich?' fragt.",
+    input_schema: {
+      type: "object",
+      properties: {
+        limit: {
+          type: "integer",
+          description: "Maximale Anzahl an Vorschlägen (Default 3, max 10)",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "confirm_match_request",
     description:
       "Suchender bestätigt, dass Home4U den Anbieter eines gefundenen Listings kontaktieren soll (Bridge-Outreach).",
