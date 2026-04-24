@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LogIn, LogOut, User as UserIcon, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { LogIn, LogOut, User as UserIcon, Loader2, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SignInDialog } from "@/components/auth/SignInDialog";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -67,6 +68,12 @@ export function AuthMenu({ compact = false }: { compact?: boolean }) {
     const label = state.email ?? "Account";
     return (
       <div className="flex items-center gap-2">
+        <Button asChild size="sm" variant="outline">
+          <Link href="/dashboard" aria-label="Dashboard">
+            <LayoutDashboard className="size-3" />
+            {compact ? null : <span>Dashboard</span>}
+          </Link>
+        </Button>
         <span
           className={
             "flex items-center gap-1 text-xs text-[var(--muted-foreground)] max-w-[160px] truncate" +
