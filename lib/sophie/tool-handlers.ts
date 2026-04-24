@@ -2,6 +2,7 @@ import {
   upsertSearchProfile,
   updateSearchProfileField,
 } from "@/lib/repo/search-profiles";
+import { findMatchesForSession } from "@/lib/repo/listings";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export type ToolResult = {
@@ -71,6 +72,31 @@ const handlers: Record<string, Handler> = {
         note: ok
           ? undefined
           : "Kein bestehendes Profil gefunden oder Supabase nicht konfiguriert.",
+      },
+    };
+  },
+
+  async find_matches(input, ctx) {
+    if (!ctx.anonymousId) return { ok: false, error: "missing_session" };
+    const limit = Math.min(
+      10,
+      Math.max(1, Number(input.limit) || 3)
+    );
+    const matches = await findMatchesForSession(ctx.anonymousId, limit);
+    return {
+      ok: true,
+      data: {
+        count: matches.length,
+        matches: matches.map((m) => ({
+          id: m.id,
+          city: m.location_city,
+          district: m.location_district,
+          price: m.price,
+          currency: m.currency,
+          rooms: m.rooms,
+          size_sqm: m.size_sqm,
+          score: Math.round(m.score * 100) / 100,
+        })),
       },
     };
   },
