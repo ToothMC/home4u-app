@@ -14,6 +14,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AuthMenu } from "@/components/auth/AuthMenu";
+import { MediaUploader, type AttachedMedia } from "@/components/chat/MediaUploader";
 import type { Region } from "@/lib/regions";
 
 type ToolCall = {
@@ -33,7 +34,7 @@ const SEED_MESSAGE: Record<string, string> = {
   seeker:
     "Hi, ich bin Sophie. Ich helfe dir, eine Wohnung zu finden, die wirklich passt. Erzähl mir kurz: In welcher Stadt oder Region suchst du — und zur Miete oder zum Kauf?",
   owner:
-    "Hi, ich bin Sophie. Du möchtest deine Wohnung vermieten? Beschreib sie mir kurz — wo sie liegt, Zimmer und ab wann sie verfügbar wäre.",
+    "Hi, ich bin Sophie. Schön, dass du deine Immobilie bei Home4U anbieten möchtest. Für ein Inserat musst du nur einmal angemeldet sein — oben rechts auf 'Anmelden' klicken, Code aus der E-Mail eingeben. Danach erzähl mir einfach wo die Immobilie liegt, Zimmer, Preis und ab wann sie verfügbar wäre.",
   agent:
     "Hi, ich bin Sophie. Schön, dass du dich für den Makler-Beirat interessierst. In welcher Stadt oder Region arbeitest du aktuell, und wie viele Inserate hast du typischerweise parallel?",
   default:
@@ -48,8 +49,11 @@ export function ChatView({
   region?: Region;
 }) {
   const baseSeed = SEED_MESSAGE[flow ?? "default"] ?? SEED_MESSAGE.default;
-  const seed = region
-    ? `Hi, ich bin Sophie. Ich arbeite gerade für dich in ${region.label}. Was kann ich tun?`
+  // Für seeker/default bekommt der Region-Seed Vorrang (macht Sophie konkreter).
+  // Für owner/agent bleibt der Flow-Seed erhalten, Region wird nur im Header angezeigt.
+  const useRegionSeed = region && (flow === "seeker" || !flow || flow === "default");
+  const seed = useRegionSeed
+    ? `Hi, ich bin Sophie. Ich arbeite gerade für dich in ${region!.label}. Was kann ich tun?`
     : baseSeed;
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: seed },
@@ -58,7 +62,35 @@ export function ChatView({
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | undefined>();
+  const [attached, setAttached] = useState<AttachedMedia[]>([]);
   const endRef = useRef<HTMLDivElement | null>(null);
+
+  // Letzte Conversation des Users/der Session beim Mount laden.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/chat/history", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data.conversation) return;
+        const hist = data.conversation as {
+          conversationId: string;
+          messages: ChatMessage[];
+        };
+        if (hist.messages?.length) {
+          setMessages(hist.messages);
+          setConversationId(hist.conversationId);
+        }
+      } catch {
+        // silently ignore — fallback bleibt der Seed
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -95,6 +127,11 @@ export function ChatView({
           region: region
             ? { slug: region.slug, label: region.label }
             : undefined,
+          attached_media: attached.map((m) => ({
+            url: m.url,
+            kind: m.kind,
+            name: m.name,
+          })),
         }),
       });
 
@@ -243,19 +280,37 @@ export function ChatView({
         }}
         className="border-t px-3 py-3 bg-[var(--background)]"
       >
-        <div className="mx-auto max-w-2xl flex items-end gap-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            rows={1}
-            placeholder="Schreib Sophie…"
-            className="resize-none min-h-[44px] max-h-40"
+        <div className="mx-auto max-w-2xl flex flex-col gap-2">
+          <MediaUploader
+            attached={attached}
+            onAttached={(m) =>
+              setAttached((prev) =>
+                prev.some((p) => p.url === m.url) ? prev : [...prev, m]
+              )
+            }
+            onRemove={(url) =>
+              setAttached((prev) => prev.filter((m) => m.url !== url))
+            }
             disabled={streaming}
           />
-          <Button type="submit" size="icon" disabled={streaming || !input.trim()}>
-            {streaming ? <Loader2 className="animate-spin" /> : <Send />}
-          </Button>
+          <div className="flex items-end gap-2">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKeyDown}
+              rows={1}
+              placeholder="Schreib Sophie…"
+              className="resize-none min-h-[44px] max-h-40"
+              disabled={streaming}
+            />
+            <Button
+              type="submit"
+              size="icon"
+              disabled={streaming || !input.trim()}
+            >
+              {streaming ? <Loader2 className="animate-spin" /> : <Send />}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

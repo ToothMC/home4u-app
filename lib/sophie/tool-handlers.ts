@@ -77,6 +77,93 @@ const handlers: Record<string, Handler> = {
     };
   },
 
+  async create_listing(input, ctx) {
+    if (!ctx.userId) {
+      return {
+        ok: false,
+        error: "not_authenticated",
+        data: {
+          message:
+            "Zum Inserieren bitte oben rechts 'Anmelden' klicken und E-Mail bestätigen. Danach kannst du das Inserat direkt anlegen.",
+        },
+      };
+    }
+    const supabase = createSupabaseServiceClient();
+    if (!supabase) {
+      return { ok: false, error: "supabase_not_configured" };
+    }
+
+    const city = String(input.location_city ?? "").trim();
+    const type = String(input.type ?? "rent");
+    const price = asNumber(input.price);
+    const rooms = asNumber(input.rooms);
+    if (!city || !price || !rooms) {
+      return { ok: false, error: "missing_required_fields" };
+    }
+
+    const district = String(input.location_district ?? "").trim() || null;
+    const sizeSqm = asNumber(input.size_sqm) ?? null;
+    const contactChannel = asString(input.contact_channel) ?? null;
+    const language = asString(input.language) ?? null;
+    const notes = asString(input.notes) ?? null;
+    const mediaUrls = asStringArray(input.media_urls)?.filter((u) =>
+      u.startsWith("http")
+    ) ?? null;
+
+    // Dedup-Hash stabil aus Owner + Stadt + Preis + Zimmer (verhindert Duplikate
+    // vom selben Owner, erlaubt verschiedene Inserate wenn die Parameter abweichen).
+    const dedupHash = [
+      "direct",
+      ctx.userId.slice(0, 8),
+      city.toLowerCase(),
+      district?.toLowerCase() ?? "",
+      String(price),
+      String(rooms),
+    ].join(":");
+
+    const { data, error } = await supabase
+      .from("listings")
+      .insert({
+        source: "direct",
+        type,
+        status: "active",
+        location_city: city,
+        location_district: district,
+        location_raw: district ? `${city}, ${district}` : city,
+        price,
+        currency: "EUR",
+        price_period: type === "rent" ? "month" : "total",
+        rooms,
+        size_sqm: sizeSqm,
+        contact_channel: contactChannel,
+        language,
+        owner_user_id: ctx.userId,
+        dedup_hash: dedupHash,
+        media: mediaUrls ?? [],
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error("[create_listing] insert failed", error);
+      return {
+        ok: false,
+        error: "insert_failed",
+        data: { detail: error.message },
+      };
+    }
+
+    return {
+      ok: true,
+      data: {
+        listing_id: data.id,
+        message: `Inserat angelegt: ${city}${district ? " · " + district : ""}, ${rooms} Zimmer, ${price} €.`,
+        notes_ack: notes ? true : false,
+        media_count: mediaUrls?.length ?? 0,
+      },
+    };
+  },
+
   async find_matches(input, ctx) {
     if (!ctx.anonymousId && !ctx.userId) {
       return { ok: false, error: "missing_session" };
