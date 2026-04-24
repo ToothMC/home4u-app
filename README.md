@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Home4U — App
 
-## Getting Started
+KI-gestützte Immobilienplattform mit Double-Match-Prinzip. Sophie ist die
+KI-Assistentin, die Suchende, private Eigentümer und Makler zusammenbringt.
+Startmarkt: Limassol, Zypern.
 
-First, run the development server:
+Dieses Repo enthält das Next.js-Frontend + Sophie-Chat-API. Das Whitepaper und
+der Umsetzungsplan liegen im übergeordneten `Home4U/`-Verzeichnis.
+
+## Stack
+
+- Next.js 16 (App Router) · React 19 · Tailwind 4 · TypeScript
+- Anthropic Claude (Sonnet 4.6 default, Opus 4.7, Haiku 4.5)
+- Supabase (Postgres + pgvector + Auth)
+- OpenAI `text-embedding-3-small` für Semantic Matching
+
+## Setup
 
 ```bash
+# 1. Dependencies
+npm install
+
+# 2. Secrets
+cp .env.example .env.local
+# ANTHROPIC_API_KEY eintragen; Supabase-Vars für DB-Features (optional Step 1)
+
+# 3. Dev-Server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Landing: http://localhost:3000 · Chat: http://localhost:3000/chat
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Ordnerstruktur
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+app/
+  page.tsx                 Landing-Page mit 3 Einstiegs-Pfaden
+  chat/page.tsx            Sophie-Chat-Seite
+  api/chat/route.ts        Anthropic-Streaming-Endpoint (NDJSON)
+components/
+  ui/                      Basis-Komponenten (Button, Card, Input, Textarea)
+  chat/ChatView.tsx        Chat-UI mit Streaming + Tool-Use-Anzeige
+lib/
+  anthropic.ts             Client-Factory + Modell-IDs (ENV-überschreibbar)
+  sophie/system-prompt.ts  Sophies System-Prompt (versioniert)
+  sophie/tools.ts          Tool-Definitionen mit JSON-Schema
+  supabase/client.ts       Browser-Client
+  supabase/server.ts       Server-Client (inkl. Service-Role-Variante)
+supabase/
+  config.toml              Supabase-CLI-Config
+  migrations/0001_*.sql    Initial-Schema (users, conversations, listings,
+                           search_profiles, matches, moderation_queue,
+                           outreach, llm_usage, opt_outs)
+```
 
-## Learn More
+## Was funktioniert jetzt
 
-To learn more about Next.js, take a look at the following resources:
+- Landing-Page mit drei Einstiegen (Suchender / Eigentümer / Makler)
+- `/chat` → POST `/api/chat` → Anthropic-Streaming mit Prompt-Caching
+- Sophie-Tool-Use wird im UI als Chip angezeigt, Backend führt Tools noch
+  nicht aus (Supabase-Integration ist der nächste Schritt)
+- Supabase-Migrations liegen vor, müssen per `supabase db push` oder gegen
+  einen Hosted-Supabase-Projekt ausgeführt werden
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Was noch fehlt (Reihenfolge)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Auth (Supabase Magic Link) + Conversation-Persistenz
+2. Tool-Executor: `create_search_profile` etc. schreiben nach Supabase
+3. Bulk-Import für Makler (CSV → listings)
+4. Matching-Job (pgvector Cosine → matches)
+5. FB-Extension + Bazaraki-Crawler (eigene Teilprojekte, s. Umsetzungsplan §2)
+6. WhatsApp-Outreach via 360dialog
+7. Co-Pilot-Moderation-UI (`/admin/moderation`)
 
-## Deploy on Vercel
+## Umsetzungsplan
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Siehe `../Home4U_Umsetzungsplan.md` und `../Home4U_Whitepaper.md` im
+übergeordneten Verzeichnis.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deploy
+
+Vercel ist vorgesehen. Vor dem ersten Deploy:
+
+- ENV-Vars aus `.env.example` in Vercel-Projekt setzen
+- Supabase-Projekt erstellen, Migrations ausführen
+- Domain `home4u.ai` in Vercel binden
