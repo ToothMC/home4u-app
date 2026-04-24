@@ -21,13 +21,13 @@ type ChatMessage = {
 
 const SEED_MESSAGE: Record<string, string> = {
   seeker:
-    "Hi, ich bin Sophie. Ich helfe dir, in Limassol eine Wohnung zu finden, die wirklich passt. Erzähl mir kurz: Suchst du zur Miete oder zum Kauf, und in welcher Gegend?",
+    "Hi, ich bin Sophie. Ich helfe dir, eine Wohnung zu finden, die wirklich passt. Erzähl mir kurz: In welcher Stadt oder Region suchst du — und zur Miete oder zum Kauf?",
   owner:
-    "Hi, ich bin Sophie. Du möchtest deine Wohnung vermieten? Beschreib sie mir kurz — Lage, Zimmer und ab wann sie verfügbar wäre.",
+    "Hi, ich bin Sophie. Du möchtest deine Wohnung vermieten? Beschreib sie mir kurz — wo sie liegt, Zimmer und ab wann sie verfügbar wäre.",
   agent:
-    "Hi, ich bin Sophie. Schön, dass du dich für den Makler-Beirat interessierst. In welcher Gegend arbeitest du aktuell, und wie viele Inserate hast du typischerweise parallel?",
+    "Hi, ich bin Sophie. Schön, dass du dich für den Makler-Beirat interessierst. In welcher Stadt oder Region arbeitest du aktuell, und wie viele Inserate hast du typischerweise parallel?",
   default:
-    "Hi, ich bin Sophie — die KI-Assistentin von Home4U. Ich helfe Suchenden, Eigentümern und Maklern in Limassol. Wobei kann ich dich unterstützen?",
+    "Hi, ich bin Sophie — die KI-Assistentin von Home4U. Ich helfe Suchenden, Eigentümern und Maklern. In welcher Stadt oder Region soll ich dich unterstützen?",
 };
 
 export function ChatView({ flow }: { flow?: string }) {

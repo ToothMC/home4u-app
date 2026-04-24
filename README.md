@@ -2,7 +2,9 @@
 
 KI-gestützte Immobilienplattform mit Double-Match-Prinzip. Sophie ist die
 KI-Assistentin, die Suchende, private Eigentümer und Makler zusammenbringt.
-Startmarkt: Limassol, Zypern.
+Startmarkt: Zypern (Region wählt der Nutzer im Chat). Marketing-Header
+bewusst ohne Stadt-Lock, um Ausweitung auf weitere mediterrane Märkte nicht
+zu blockieren.
 
 Dieses Repo enthält das Next.js-Frontend + Sophie-Chat-API. Das Whitepaper und
 der Umsetzungsplan liegen im übergeordneten `Home4U/`-Verzeichnis.

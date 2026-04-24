@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Home4U — Schreib Sophie. Sie findet dein Zuhause.",
   description:
-    "KI-gestützte Immobilienplattform mit Double-Match-Prinzip. Start in Limassol, Zypern.",
+    "KI-gestützte Immobilienplattform mit Double-Match-Prinzip. Sophie chattet mit dir und findet, was wirklich passt.",
 };
 
 export default function RootLayout({

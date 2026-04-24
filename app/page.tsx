@@ -14,7 +14,7 @@ export default function LandingPage() {
     <main className="flex-1">
       <section className="mx-auto max-w-5xl px-4 pt-16 pb-10 sm:pt-24 sm:pb-16 text-center">
         <p className="text-sm uppercase tracking-widest text-[var(--muted-foreground)] mb-4">
-          Home4U · Limassol
+          Home4U
         </p>
         <h1 className="text-4xl sm:text-6xl font-semibold tracking-tight mb-6">
           Schreib Sophie.
@@ -118,7 +118,7 @@ export default function LandingPage() {
 
       <footer className="mx-auto max-w-5xl px-4 py-8 text-xs text-[var(--muted-foreground)] border-t">
         <div className="flex flex-col sm:flex-row justify-between gap-2">
-          <p>© {new Date().getFullYear()} Home4U · Limassol · Zypern</p>
+          <p>© {new Date().getFullYear()} Home4U</p>
           <p>MVP · Scaffold</p>
         </div>
       </footer>
