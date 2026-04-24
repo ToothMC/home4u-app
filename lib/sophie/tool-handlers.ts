@@ -191,15 +191,34 @@ const handlers: Record<string, Handler> = {
     };
   },
 
-  async confirm_match_request(input) {
-    // TODO: echte Matches-Tabelle befüllen sobald Matching-Job + Listings da sind
+  async confirm_match_request(input, ctx) {
+    const listingId = asString(input.listing_id);
+    if (!listingId) {
+      return { ok: false, error: "missing_listing_id" };
+    }
+    const supabase = createSupabaseServiceClient();
+    if (!supabase) {
+      return { ok: false, error: "supabase_not_configured" };
+    }
+    const { data, error } = await supabase.rpc("seeker_request_match", {
+      p_anonymous_id: ctx.anonymousId ?? null,
+      p_listing_id: listingId,
+    });
+    if (error) {
+      console.error("[confirm_match_request] rpc failed", error);
+      return { ok: false, error: error.message };
+    }
+    const payload = data as { ok: boolean; match_id?: string; error?: string };
+    if (!payload.ok) {
+      return { ok: false, error: payload.error ?? "unknown_error" };
+    }
     return {
       ok: true,
       data: {
-        listing_id: input.listing_id,
-        status: "outreach_queued",
+        listing_id: listingId,
+        match_id: payload.match_id,
         message:
-          "Anbieter wird kontaktiert sobald die Outreach-Pipeline live ist.",
+          "Anfrage ist raus. Sobald der Anbieter zusagt, tauschen wir den Kontakt aus — du siehst das Ergebnis in deinem Dashboard unter 'Meine Anfragen'.",
       },
     };
   },

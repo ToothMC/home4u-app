@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { ListingCard } from "@/components/dashboard/ListingCard";
+import { MatchSections } from "@/components/dashboard/MatchSections";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -149,6 +150,8 @@ export default async function DashboardPage() {
             )}
           </section>
         </div>
+
+        <MatchSections />
 
         <div className="mt-10 rounded-lg border p-4 bg-[var(--accent)] flex items-center justify-between">
           <div className="flex items-center gap-3">
