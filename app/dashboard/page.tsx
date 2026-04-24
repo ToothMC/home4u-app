@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { AuthMenu } from "@/components/auth/AuthMenu";
+import { ListingCard } from "@/components/dashboard/ListingCard";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -94,29 +95,7 @@ export default async function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {listings.map((l) => (
-                  <Card key={l.id}>
-                    {l.media && l.media.length > 0 && (
-                      <ListingCover url={l.media[0]} count={l.media.length} />
-                    )}
-                    <CardHeader>
-                      <CardTitle className="text-base">
-                        {l.location_city}
-                        {l.location_district ? ` · ${l.location_district}` : ""}
-                      </CardTitle>
-                      <CardDescription className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                        <span>{l.rooms ?? "?"} Zimmer</span>
-                        {l.size_sqm ? <span>{l.size_sqm} m²</span> : null}
-                        <span>
-                          {Number(l.price).toLocaleString("de-DE")}{" "}
-                          {l.currency || "EUR"}
-                          {l.type === "rent" ? "/Monat" : ""}
-                        </span>
-                        <span className="uppercase tracking-wider text-[10px]">
-                          {l.status}
-                        </span>
-                      </CardDescription>
-                    </CardHeader>
-                  </Card>
+                  <ListingCard key={l.id} listing={l} />
                 ))}
               </div>
             )}
@@ -182,31 +161,6 @@ export default async function DashboardPage() {
         </div>
       </section>
     </main>
-  );
-}
-
-function ListingCover({ url, count }: { url: string; count: number }) {
-  const isVideo = /\.(mp4|mov|webm)$/i.test(url);
-  return (
-    <div className="relative aspect-[16/9] overflow-hidden rounded-t-lg bg-[var(--muted)]">
-      {isVideo ? (
-        // eslint-disable-next-line jsx-a11y/media-has-caption
-        <video
-          src={url}
-          className="h-full w-full object-cover"
-          muted
-          playsInline
-        />
-      ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" className="h-full w-full object-cover" />
-      )}
-      {count > 1 && (
-        <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white">
-          +{count - 1}
-        </span>
-      )}
-    </div>
   );
 }
 
