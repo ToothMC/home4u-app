@@ -33,7 +33,7 @@ const SEED_MESSAGE: Record<string, string> = {
   seeker:
     "Hi, ich bin Sophie. Ich helfe dir, eine Wohnung zu finden, die wirklich passt. Erzähl mir kurz: In welcher Stadt oder Region suchst du — und zur Miete oder zum Kauf?",
   owner:
-    "Hi, ich bin Sophie. Du möchtest deine Wohnung vermieten? Beschreib sie mir kurz — wo sie liegt, Zimmer und ab wann sie verfügbar wäre.",
+    "Hi, ich bin Sophie. Schön, dass du deine Wohnung bei Home4U anbieten möchtest. Für ein Inserat musst du nur einmal angemeldet sein — oben rechts auf 'Anmelden' klicken, Code aus der E-Mail eingeben. Danach erzähl mir einfach wo die Wohnung liegt, Zimmer, Preis und ab wann sie verfügbar wäre.",
   agent:
     "Hi, ich bin Sophie. Schön, dass du dich für den Makler-Beirat interessierst. In welcher Stadt oder Region arbeitest du aktuell, und wie viele Inserate hast du typischerweise parallel?",
   default:
@@ -48,8 +48,11 @@ export function ChatView({
   region?: Region;
 }) {
   const baseSeed = SEED_MESSAGE[flow ?? "default"] ?? SEED_MESSAGE.default;
-  const seed = region
-    ? `Hi, ich bin Sophie. Ich arbeite gerade für dich in ${region.label}. Was kann ich tun?`
+  // Für seeker/default bekommt der Region-Seed Vorrang (macht Sophie konkreter).
+  // Für owner/agent bleibt der Flow-Seed erhalten, Region wird nur im Header angezeigt.
+  const useRegionSeed = region && (flow === "seeker" || !flow || flow === "default");
+  const seed = useRegionSeed
+    ? `Hi, ich bin Sophie. Ich arbeite gerade für dich in ${region!.label}. Was kann ich tun?`
     : baseSeed;
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: seed },

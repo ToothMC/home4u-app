@@ -79,6 +79,57 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "create_listing",
+    description:
+      "Legt ein neues Inserat für eine Wohnung/ein Haus an, wenn der Nutzer als privater Eigentümer oder Makler etwas inserieren möchte. Pflicht: eingeloggter Nutzer, Stadt, mindestens Viertel/Postleitzahl, Preis, Zimmer, Typ (rent/sale). Bei Makler-Inseraten zusätzlich Provisionshöhe erfragen. Das Inserat ist nach Anlage sofort aktiv und kann gematcht werden.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: {
+          type: "string",
+          enum: ["rent", "sale"],
+          description: "Miete oder Kauf",
+        },
+        location_city: {
+          type: "string",
+          description: "Stadt, z. B. 'Paphos', 'Limassol', 'Nicosia'",
+        },
+        location_district: {
+          type: "string",
+          description: "Viertel oder genauere Lage, z. B. 'Chloraka', 'Kato Paphos'",
+        },
+        price: {
+          type: "number",
+          description: "Miete pro Monat (in EUR) oder Kaufpreis",
+        },
+        rooms: {
+          type: "integer",
+          description: "Anzahl Zimmer",
+        },
+        size_sqm: {
+          type: "integer",
+          description: "Wohnfläche in Quadratmetern",
+        },
+        contact_channel: {
+          type: "string",
+          enum: ["whatsapp", "telegram", "email", "phone"],
+          description: "Bevorzugter Kontaktkanal, über den Sophie den Match-Anfragen weiterleitet",
+        },
+        language: {
+          type: "string",
+          enum: ["de", "en", "ru", "el"],
+          description: "Sprache, in der der Anbieter bevorzugt antwortet",
+        },
+        notes: {
+          type: "string",
+          description: "Kurzer Freitext: was macht die Wohnung aus, besondere Wünsche an Mieter/Käufer",
+        },
+      },
+      required: ["type", "location_city", "price", "rooms"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "find_matches",
     description:
       "Sucht passende Wohnungsangebote für das zuletzt angelegte Suchprofil des Nutzers. Ruft den Matching-Job in der Datenbank auf und liefert die Top-Treffer zurück (Stadt, Lage, Preis, Zimmer, Größe). Nutze dieses Tool, sobald genug Informationen für ein Profil erfasst sind — idealerweise direkt nach create_search_profile oder wenn der Nutzer nach 'was hast du für mich?' fragt.",
