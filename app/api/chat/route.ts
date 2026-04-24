@@ -9,6 +9,7 @@ import {
 import { SOPHIE_TOOLS } from "@/lib/sophie/tools";
 import { executeTool, type ToolContext } from "@/lib/sophie/tool-handlers";
 import { getOrCreateAnonymousSession } from "@/lib/session";
+import { getAuthUser } from "@/lib/supabase/auth";
 import {
   appendMessage,
   createConversation,
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
   }
 
   const session = await getOrCreateAnonymousSession();
+  const authUser = await getAuthUser();
 
   // Conversation: weiterführen oder neu anlegen
   let conversationId = body.conversationId;
@@ -88,6 +90,7 @@ export async function POST(req: NextRequest) {
 
   const ctx: ToolContext = {
     anonymousId: session.anonymousId,
+    userId: authUser?.id,
     conversationId,
   };
 

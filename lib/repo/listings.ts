@@ -16,18 +16,20 @@ export type Listing = {
 export type ListingMatch = Listing & { score: number };
 
 /**
- * Ruft den match_listings_for_profile-RPC auf. Bevorzugt das aktuelle
- * aktive Profil der anonymen Session; wenn keines existiert, returned [].
+ * Ruft den match_listings_for_profile-RPC auf. Bevorzugt user_id (eingeloggt),
+ * fällt auf anonymous_id zurück (anonyme Session). Liefert [] wenn kein
+ * aktives Profil existiert oder Supabase nicht konfiguriert ist.
  */
 export async function findMatchesForSession(
-  anonymousId: string,
+  params: { anonymousId?: string | null; userId?: string | null },
   limit = 5
 ): Promise<ListingMatch[]> {
   const supabase = createSupabaseServiceClient();
   if (!supabase) return [];
 
   const { data, error } = await supabase.rpc("match_listings_for_profile", {
-    p_anonymous_id: anonymousId,
+    p_anonymous_id: params.anonymousId ?? null,
+    p_user_id: params.userId ?? null,
     p_limit: limit,
   });
   if (error) {

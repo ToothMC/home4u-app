@@ -1,11 +1,9 @@
--- Matching: match_listings_for_profile
--- Hard-Filter (Stadt, Preis ±15%, Zimmer ±1, aktiver Status) + Score nach
--- Preis-Proximity und optional pgvector-Embedding (wenn beide gesetzt).
--- SECURITY DEFINER, damit Tool-Handler (service-role) + Server-Components den
--- RPC ohne RLS-Reibung rufen können.
+-- Fix: match_listings_for_profile muss nach Login auch über user_id lookupen.
+-- Ersetzt die RPC aus 0004.
 
 create or replace function public.match_listings_for_profile(
   p_anonymous_id text default null,
+  p_user_id uuid default null,
   p_profile_id uuid default null,
   p_limit int default 5
 )
@@ -33,11 +31,14 @@ declare
 begin
   if p_profile_id is not null then
     select * into v_profile from search_profiles where id = p_profile_id;
+  elsif p_user_id is not null then
+    select * into v_profile from search_profiles
+    where user_id = p_user_id and active = true
+    order by updated_at desc limit 1;
   elsif p_anonymous_id is not null then
     select * into v_profile from search_profiles
     where anonymous_id = p_anonymous_id and active = true
-    order by updated_at desc
-    limit 1;
+    order by updated_at desc limit 1;
   else
     return;
   end if;
@@ -62,8 +63,6 @@ begin
       l.rooms,
       l.size_sqm,
       l.contact_channel,
-      -- Score: je kleiner Preis-Differenz zum Maximum, desto besser; bonus
-      -- für passende Zimmeranzahl. Zwischen 0 und 1.
       (
         greatest(
           0,
@@ -106,5 +105,9 @@ begin
 end;
 $$;
 
-revoke all on function public.match_listings_for_profile(text, uuid, int) from public;
-grant execute on function public.match_listings_for_profile(text, uuid, int) to anon, authenticated;
+-- Die alte 4-arg Signatur aus 0004 aufräumen, damit nur eine existiert
+drop function if exists public.match_listings_for_profile(text, uuid, int);
+
+revoke all on function public.match_listings_for_profile(text, uuid, uuid, int) from public;
+grant execute on function public.match_listings_for_profile(text, uuid, uuid, int)
+  to anon, authenticated;

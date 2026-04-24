@@ -13,6 +13,7 @@ export type ToolResult = {
 
 export type ToolContext = {
   anonymousId?: string;
+  userId?: string;
   conversationId?: string;
 };
 
@@ -77,12 +78,14 @@ const handlers: Record<string, Handler> = {
   },
 
   async find_matches(input, ctx) {
-    if (!ctx.anonymousId) return { ok: false, error: "missing_session" };
-    const limit = Math.min(
-      10,
-      Math.max(1, Number(input.limit) || 3)
+    if (!ctx.anonymousId && !ctx.userId) {
+      return { ok: false, error: "missing_session" };
+    }
+    const limit = Math.min(10, Math.max(1, Number(input.limit) || 3));
+    const matches = await findMatchesForSession(
+      { anonymousId: ctx.anonymousId, userId: ctx.userId },
+      limit
     );
-    const matches = await findMatchesForSession(ctx.anonymousId, limit);
     return {
       ok: true,
       data: {
