@@ -17,7 +17,7 @@ export function DashboardViewTabs({
       </Tab>
       <Tab href="/dashboard?view=provider" active={current === "provider"}>
         <KeyRound className="size-3" />
-        Ich biete an
+        Ich biete
       </Tab>
     </div>
   );

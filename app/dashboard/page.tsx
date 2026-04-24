@@ -34,6 +34,8 @@ export default async function DashboardPage({
 
   let listings: Listing[] = [];
   let profiles: SearchProfile[] = [];
+  const listingRequestCounts: Record<string, number> = {};
+  const profileMatchCounts: Record<string, number> = {};
 
   if (supabase) {
     const [listingRes, profileRes] = await Promise.all([
@@ -54,6 +56,35 @@ export default async function DashboardPage({
     ]);
     listings = (listingRes.data ?? []) as Listing[];
     profiles = (profileRes.data ?? []) as SearchProfile[];
+
+    // Anfragen pro Listing (seeker_interest=true)
+    if (listings.length > 0) {
+      const { data: matchRows } = await supabase
+        .from("matches")
+        .select("listing_id")
+        .in(
+          "listing_id",
+          listings.map((l) => l.id)
+        )
+        .eq("seeker_interest", true);
+      for (const m of matchRows ?? []) {
+        listingRequestCounts[m.listing_id] =
+          (listingRequestCounts[m.listing_id] ?? 0) + 1;
+      }
+    }
+
+    // Treffer pro Suchprofil (RPC pro Profil, für MVP ausreichend)
+    for (const p of profiles) {
+      const { data: matches } = await supabase.rpc(
+        "match_listings_for_profile",
+        {
+          p_user_id: user.id,
+          p_profile_id: p.id,
+          p_limit: 100,
+        }
+      );
+      profileMatchCounts[p.id] = (matches ?? []).length;
+    }
   }
 
   // View-Default: URL-Param → profiles.role (seeker/owner/agent) → erste
@@ -99,9 +130,12 @@ export default async function DashboardPage({
         <DashboardViewTabs current={view} />
 
         {view === "seeker" ? (
-          <SeekerView profiles={profiles} />
+          <SeekerView profiles={profiles} matchCounts={profileMatchCounts} />
         ) : (
-          <ProviderView listings={listings} />
+          <ProviderView
+            listings={listings}
+            requestCounts={listingRequestCounts}
+          />
         )}
 
         <MatchSections role={view} />
@@ -120,7 +154,13 @@ export default async function DashboardPage({
   );
 }
 
-function SeekerView({ profiles }: { profiles: SearchProfile[] }) {
+function SeekerView({
+  profiles,
+  matchCounts,
+}: {
+  profiles: SearchProfile[];
+  matchCounts: Record<string, number>;
+}) {
   return (
     <section className="mt-6">
       <div className="flex items-center justify-between mb-3">
@@ -141,33 +181,57 @@ function SeekerView({ profiles }: { profiles: SearchProfile[] }) {
         </Card>
       ) : (
         <div className="space-y-3">
-          {profiles.map((p) => (
-            <Card key={p.id}>
-              <CardHeader>
-                <CardTitle className="text-base">{p.location}</CardTitle>
-                <CardDescription className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                  {p.rooms ? <span>{p.rooms} Zimmer</span> : null}
-                  {p.budget_max ? (
-                    <span>
-                      bis {Number(p.budget_max).toLocaleString("de-DE")} €
+          {profiles.map((p) => {
+            const count = matchCounts[p.id] ?? 0;
+            return (
+              <Card key={p.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-base">{p.location}</CardTitle>
+                    {count > 0 ? (
+                      <Link
+                        href="/chat"
+                        className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25"
+                        title="Sophie zeigt dir die passenden Inserate"
+                      >
+                        {count} passende Inserate →
+                      </Link>
+                    ) : (
+                      <span className="text-[10px] text-[var(--muted-foreground)]">
+                        0 Treffer
+                      </span>
+                    )}
+                  </div>
+                  <CardDescription className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                    {p.rooms ? <span>{p.rooms} Zimmer</span> : null}
+                    {p.budget_max ? (
+                      <span>
+                        bis {Number(p.budget_max).toLocaleString("de-DE")} €
+                      </span>
+                    ) : null}
+                    {p.move_in_date ? <span>ab {p.move_in_date}</span> : null}
+                    {p.household ? <span>{p.household}</span> : null}
+                    <span className="uppercase tracking-wider text-[10px]">
+                      {p.active ? "aktiv" : "pausiert"}
                     </span>
-                  ) : null}
-                  {p.move_in_date ? <span>ab {p.move_in_date}</span> : null}
-                  {p.household ? <span>{p.household}</span> : null}
-                  <span className="uppercase tracking-wider text-[10px]">
-                    {p.active ? "aktiv" : "pausiert"}
-                  </span>
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          ))}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            );
+          })}
         </div>
       )}
     </section>
   );
 }
 
-function ProviderView({ listings }: { listings: Listing[] }) {
+function ProviderView({
+  listings,
+  requestCounts,
+}: {
+  listings: Listing[];
+  requestCounts: Record<string, number>;
+}) {
   return (
     <section className="mt-6">
       <div className="flex items-center justify-between mb-3">
@@ -189,7 +253,11 @@ function ProviderView({ listings }: { listings: Listing[] }) {
       ) : (
         <div className="space-y-3">
           {listings.map((l) => (
-            <ListingCard key={l.id} listing={l} />
+            <ListingCard
+              key={l.id}
+              listing={l}
+              requestCount={requestCounts[l.id] ?? 0}
+            />
           ))}
         </div>
       )}

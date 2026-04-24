@@ -97,7 +97,7 @@ export function MatchSections({
 
   if (role === "provider") {
     return (
-      <section className="mt-8">
+      <section id="match-inbox" className="mt-8 scroll-mt-8">
         <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
           <Inbox className="size-4" />
           Anfragen an dich ({inbox?.length ?? "…"})
