@@ -56,6 +56,7 @@ export function ChatView({
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -88,6 +89,8 @@ export function ChatView({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           messages: payloadMessages,
+          conversationId,
+          flow,
           region: region
             ? { slug: region.slug, label: region.label }
             : undefined,
@@ -128,7 +131,9 @@ export function ChatView({
             continue;
           }
 
-          if (evt.type === "text" && typeof evt.delta === "string") {
+          if (evt.type === "conversation" && typeof evt.id === "string") {
+            setConversationId(evt.id);
+          } else if (evt.type === "text" && typeof evt.delta === "string") {
             assistantText += evt.delta;
           } else if (
             evt.type === "tool_use_start" &&
