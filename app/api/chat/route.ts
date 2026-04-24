@@ -31,11 +31,18 @@ const RegionSchema = z
   })
   .optional();
 
+const AttachedMediaSchema = z.object({
+  url: z.string().url(),
+  kind: z.enum(["image", "video"]),
+  name: z.string().max(140),
+});
+
 const BodySchema = z.object({
   conversationId: z.string().uuid().optional(),
   flow: z.string().optional(),
   messages: z.array(MessageSchema).min(1).max(40),
   region: RegionSchema,
+  attached_media: z.array(AttachedMediaSchema).max(20).optional(),
 });
 
 const MAX_TOOL_ROUNDS = 4;
@@ -121,6 +128,18 @@ export async function POST(req: NextRequest) {
         systemBlocks.push({
           type: "text",
           text: `<user_context>\nDer Nutzer hat im Landing-Page-Picker die Region "${body.region.label}" (slug: ${body.region.slug}) gewählt. Frage nicht nochmal nach Land/Stadt, arbeite mit dieser Region als Default. Bei Wunsch nach anderer Region darf der Nutzer jederzeit wechseln.\n</user_context>`,
+        });
+      }
+      if (body.attached_media && body.attached_media.length > 0) {
+        const mediaList = body.attached_media
+          .map(
+            (m, i) =>
+              `${i + 1}. ${m.kind.toUpperCase()} — ${m.name} — ${m.url}`
+          )
+          .join("\n");
+        systemBlocks.push({
+          type: "text",
+          text: `<attached_media>\nDer Nutzer hat ${body.attached_media.length} Medien angehängt (in dieser Reihenfolge):\n${mediaList}\n\nNutze diese URLs unverändert im media_urls-Feld, wenn du create_listing aufrufst. Frage den Nutzer nicht nach weiteren Bildern, wenn er bereits welche angehängt hat. Die erste Datei wird als Cover verwendet.\n</attached_media>`,
         });
       }
 

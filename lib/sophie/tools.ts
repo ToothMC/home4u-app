@@ -124,6 +124,11 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
           type: "string",
           description: "Kurzer Freitext: was macht die Immobilie aus, besondere Wünsche an Mieter/Käufer",
         },
+        media_urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "Öffentliche URLs zu Bildern/Videos in der Reihenfolge, in der sie angezeigt werden. Erste URL = Cover. Übernimm diese aus dem <attached_media>-Context, wenn vorhanden — niemals URLs erfinden.",
+        },
       },
       required: ["type", "location_city", "price", "rooms"],
       additionalProperties: false,

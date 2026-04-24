@@ -106,6 +106,9 @@ const handlers: Record<string, Handler> = {
     const contactChannel = asString(input.contact_channel) ?? null;
     const language = asString(input.language) ?? null;
     const notes = asString(input.notes) ?? null;
+    const mediaUrls = asStringArray(input.media_urls)?.filter((u) =>
+      u.startsWith("http")
+    ) ?? null;
 
     // Dedup-Hash stabil aus Owner + Stadt + Preis + Zimmer (verhindert Duplikate
     // vom selben Owner, erlaubt verschiedene Inserate wenn die Parameter abweichen).
@@ -136,6 +139,7 @@ const handlers: Record<string, Handler> = {
         language,
         owner_user_id: ctx.userId,
         dedup_hash: dedupHash,
+        media: mediaUrls ?? [],
       })
       .select("id")
       .single();
@@ -155,6 +159,7 @@ const handlers: Record<string, Handler> = {
         listing_id: data.id,
         message: `Inserat angelegt: ${city}${district ? " · " + district : ""}, ${rooms} Zimmer, ${price} €.`,
         notes_ack: notes ? true : false,
+        media_count: mediaUrls?.length ?? 0,
       },
     };
   },
