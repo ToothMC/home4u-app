@@ -8,9 +8,7 @@ export const dynamic = "force-dynamic";
 
 const BodySchema = z.object({
   email: z.string().email().max(254),
-  code: z
-    .string()
-    .regex(/^\d{6}$/, "6-digit-code expected"),
+  code: z.string().regex(/^\d{6,10}$/, "numeric code expected"),
 });
 
 export async function POST(req: NextRequest) {

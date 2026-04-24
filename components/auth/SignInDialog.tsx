@@ -39,6 +39,17 @@ export function SignInDialog({
     if (mode === "code") codeInputRef.current?.focus();
   }, [mode]);
 
+  // Auto-Submit: 8-stelliger Code sofort, 6-stelliger nach kurzer Ruhezeit
+  // (damit 7/8-stellige Eingaben nicht versehentlich gesendet werden).
+  const verifyRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (mode !== "code" || busy) return;
+    if (code.length < 6 || code.length > 8) return;
+    const delay = code.length === 8 ? 0 : 700;
+    const t = setTimeout(() => verifyRef.current(), delay);
+    return () => clearTimeout(t);
+  }, [code, mode, busy]);
+
   async function sendOtp(opts?: { resend?: boolean }) {
     if (!email || busy) return;
     if (cooldownEnd && Date.now() < cooldownEnd && !opts?.resend) {
@@ -65,8 +76,10 @@ export function SignInDialog({
     }
   }
 
+  verifyRef.current = verify;
+
   async function verify() {
-    if (code.length !== 6 || busy) return;
+    if (code.length < 6 || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -182,11 +195,11 @@ export function SignInDialog({
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                pattern="\d{6}"
+                pattern="\d{6,8}"
                 placeholder="123456"
                 value={code}
                 onChange={(e) =>
-                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 8))
                 }
                 disabled={busy}
                 className="text-center tracking-[0.3em] text-lg"
@@ -195,7 +208,7 @@ export function SignInDialog({
               <Button
                 type="submit"
                 className="w-full"
-                disabled={busy || code.length !== 6}
+                disabled={busy || code.length < 6}
               >
                 {busy ? <Loader2 className="animate-spin" /> : null}
                 Anmelden
