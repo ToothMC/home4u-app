@@ -17,8 +17,16 @@ const MessageSchema = z.object({
   content: z.string(),
 });
 
+const RegionSchema = z
+  .object({
+    slug: z.string().min(1),
+    label: z.string().min(1),
+  })
+  .optional();
+
 const BodySchema = z.object({
   messages: z.array(MessageSchema).min(1).max(40),
+  region: RegionSchema,
 });
 
 const MAX_TOOL_ROUNDS = 4;
@@ -61,18 +69,26 @@ export async function POST(req: NextRequest) {
         content: m.content,
       }));
 
+      const systemBlocks: Anthropic.Messages.TextBlockParam[] = [
+        {
+          type: "text",
+          text: SOPHIE_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ];
+      if (body.region) {
+        systemBlocks.push({
+          type: "text",
+          text: `<user_context>\nDer Nutzer hat im Landing-Page-Picker die Region "${body.region.label}" (slug: ${body.region.slug}) gewählt. Frage nicht nochmal nach Land/Stadt, arbeite mit dieser Region als Default. Bei Wunsch nach anderer Region darf der Nutzer jederzeit wechseln.\n</user_context>`,
+        });
+      }
+
       try {
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           const response = anthropic.messages.stream({
             model: MODEL_SONNET,
             max_tokens: 1024,
-            system: [
-              {
-                type: "text",
-                text: SOPHIE_SYSTEM_PROMPT,
-                cache_control: { type: "ephemeral" },
-              },
-            ],
+            system: systemBlocks,
             tools: SOPHIE_TOOLS,
             messages: conversation,
             metadata: { user_id: `prompt_version=${SOPHIE_PROMPT_VERSION}` },

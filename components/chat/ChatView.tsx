@@ -1,10 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, ArrowLeft, Wrench, Check, X } from "lucide-react";
+import {
+  Send,
+  Loader2,
+  ArrowLeft,
+  Wrench,
+  Check,
+  X,
+  MapPin,
+} from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import type { Region } from "@/lib/regions";
 
 type ToolCall = {
   id: string;
@@ -30,8 +39,17 @@ const SEED_MESSAGE: Record<string, string> = {
     "Hi, ich bin Sophie — die KI-Assistentin von Home4U. Ich helfe Suchenden, Eigentümern und Maklern. In welcher Stadt oder Region soll ich dich unterstützen?",
 };
 
-export function ChatView({ flow }: { flow?: string }) {
-  const seed = SEED_MESSAGE[flow ?? "default"] ?? SEED_MESSAGE.default;
+export function ChatView({
+  flow,
+  region,
+}: {
+  flow?: string;
+  region?: Region;
+}) {
+  const baseSeed = SEED_MESSAGE[flow ?? "default"] ?? SEED_MESSAGE.default;
+  const seed = region
+    ? `Hi, ich bin Sophie. Ich arbeite gerade für dich in ${region.label}. Was kann ich tun?`
+    : baseSeed;
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: seed },
   ]);
@@ -68,7 +86,12 @@ export function ChatView({ flow }: { flow?: string }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: payloadMessages }),
+        body: JSON.stringify({
+          messages: payloadMessages,
+          region: region
+            ? { slug: region.slug, label: region.label }
+            : undefined,
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -174,6 +197,16 @@ export function ChatView({ flow }: { flow?: string }) {
             Home4U · KI-Assistentin
           </p>
         </div>
+        {region && (
+          <Link
+            href="/#region"
+            className="flex items-center gap-1 text-xs text-[var(--muted-foreground)] rounded-full border px-3 py-1.5 hover:bg-[var(--accent)]"
+            aria-label="Region wechseln"
+          >
+            <MapPin className="size-3" />
+            {region.city}
+          </Link>
+        )}
       </header>
 
       <div className="flex-1 overflow-y-auto">
