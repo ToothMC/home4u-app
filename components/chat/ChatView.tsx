@@ -63,6 +63,33 @@ export function ChatView({
   const [conversationId, setConversationId] = useState<string | undefined>();
   const endRef = useRef<HTMLDivElement | null>(null);
 
+  // Letzte Conversation des Users/der Session beim Mount laden.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/chat/history", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data.conversation) return;
+        const hist = data.conversation as {
+          conversationId: string;
+          messages: ChatMessage[];
+        };
+        if (hist.messages?.length) {
+          setMessages(hist.messages);
+          setConversationId(hist.conversationId);
+        }
+      } catch {
+        // silently ignore — fallback bleibt der Seed
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streaming]);
