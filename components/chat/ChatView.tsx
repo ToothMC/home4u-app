@@ -1,15 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, ArrowLeft, Wrench } from "lucide-react";
+import { Send, Loader2, ArrowLeft, Wrench, Check, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
+type ToolCall = {
+  id: string;
+  name: string;
+  input: string;
+  result?: { ok: boolean; error?: string };
+};
+
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
-  toolCalls?: { name: string; input?: string }[];
+  toolCalls?: ToolCall[];
 };
 
 const SEED_MESSAGE: Record<string, string> = {
@@ -70,8 +77,8 @@ export function ChatView({ flow }: { flow?: string }) {
       }
 
       let assistantText = "";
-      const toolCalls: { name: string; input?: string }[] = [];
-      let currentTool: { name: string; input: string } | null = null;
+      const toolCalls: ToolCall[] = [];
+      let currentTool: ToolCall | null = null;
 
       setMessages((prev) => [
         ...prev,
@@ -100,8 +107,12 @@ export function ChatView({ flow }: { flow?: string }) {
 
           if (evt.type === "text" && typeof evt.delta === "string") {
             assistantText += evt.delta;
-          } else if (evt.type === "tool_use_start" && typeof evt.name === "string") {
-            currentTool = { name: evt.name, input: "" };
+          } else if (
+            evt.type === "tool_use_start" &&
+            typeof evt.name === "string" &&
+            typeof evt.id === "string"
+          ) {
+            currentTool = { id: evt.id, name: evt.name, input: "" };
             toolCalls.push(currentTool);
           } else if (
             evt.type === "tool_input_delta" &&
@@ -109,6 +120,14 @@ export function ChatView({ flow }: { flow?: string }) {
             currentTool
           ) {
             currentTool.input += evt.delta;
+          } else if (evt.type === "tool_result" && typeof evt.id === "string") {
+            const tc = toolCalls.find((t) => t.id === evt.id);
+            if (tc) {
+              tc.result = {
+                ok: Boolean(evt.ok),
+                error: typeof evt.error === "string" ? evt.error : undefined,
+              };
+            }
           } else if (evt.type === "error") {
             throw new Error(String(evt.message ?? "stream_error"));
           }
@@ -120,10 +139,7 @@ export function ChatView({ flow }: { flow?: string }) {
               copy[copy.length - 1] = {
                 role: "assistant",
                 content: assistantText,
-                toolCalls: toolCalls.map((t) => ({
-                  name: t.name,
-                  input: t.input,
-                })),
+                toolCalls: toolCalls.map((t) => ({ ...t })),
               };
             }
             return copy;
@@ -221,13 +237,20 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         {message.content || (isUser ? "" : "…")}
         {message.toolCalls && message.toolCalls.length > 0 && (
           <div className="mt-2 space-y-1">
-            {message.toolCalls.map((t, i) => (
+            {message.toolCalls.map((t) => (
               <div
-                key={i}
+                key={t.id}
                 className="flex items-center gap-1 text-xs opacity-70"
               >
                 <Wrench className="size-3" />
                 <code>{t.name}</code>
+                {t.result && t.result.ok && <Check className="size-3" />}
+                {t.result && !t.result.ok && (
+                  <>
+                    <X className="size-3" />
+                    <span className="truncate">{t.result.error}</span>
+                  </>
+                )}
               </div>
             ))}
           </div>
