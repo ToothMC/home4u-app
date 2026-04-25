@@ -89,6 +89,15 @@ export type PublicListingData = {
   price_warm: number | null;
   price_cold: number | null;
   deposit: number | null;
+  service_charge_monthly: number | null;
+  utilities: {
+    water?: string | null;
+    electricity?: string | null;
+    internet?: string | null;
+    bills_in_tenant_name?: boolean | null;
+    estimated_monthly_total?: number | null;
+    notes?: string | null;
+  } | null;
   currency: string;
   rooms: number | null;
   bathrooms: number | null;

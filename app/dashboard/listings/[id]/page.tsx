@@ -29,9 +29,12 @@ export default async function ListingDetailPage({
     .from("listings")
     .select(
       `id, title, description, type, status, location_city, location_district,
-       price, currency, rooms, bathrooms, size_sqm, plot_sqm,
+       location_address, lat, lng,
+       price, price_warm, price_cold, deposit, service_charge_monthly, utilities, currency,
+       rooms, bathrooms, size_sqm, plot_sqm,
        property_type, floor, year_built, energy_class, furnishing,
        features, pets_allowed, available_from, contact_channel, language, media,
+       floorplan_url, tour_3d_url, video_url,
        owner_user_id, source, external_id`
     )
     .eq("id", id)
@@ -53,7 +56,16 @@ export default async function ListingDetailPage({
     status: data.status,
     location_city: data.location_city,
     location_district: data.location_district,
+    location_address: data.location_address ?? null,
+    lat: data.lat != null ? Number(data.lat) : null,
+    lng: data.lng != null ? Number(data.lng) : null,
     price: Number(data.price),
+    price_warm: data.price_warm != null ? Number(data.price_warm) : null,
+    price_cold: data.price_cold != null ? Number(data.price_cold) : null,
+    deposit: data.deposit != null ? Number(data.deposit) : null,
+    service_charge_monthly:
+      data.service_charge_monthly != null ? Number(data.service_charge_monthly) : null,
+    utilities: data.utilities ?? null,
     currency: data.currency,
     rooms: data.rooms,
     bathrooms: data.bathrooms ?? null,
@@ -70,6 +82,9 @@ export default async function ListingDetailPage({
     contact_channel: data.contact_channel ?? null,
     language: data.language ?? null,
     media: data.media ?? [],
+    floorplan_url: data.floorplan_url ?? null,
+    tour_3d_url: data.tour_3d_url ?? null,
+    video_url: data.video_url ?? null,
   };
 
   return (

@@ -17,7 +17,7 @@ export async function loadPublicListing(
     .select(
       `id, title, description, type, status, property_type,
        location_city, location_district, location_address, lat, lng,
-       price, price_warm, price_cold, deposit, currency,
+       price, price_warm, price_cold, deposit, service_charge_monthly, utilities, currency,
        rooms, bathrooms, size_sqm, plot_sqm,
        floor, year_built, energy_class, furnishing,
        pets_allowed, available_from, features, media,
@@ -73,6 +73,9 @@ export async function loadPublicListing(
     price_warm: l.price_warm != null ? Number(l.price_warm) : null,
     price_cold: l.price_cold != null ? Number(l.price_cold) : null,
     deposit: l.deposit != null ? Number(l.deposit) : null,
+    service_charge_monthly:
+      l.service_charge_monthly != null ? Number(l.service_charge_monthly) : null,
+    utilities: (l.utilities as PublicListingData["utilities"]) ?? null,
     currency: l.currency ?? "EUR",
     rooms: l.rooms ?? null,
     bathrooms: l.bathrooms ?? null,

@@ -22,6 +22,22 @@ import { DeleteRecordButton } from "@/components/dashboard/DeleteRecordButton";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
+export type UtilityArrangement =
+  | "included"
+  | "tenant_pays"
+  | "landlord_pays"
+  | "estimated"
+  | "not_provided";
+
+export type Utilities = {
+  water?: UtilityArrangement | null;
+  electricity?: UtilityArrangement | null;
+  internet?: UtilityArrangement | null;
+  bills_in_tenant_name?: boolean | null;
+  estimated_monthly_total?: number | null;
+  notes?: string | null;
+};
+
 export type EditableListing = {
   id: string;
   title: string | null;
@@ -30,7 +46,15 @@ export type EditableListing = {
   status: string;
   location_city: string;
   location_district: string | null;
+  location_address: string | null;
+  lat: number | null;
+  lng: number | null;
   price: number;
+  price_warm: number | null;
+  price_cold: number | null;
+  deposit: number | null;
+  service_charge_monthly: number | null;
+  utilities: Utilities | null;
   currency: string;
   rooms: number | null;
   bathrooms: number | null;
@@ -47,6 +71,9 @@ export type EditableListing = {
   contact_channel: string | null;
   language: string | null;
   media: string[] | null;
+  floorplan_url: string | null;
+  tour_3d_url: string | null;
+  video_url: string | null;
 };
 
 const PROPERTY_TYPES = [
@@ -329,8 +356,17 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={get("type") === "sale" ? "Kaufpreis (€)" : "Miete pro Monat (€)"}>
+        <Field label="Vollständige Adresse (Straße + Hausnummer + PLZ)">
+          <Input
+            value={(get("location_address") as string) ?? ""}
+            onChange={(e) => set("location_address", e.target.value || null)}
+            placeholder="z. B. Prenzlauer Allee 123, 10409 Berlin – Prenzlauer Berg"
+            maxLength={240}
+          />
+        </Field>
+
+        <div className="grid grid-cols-3 gap-3">
+          <Field label={get("type") === "sale" ? "Kaufpreis (€)" : "Miete (€)"}>
             <Input
               type="number"
               value={(get("price") as number | undefined) ?? ""}
@@ -341,14 +377,43 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
               min={0}
             />
           </Field>
-          <Field label="Verfügbar ab">
+          <Field label="Kaution (€)">
             <Input
-              type="date"
-              value={((get("available_from") as string) ?? "").slice(0, 10)}
-              onChange={(e) => set("available_from", e.target.value || null)}
+              type="number"
+              value={(get("deposit") as number | null) ?? ""}
+              onChange={(e) => {
+                const n = parseFloat(e.target.value);
+                set("deposit", Number.isFinite(n) ? n : null);
+              }}
+              min={0}
+              placeholder="z. B. 2 × Miete"
             />
           </Field>
+          {get("type") === "rent" && (
+            <Field label="Service-Charge / Mt. (€)">
+              <Input
+                type="number"
+                value={(get("service_charge_monthly") as number | null) ?? ""}
+                onChange={(e) => {
+                  const n = parseFloat(e.target.value);
+                  set("service_charge_monthly", Number.isFinite(n) ? n : null);
+                }}
+                min={0}
+                placeholder="Pool/Aufzug"
+              />
+            </Field>
+          )}
         </div>
+
+        <Field label="Verfügbar ab">
+          <Input
+            type="date"
+            value={((get("available_from") as string) ?? "").slice(0, 10)}
+            onChange={(e) => set("available_from", e.target.value || null)}
+          />
+        </Field>
+
+        {get("type") === "rent" && <UtilitiesEditor get={get} set={set} />}
 
         <div className="grid grid-cols-3 gap-3">
           <Field label="Zimmer">
@@ -572,6 +637,37 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                 <option value="stale">veraltet</option>
               </select>
             </Field>
+            <div className="border-t pt-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">
+                Externe Assets
+              </h3>
+              <div className="space-y-2">
+                <Field label="Grundriss-URL (PDF/Bild)">
+                  <Input
+                    type="url"
+                    value={(get("floorplan_url") as string) ?? ""}
+                    onChange={(e) => set("floorplan_url", e.target.value || null)}
+                    placeholder="https://…"
+                  />
+                </Field>
+                <Field label="3D-Tour-URL (Matterport o. ä.)">
+                  <Input
+                    type="url"
+                    value={(get("tour_3d_url") as string) ?? ""}
+                    onChange={(e) => set("tour_3d_url", e.target.value || null)}
+                    placeholder="https://…"
+                  />
+                </Field>
+                <Field label="Video-URL (YouTube/Vimeo)">
+                  <Input
+                    type="url"
+                    value={(get("video_url") as string) ?? ""}
+                    onChange={(e) => set("video_url", e.target.value || null)}
+                    placeholder="https://…"
+                  />
+                </Field>
+              </div>
+            </div>
           </div>
         )}
       </section>
@@ -612,5 +708,145 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </span>
       <div className="mt-1">{children}</div>
     </label>
+  );
+}
+
+// ---------- Utilities-Editor (Cyprus-Modell) ----------
+
+const UTILITY_OPTIONS = [
+  { value: "tenant_pays", label: "Mieter zahlt" },
+  { value: "included", label: "inklusive" },
+  { value: "landlord_pays", label: "Vermieter zahlt" },
+  { value: "estimated", label: "geschätzt" },
+];
+const INTERNET_OPTIONS = [
+  { value: "tenant_pays", label: "Mieter zahlt" },
+  { value: "included", label: "inklusive" },
+  { value: "landlord_pays", label: "Vermieter zahlt" },
+  { value: "not_provided", label: "nicht vorhanden" },
+];
+
+function UtilitiesEditor({
+  get,
+  set,
+}: {
+  get: <K extends keyof EditableListing>(key: K) => EditableListing[K];
+  set: <K extends keyof EditableListing>(key: K, value: EditableListing[K]) => void;
+}) {
+  const u = (get("utilities") as Utilities) ?? {};
+
+  function update<K extends keyof Utilities>(key: K, value: Utilities[K]) {
+    set("utilities", { ...u, [key]: value } as EditableListing["utilities"]);
+  }
+
+  return (
+    <div className="rounded-lg border bg-[var(--accent)]/40 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Nebenkosten</h3>
+        <span className="text-[10px] text-[var(--muted-foreground)]">
+          Strom · Wasser · Internet · Verträge
+        </span>
+      </div>
+
+      <UtilityRow
+        label="Strom"
+        value={u.electricity ?? null}
+        options={UTILITY_OPTIONS}
+        onChange={(v) => update("electricity", v as UtilityArrangement)}
+      />
+      <UtilityRow
+        label="Wasser"
+        value={u.water ?? null}
+        options={UTILITY_OPTIONS}
+        onChange={(v) => update("water", v as UtilityArrangement)}
+      />
+      <UtilityRow
+        label="Internet"
+        value={u.internet ?? null}
+        options={INTERNET_OPTIONS}
+        onChange={(v) => update("internet", v as UtilityArrangement)}
+      />
+
+      <Field label="Geschätzte Nebenkosten / Monat (€)">
+        <Input
+          type="number"
+          value={u.estimated_monthly_total ?? ""}
+          onChange={(e) => {
+            const n = parseFloat(e.target.value);
+            update("estimated_monthly_total", Number.isFinite(n) ? n : null);
+          }}
+          min={0}
+          placeholder="z. B. 80–120 € — Strom + Wasser + Internet zusammen"
+        />
+      </Field>
+
+      <Field label="Verträge">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { v: true, l: "Mieter meldet eigene Verträge an" },
+            { v: false, l: "Verträge laufen über Vermieter" },
+            { v: null, l: "noch offen" },
+          ].map((o) => (
+            <button
+              key={String(o.v)}
+              type="button"
+              onClick={() => update("bills_in_tenant_name", o.v as boolean | null)}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs",
+                u.bills_in_tenant_name === o.v
+                  ? "bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]"
+                  : "bg-[var(--background)] hover:bg-[var(--accent)]"
+              )}
+            >
+              {o.l}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="Notizen / Besonderheiten">
+        <Input
+          value={u.notes ?? ""}
+          onChange={(e) => update("notes", e.target.value || null)}
+          placeholder="z. B. Solar-Boiler, kein Klimaanlagen-Stromverbrauch im Sommer"
+          maxLength={500}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function UtilityRow({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  options: { value: string; label: string }[];
+  onChange: (v: string | null) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs font-medium w-16 shrink-0">{label}</span>
+      <div className="flex flex-wrap gap-1">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(value === o.value ? null : o.value)}
+            className={cn(
+              "rounded-full border px-2 py-0.5 text-[11px]",
+              value === o.value
+                ? "bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]"
+                : "bg-[var(--background)] hover:bg-[var(--accent)]"
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

@@ -34,6 +34,39 @@ const patchSchema = z
     language: z.enum(["de", "en", "ru", "el"]).nullable().optional(),
     media: z.array(z.string().url().max(1024)).max(40).optional(),
     status: z.enum(["active", "stale", "opted_out", "archived"]).optional(),
+    // Adresse + Geo
+    location_address: z.string().max(240).nullable().optional(),
+    lat: z.number().min(-90).max(90).nullable().optional(),
+    lng: z.number().min(-180).max(180).nullable().optional(),
+    // Preise (alle €)
+    price_warm: z.number().min(0).max(50_000_000).nullable().optional(),
+    price_cold: z.number().min(0).max(50_000_000).nullable().optional(),
+    deposit: z.number().min(0).max(50_000_000).nullable().optional(),
+    service_charge_monthly: z.number().min(0).max(50_000).nullable().optional(),
+    utilities: z
+      .object({
+        water: z
+          .enum(["included", "tenant_pays", "landlord_pays", "estimated"])
+          .nullable()
+          .optional(),
+        electricity: z
+          .enum(["included", "tenant_pays", "landlord_pays", "estimated"])
+          .nullable()
+          .optional(),
+        internet: z
+          .enum(["included", "tenant_pays", "landlord_pays", "not_provided"])
+          .nullable()
+          .optional(),
+        bills_in_tenant_name: z.boolean().nullable().optional(),
+        estimated_monthly_total: z.number().min(0).max(50_000).nullable().optional(),
+        notes: z.string().max(500).nullable().optional(),
+      })
+      .nullable()
+      .optional(),
+    // Externe Assets für Quick-Actions
+    floorplan_url: z.string().url().max(1024).nullable().optional(),
+    tour_3d_url: z.string().url().max(1024).nullable().optional(),
+    video_url: z.string().url().max(1024).nullable().optional(),
   })
   .strict();
 
