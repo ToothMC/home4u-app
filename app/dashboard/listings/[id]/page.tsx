@@ -36,6 +36,8 @@ export default async function ListingDetailPage({
        features, pets_allowed, available_from, contact_channel, language, media,
        floorplan_url, tour_3d_url, video_url,
        contract_min_months, contract_notes, ai_analyzed_at,
+       price_per_sqm, market_position, market_compset_size,
+       market_p25_eur_sqm, market_median_eur_sqm, market_p75_eur_sqm,
        owner_user_id, source, external_id`
     )
     .eq("id", id)
@@ -89,6 +91,16 @@ export default async function ListingDetailPage({
     contract_min_months: data.contract_min_months ?? null,
     contract_notes: data.contract_notes ?? null,
     ai_analyzed_at: data.ai_analyzed_at ?? null,
+    price_per_sqm: data.price_per_sqm != null ? Number(data.price_per_sqm) : null,
+    market_position:
+      (data.market_position as EditableListing["market_position"]) ?? null,
+    market_compset_size: data.market_compset_size ?? 0,
+    market_p25_eur_sqm:
+      data.market_p25_eur_sqm != null ? Number(data.market_p25_eur_sqm) : null,
+    market_median_eur_sqm:
+      data.market_median_eur_sqm != null ? Number(data.market_median_eur_sqm) : null,
+    market_p75_eur_sqm:
+      data.market_p75_eur_sqm != null ? Number(data.market_p75_eur_sqm) : null,
   };
 
   return (

@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DeleteRecordButton } from "@/components/dashboard/DeleteRecordButton";
 import { AnalyzeWithSophieButton } from "@/components/dashboard/AnalyzeWithSophieButton";
 import { PhotoDropZone } from "@/components/dashboard/PhotoDropZone";
+import { MarketHint } from "@/components/dashboard/MarketHint";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -78,6 +79,19 @@ export type EditableListing = {
   contract_min_months: number | null;
   contract_notes: string | null;
   ai_analyzed_at: string | null;
+  price_per_sqm: number | null;
+  market_position:
+    | "very_good"
+    | "good"
+    | "fair"
+    | "above"
+    | "expensive"
+    | "unknown"
+    | null;
+  market_compset_size: number;
+  market_p25_eur_sqm: number | null;
+  market_median_eur_sqm: number | null;
+  market_p75_eur_sqm: number | null;
 };
 
 const PROPERTY_TYPES = [
@@ -407,6 +421,15 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
             onChange={(e) => set("available_from", e.target.value || null)}
           />
         </Field>
+
+        <MarketHint
+          position={initial.market_position}
+          pricePerSqm={initial.price_per_sqm}
+          median={initial.market_median_eur_sqm}
+          p25={initial.market_p25_eur_sqm}
+          p75={initial.market_p75_eur_sqm}
+          compsetSize={initial.market_compset_size}
+        />
 
         {get("type") === "rent" && (
           <ContractTermEditor get={get} set={set} />
