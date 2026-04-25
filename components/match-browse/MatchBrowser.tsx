@@ -308,10 +308,12 @@ function Toast({
         <div className="font-medium">Anfrage raus</div>
         <div className="text-xs opacity-90 flex items-center gap-2 mt-0.5">
           <Link
-            href={`/matches/${listingId}`}
+            href={`/listings/${listingId}`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="underline hover:no-underline"
           >
-            ansehen
+            Inserat ansehen
           </Link>
           <span>·</span>
           <button

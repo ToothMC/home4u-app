@@ -117,46 +117,40 @@ export function MatchCard({
 
       let axis = dragRef.current.axis;
       if (!axis && (absX > 10 || absY > 10)) {
-        axis = absX > absY ? "x" : "y";
+        // Vertikal lassen wir den Browser native scrollen — JS-Handler steigt aus
+        if (absY > absX) {
+          axis = "y";
+          dragRef.current = { x: 0, y: 0, axis };
+          return; // kein preventDefault → Browser scrollt das Image-Stack
+        }
+        axis = "x";
       }
 
-      if (axis === "x" || axis === "y") {
+      if (axis === "x") {
         e.preventDefault();
+        const nextDrag = { x: dx, y: 0, axis };
+        dragRef.current = nextDrag;
+        setDragVisual(nextDrag);
       }
-
-      const nextDrag = {
-        x: axis === "x" ? dx : 0,
-        y: axis === "y" ? dy : 0,
-        axis,
-      };
-      dragRef.current = nextDrag;
-      setDragVisual(nextDrag);
+      // axis === "y" → nichts tun, Browser scrollt
     };
 
     const onTouchEnd = () => {
-      const { x, y, axis } = dragRef.current;
+      const { x, axis } = dragRef.current;
       const swipeWidth = window.innerWidth * 0.25;
 
       if (axis === "x" && Math.abs(x) > swipeWidth) {
-        // Animate fly-out, dann Action
         animatingRef.current = true;
         const flyTo = x > 0 ? window.innerWidth : -window.innerWidth;
         setDragVisual({ x: flyTo, y: 0, axis: "x" });
         setTimeout(() => {
           onSwipeRef.current?.(x > 0 ? "like" : "skip");
-          // Reset für nächste Karte
           animatingRef.current = false;
           dragRef.current = { x: 0, y: 0, axis: "" };
           setDragVisual({ x: 0, y: 0, axis: "" });
         }, 200);
-      } else if (axis === "y" && Math.abs(y) > 50) {
-        // Vertikal: Bild wechseln
-        if (y < 0) nextRef.current();
-        else prevRef.current();
-        dragRef.current = { x: 0, y: 0, axis: "" };
-        setDragVisual({ x: 0, y: 0, axis: "" });
       } else {
-        // Snap back
+        // Snap back / vertical end → reset
         dragRef.current = { x: 0, y: 0, axis: "" };
         setDragVisual({ x: 0, y: 0, axis: "" });
       }
@@ -192,8 +186,6 @@ export function MatchCard({
     dragVisual.axis === "x" ? Math.min(1, Math.abs(dragVisual.x) / 200) : 0;
   const showLikeOverlay = dragVisual.axis === "x" && dragVisual.x > 30;
   const showSkipOverlay = dragVisual.axis === "x" && dragVisual.x < -30;
-  const verticalHint =
-    dragVisual.axis === "y" ? Math.min(1, Math.abs(dragVisual.y) / 80) : 0;
   const isAnimating = animatingRef.current;
 
   return (
@@ -212,161 +204,154 @@ export function MatchCard({
     >
       {/* Image-Area + vertikaler Thumb-Strip nebeneinander */}
       <div className="flex" style={{ aspectRatio: "4/5" }}>
-      {/* Image area (Swipe-Handler hängt hier — nicht auf Thumbs) */}
-      <div
-        ref={swipeAreaRef}
-        className={cn(
-          "relative flex-1 bg-[var(--muted)] overflow-hidden",
-          isTop ? "touch-none" : ""
-        )}
-      >
-        {total > 0 && !brokenIdx.has(imgIdx) ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={images[imgIdx]}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover"
-            draggable={false}
-            onError={() =>
-              setBrokenIdx((prev) => {
-                const next = new Set(prev);
-                next.add(imgIdx);
-                return next;
-              })
+      {/* Image-Area-Container: relativ, enthält Scroll-Stack + Overlay-Layer */}
+      <div className="relative flex-1 bg-[var(--muted)] overflow-hidden">
+
+        {/* Scroll-Stack: vertikal scrollbar mit Snap, Browser handhabt Momentum */}
+        <div
+          ref={swipeAreaRef}
+          className="absolute inset-0 overflow-y-auto snap-y snap-mandatory scrollbar-hidden"
+          style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            const idx = Math.round(el.scrollTop / el.clientHeight);
+            if (idx !== imgIdx && idx >= 0 && idx < total) {
+              setImgIdx(idx);
             }
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted-foreground)]">
-            {total > 0 ? "Bild nicht ladbar" : "Kein Bild"}
-          </div>
-        )}
-
-        {/* Counter top-left */}
-        {total > 1 && (
-          <div className="absolute top-3 left-3 rounded-full bg-black/60 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-white">
-            {imgIdx + 1} / {total}
-          </div>
-        )}
-
-        {/* Score badge — nur ab 60 % */}
-        {data.score >= 0.6 && (
-          <div className="absolute top-3 right-12 rounded-full bg-white/90 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-            {Math.round(data.score * 100)} % Match
-          </div>
-        )}
-
-        {/* Inserat-anzeigen-Button (oben rechts) */}
-        <Link
-          href={`/listings/${data.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Inserat in voller Ansicht öffnen"
-          className="absolute top-3 right-3 size-8 rounded-full bg-white/90 hover:bg-white backdrop-blur flex items-center justify-center text-[var(--foreground)] shadow"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <ExternalLink className="size-4" />
-        </Link>
-
-        {/* Always-visible direction hints — werden opaker beim Drag */}
-        {/* Links: Weiter */}
-        <div
-          className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 pointer-events-none transition-all"
-          style={{
-            opacity: 0.45 + opacityHorizontal * 0.55,
-            transform: `translateY(-50%) scale(${1 + (showSkipOverlay ? opacityHorizontal * 0.3 : 0)})`,
           }}
         >
-          <span className="size-9 rounded-full bg-black/55 backdrop-blur flex items-center justify-center text-white shadow">
-            <ChevronLeft className="size-5" />
-          </span>
-          <span className="text-[9px] font-medium text-white bg-black/55 backdrop-blur px-1.5 py-0.5 rounded">
-            Kein Interesse
-          </span>
+          {total === 0 ? (
+            <div className="h-full flex items-center justify-center text-sm text-[var(--muted-foreground)]">
+              Kein Bild
+            </div>
+          ) : (
+            images.map((src, i) => (
+              <div
+                key={`${data.id}-img-${i}`}
+                className="relative h-full w-full snap-start shrink-0 bg-[var(--muted)]"
+              >
+                {!brokenIdx.has(i) ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={src}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    draggable={false}
+                    loading={i === 0 ? "eager" : "lazy"}
+                    onError={() =>
+                      setBrokenIdx((prev) => {
+                        const next = new Set(prev);
+                        next.add(i);
+                        return next;
+                      })
+                    }
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted-foreground)]">
+                    Bild nicht ladbar
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
 
-        {/* Rechts: Interesse */}
-        <div
-          className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 pointer-events-none transition-all"
-          style={{
-            opacity: 0.45 + opacityHorizontal * 0.55,
-            transform: `translateY(-50%) scale(${1 + (showLikeOverlay ? opacityHorizontal * 0.3 : 0)})`,
-          }}
-        >
-          <span className="size-9 rounded-full bg-rose-500/85 backdrop-blur flex items-center justify-center text-white shadow">
-            <Heart className="size-5 fill-white" />
-          </span>
-          <span className="text-[9px] font-medium text-white bg-rose-500/85 backdrop-blur px-1.5 py-0.5 rounded">
-            Interesse
-          </span>
-        </div>
+        {/* Overlay-Layer: bleibt fix beim Scrollen. pointer-events-none auf
+            Container, einzelne Buttons setzen sich auf auto. */}
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Counter top-left */}
+          {total > 1 && (
+            <div className="absolute top-3 left-3 rounded-full bg-black/60 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-white">
+              {imgIdx + 1} / {total}
+            </div>
+          )}
 
-        {/* Oben Mitte: mehr Bilder (nur wenn >1) */}
-        {total > 1 && (
+          {/* Score badge — nur ab 60 % */}
+          {data.score >= 0.6 && (
+            <div className="absolute top-3 right-12 rounded-full bg-white/90 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+              {Math.round(data.score * 100)} % Match
+            </div>
+          )}
+
+          {/* Eye-Icon top-right → /listings/[id] */}
+          <Link
+            href={`/listings/${data.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Zum Inserat"
+            className="absolute top-3 right-3 size-8 rounded-full bg-white/95 hover:bg-white backdrop-blur flex items-center justify-center text-[var(--foreground)] shadow pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLink className="size-4" />
+          </Link>
+
+          {/* Always-visible direction hints */}
           <div
-            className="absolute left-1/2 -translate-x-1/2 top-12 flex flex-col items-center gap-1 pointer-events-none transition-all"
+            className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 transition-all"
             style={{
-              opacity: 0.45 + verticalHint * 0.55,
-              transform: `translateX(-50%) scale(${1 + verticalHint * 0.3})`,
+              opacity: 0.45 + opacityHorizontal * 0.55,
+              transform: `translateY(-50%) scale(${1 + (showSkipOverlay ? opacityHorizontal * 0.3 : 0)})`,
             }}
           >
-            <span className="size-9 rounded-full bg-black/55 backdrop-blur flex items-center justify-center text-white shadow">
-              <ChevronsUpDown className="size-5" />
+            <span className="size-9 rounded-full bg-rose-600/85 backdrop-blur flex items-center justify-center text-white shadow">
+              <XIcon className="size-5" />
             </span>
-            <span className="text-[9px] font-medium text-white bg-black/55 backdrop-blur px-1.5 py-0.5 rounded">
-              mehr Bilder
-            </span>
-          </div>
-        )}
-
-        {/* Up/Down Active-Indicator beim Vertical-Drag */}
-        {verticalHint > 0 && total > 1 && (
-          <div
-            className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none"
-            style={{ opacity: verticalHint }}
-          >
-            <span className="size-14 rounded-full bg-black/70 backdrop-blur flex items-center justify-center text-white">
-              {dragVisual.y < 0 ? <ChevronUp className="size-7" /> : <ChevronDown className="size-7" />}
+            <span className="text-[9px] font-medium text-white bg-rose-600/85 backdrop-blur px-1.5 py-0.5 rounded">
+              Kein Interesse
             </span>
           </div>
-        )}
-
-        {/* Like-Overlay */}
-        {showLikeOverlay && (
           <div
-            className="absolute inset-0 bg-rose-500/30 flex items-center justify-center pointer-events-none"
-            style={{ opacity: opacityHorizontal }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 transition-all"
+            style={{
+              opacity: 0.45 + opacityHorizontal * 0.55,
+              transform: `translateY(-50%) scale(${1 + (showLikeOverlay ? opacityHorizontal * 0.3 : 0)})`,
+            }}
           >
-            <div className="rounded-2xl border-4 border-white text-white px-6 py-3 -rotate-12 flex items-center gap-2 text-2xl font-bold tracking-wide">
-              <Heart className="size-7 fill-white" /> INTERESSE
+            <span className="size-9 rounded-full bg-emerald-600/85 backdrop-blur flex items-center justify-center text-white shadow">
+              <Heart className="size-5 fill-white" />
+            </span>
+            <span className="text-[9px] font-medium text-white bg-emerald-600/85 backdrop-blur px-1.5 py-0.5 rounded">
+              Interesse
+            </span>
+          </div>
+
+          {/* Like-Overlay (Stempel beim Threshold-Drag) — grün */}
+          {showLikeOverlay && (
+            <div
+              className="absolute inset-0 bg-emerald-500/40 flex items-center justify-center"
+              style={{ opacity: opacityHorizontal }}
+            >
+              <div className="rounded-2xl border-4 border-white text-white px-6 py-3 -rotate-12 flex items-center gap-2 text-2xl font-bold tracking-wide">
+                <Heart className="size-7 fill-white" /> INTERESSE
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Skip-Overlay */}
-        {showSkipOverlay && (
-          <div
-            className="absolute inset-0 bg-gray-700/30 flex items-center justify-center pointer-events-none"
-            style={{ opacity: opacityHorizontal }}
-          >
-            <div className="rounded-2xl border-4 border-white text-white px-6 py-3 rotate-12 flex items-center gap-2 text-2xl font-bold tracking-wide">
-              <XIcon className="size-7" /> KEIN INTERESSE
+          )}
+          {/* Skip-Overlay — rot */}
+          {showSkipOverlay && (
+            <div
+              className="absolute inset-0 bg-rose-600/40 flex items-center justify-center"
+              style={{ opacity: opacityHorizontal }}
+            >
+              <div className="rounded-2xl border-4 border-white text-white px-6 py-3 rotate-12 flex items-center gap-2 text-2xl font-bold tracking-wide">
+                <XIcon className="size-7" /> KEIN INTERESSE
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Info gradient overlay */}
-        <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-white pointer-events-none">
-          <div className="text-2xl font-semibold leading-none">
-            {formatPrice(data.price)}
-            {data.type === "rent" && (
-              <span className="text-sm font-normal opacity-80"> / Monat</span>
-            )}
-          </div>
-          <div className="mt-1 flex items-center gap-1 text-sm opacity-95">
-            <MapPin className="size-3" />
-            {data.location_district
-              ? `${data.location_district}, ${data.location_city}`
-              : data.location_city}
+          {/* Info gradient overlay (Preis + Lage) */}
+          <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-white">
+            <div className="text-2xl font-semibold leading-none">
+              {formatPrice(data.price)}
+              {data.type === "rent" && (
+                <span className="text-sm font-normal opacity-80"> / Monat</span>
+              )}
+            </div>
+            <div className="mt-1 flex items-center gap-1 text-sm opacity-95">
+              <MapPin className="size-3" />
+              {data.location_district
+                ? `${data.location_district}, ${data.location_city}`
+                : data.location_city}
+            </div>
           </div>
         </div>
       </div>
@@ -412,6 +397,17 @@ export function MatchCard({
         </div>
       )}
       </div>{/* /flex image+thumbs */}
+
+      {/* Inserat-ansehen-Link (deutlich sichtbar zwischen Bild und Facts) */}
+      <Link
+        href={`/listings/${data.id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-2 border-t bg-slate-900 hover:bg-slate-800 text-white text-base font-semibold py-3.5 transition-colors"
+      >
+        <ExternalLink className="size-5" />
+        Zum Inserat
+      </Link>
 
       {/* Facts row */}
       <div className="px-4 py-3 grid grid-cols-3 gap-2 text-center text-sm">
