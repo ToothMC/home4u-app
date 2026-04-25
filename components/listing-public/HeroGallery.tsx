@@ -1,13 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Expand } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PhotoLightbox } from "./PhotoLightbox";
+import type { ListingPhoto } from "./types";
 
 export function HeroGallery({ images }: { images: string[] }) {
   const [idx, setIdx] = React.useState(0);
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const [broken, setBroken] = React.useState<Set<number>>(new Set());
+  const [lightboxStart, setLightboxStart] = React.useState<number | null>(null);
 
   const total = images.length;
   if (total === 0) {
@@ -22,6 +25,15 @@ export function HeroGallery({ images }: { images: string[] }) {
   const prev = () => setIdx((i) => (i - 1 + total) % total);
   const sideThumbs = images.slice(0, 5).map((_, i) => i);
 
+  // Lightbox-Photos im richtigen Format
+  const lightboxPhotos: ListingPhoto[] = images.map((url, i) => ({
+    id: `hero-${i}`,
+    url,
+    room_type: null,
+    caption: null,
+    position: i,
+  }));
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-2">
       {/* Hero */}
@@ -31,8 +43,9 @@ export function HeroGallery({ images }: { images: string[] }) {
           <img
             src={images[idx]}
             alt=""
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover cursor-zoom-in"
             draggable={false}
+            onClick={() => setLightboxStart(idx)}
             onError={() =>
               setBroken((p) => {
                 const n = new Set(p);
@@ -73,6 +86,14 @@ export function HeroGallery({ images }: { images: string[] }) {
             <div className="absolute bottom-3 left-3 rounded-full bg-black/60 backdrop-blur px-3 py-1 text-xs font-medium text-white">
               {idx + 1} / {total}
             </div>
+            <button
+              type="button"
+              onClick={() => setLightboxStart(idx)}
+              className="absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-full bg-white/90 hover:bg-white text-[var(--foreground)] shadow px-3 py-1 text-xs font-medium"
+              aria-label="Alle Bilder anzeigen"
+            >
+              <Expand className="size-3" /> Alle Bilder
+            </button>
           </>
         )}
       </div>
@@ -82,12 +103,18 @@ export function HeroGallery({ images }: { images: string[] }) {
         {sideThumbs.map((i) => (
           <button
             key={i}
-            onClick={() => setIdx(i)}
+            onClick={() => {
+              if (i === 4 && total > 5) {
+                setLightboxStart(0);
+              } else {
+                setIdx(i);
+              }
+            }}
             className={cn(
               "relative aspect-[5/3] overflow-hidden rounded-xl border-2 transition-all",
               i === idx ? "border-[var(--primary)]" : "border-transparent opacity-80 hover:opacity-100"
             )}
-            aria-label={`Bild ${i + 1}`}
+            aria-label={i === 4 && total > 5 ? "Alle Bilder anzeigen" : `Bild ${i + 1}`}
           >
             {!broken.has(i) ? (
               /* eslint-disable-next-line @next/next/no-img-element */
@@ -114,6 +141,15 @@ export function HeroGallery({ images }: { images: string[] }) {
           </button>
         ))}
       </div>
+
+      {lightboxStart != null && (
+        <PhotoLightbox
+          photos={lightboxPhotos}
+          startIndex={lightboxStart}
+          roomLabel="Alle Bilder"
+          onClose={() => setLightboxStart(null)}
+        />
+      )}
     </div>
   );
 }
