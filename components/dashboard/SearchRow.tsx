@@ -22,7 +22,7 @@ export function SearchRow({
 }) {
   return (
     <Link
-      href="/chat"
+      href={matchCount > 0 ? "/matches" : "/chat"}
       className="group flex items-center gap-3 rounded-lg border p-2 hover:bg-[var(--accent)] transition-colors"
     >
       <div className="shrink-0 size-14 rounded-md bg-[var(--muted)] border flex items-center justify-center">

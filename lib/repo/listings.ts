@@ -83,7 +83,11 @@ export type Listing = {
   contact_channel: string | null;
 };
 
-export type ListingMatch = Listing & { score: number };
+export type ListingMatch = Listing & {
+  score: number;
+  external_id: string | null;
+  media: string[] | null;
+};
 
 /**
  * Ruft den match_listings_for_profile-RPC auf. Bevorzugt user_id (eingeloggt),
@@ -110,6 +114,7 @@ export async function findMatchesForSession(
     id: row.listing_id as string,
     source: row.source as string,
     type: row.type as "rent" | "sale",
+    external_id: (row.external_id as string) ?? null,
     location_city: row.location_city as string,
     location_district: (row.location_district as string) ?? null,
     price: Number(row.price),
@@ -117,6 +122,7 @@ export async function findMatchesForSession(
     rooms: (row.rooms as number) ?? null,
     size_sqm: (row.size_sqm as number) ?? null,
     contact_channel: (row.contact_channel as string) ?? null,
+    media: (row.media as string[]) ?? null,
     score: Number(row.score ?? 0),
   }));
 }
