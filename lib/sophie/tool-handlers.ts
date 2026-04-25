@@ -4,6 +4,10 @@ import {
 } from "@/lib/repo/search-profiles";
 import { findMatchesForSession } from "@/lib/repo/listings";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import {
+  embedAndStoreListing,
+  embedAndStoreSearchProfile,
+} from "@/lib/embeddings";
 
 export type ToolResult = {
   ok: boolean;
@@ -102,6 +106,16 @@ const handlers: Record<string, Handler> = {
         },
       };
     }
+    // Embedding fire-and-forget — Profil ist persistiert, Soft-Match ist Best-Effort
+    void embedAndStoreSearchProfile(result.id, {
+      location,
+      budget_min: asNumber(input.budget_min),
+      budget_max: asNumber(input.budget_max),
+      rooms: asNumber(input.rooms),
+      household: asString(input.household),
+      lifestyle_tags: asStringArray(input.lifestyle_tags),
+      free_text: asString(input.free_text),
+    });
     return { ok: true, data: { persisted: true, profile_id: result.id } };
   },
 
@@ -117,6 +131,10 @@ const handlers: Record<string, Handler> = {
       field,
       input.value
     );
+    if (ok) {
+      // Bei jedem Profil-Update Embedding neu rechnen (Best-Effort, async)
+      void refreshProfileEmbedding(ctx);
+    }
     return {
       ok: true,
       data: {
@@ -203,6 +221,19 @@ const handlers: Record<string, Handler> = {
         data: { detail: error.message },
       };
     }
+
+    // Embedding fire-and-forget — Listing ist persistiert, Soft-Match ist Best-Effort
+    void embedAndStoreListing(data.id, {
+      type: type as "rent" | "sale",
+      location_city: city,
+      location_district: district,
+      price,
+      currency: "EUR",
+      rooms,
+      size_sqm: sizeSqm,
+      language,
+      raw_text: notes,
+    });
 
     return {
       ok: true,
@@ -309,6 +340,35 @@ export async function executeTool(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+async function refreshProfileEmbedding(ctx: ToolContext): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  if (!supabase) return;
+  const keyColumn = ctx.userId ? "user_id" : "anonymous_id";
+  const keyValue = ctx.userId ?? ctx.anonymousId;
+  if (!keyValue) return;
+  const { data } = await supabase
+    .from("search_profiles")
+    .select(
+      "id, location, budget_min, budget_max, rooms, type, household, lifestyle_tags, free_text"
+    )
+    .eq(keyColumn, keyValue)
+    .eq("active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return;
+  await embedAndStoreSearchProfile(data.id, {
+    location: data.location,
+    budget_min: data.budget_min,
+    budget_max: data.budget_max,
+    rooms: data.rooms,
+    type: data.type,
+    household: data.household,
+    lifestyle_tags: data.lifestyle_tags,
+    free_text: data.free_text,
+  });
 }
 
 function asNumber(v: unknown): number | undefined {
