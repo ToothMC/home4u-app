@@ -5,7 +5,10 @@
 import { z } from "zod";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { getOrCreateAnonymousSession } from "@/lib/session";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import {
+  createSupabaseServerClient,
+  createSupabaseServiceClient,
+} from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,16 +25,29 @@ export async function POST(req: Request) {
     );
   }
 
-  const supabase = createSupabaseServiceClient();
-  if (!supabase) {
-    return Response.json({ error: "supabase_not_configured" }, { status: 503 });
+  const user = await getAuthUser();
+  // Wichtig: für eingeloggte User den Session-Client (auth.uid() wird in der
+  // RPC genutzt) — service-role hätte keine User-Identity. Anonyme Visitors
+  // gehen über service-role + Cookie-Session.
+  let supabase;
+  let anonymousId: string | null = null;
+  if (user) {
+    try {
+      supabase = await createSupabaseServerClient();
+    } catch {
+      return Response.json({ error: "supabase_not_configured" }, { status: 503 });
+    }
+  } else {
+    supabase = createSupabaseServiceClient();
+    if (!supabase) {
+      return Response.json({ error: "supabase_not_configured" }, { status: 503 });
+    }
+    const session = await getOrCreateAnonymousSession();
+    anonymousId = session.anonymousId;
   }
 
-  const user = await getAuthUser();
-  const session = user ? null : await getOrCreateAnonymousSession();
-
   const { data, error } = await supabase.rpc("seeker_request_match", {
-    p_anonymous_id: session?.anonymousId ?? null,
+    p_anonymous_id: anonymousId,
     p_listing_id: parsed.data.listing_id,
   });
   if (error) {
