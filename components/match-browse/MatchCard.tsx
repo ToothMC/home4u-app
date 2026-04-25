@@ -47,6 +47,9 @@ export function MatchCard({
   const [brokenIdx, setBrokenIdx] = React.useState<Set<number>>(() => new Set());
   const stripRef = React.useRef<HTMLDivElement | null>(null);
   const cardRef = React.useRef<HTMLDivElement | null>(null);
+  // Swipe-Handler hängt an der Image-Area allein, damit Touches auf den
+  // (vertikal scrollbaren) Thumbnails nicht versehentlich Like/Skip triggern.
+  const swipeAreaRef = React.useRef<HTMLDivElement | null>(null);
 
   // Reset image index + broken-set when card changes
   React.useEffect(() => {
@@ -93,8 +96,8 @@ export function MatchCard({
   }, [onSwipe, next, prev]);
 
   React.useEffect(() => {
-    if (!isTop || !cardRef.current) return;
-    const el = cardRef.current;
+    if (!isTop || !swipeAreaRef.current) return;
+    const el = swipeAreaRef.current;
 
     const onTouchStart = (e: TouchEvent) => {
       if (animatingRef.current) return;
@@ -198,7 +201,6 @@ export function MatchCard({
       ref={cardRef}
       className={cn(
         "rounded-2xl overflow-hidden bg-[var(--card)] border shadow-sm relative select-none",
-        isTop ? "touch-none" : "",
         // Smooth transition wenn snap-back oder fly-out, nicht während aktivem Drag
         dragVisual.axis === "" || isAnimating
           ? "transition-transform duration-200 ease-out"
@@ -208,8 +210,16 @@ export function MatchCard({
         transform: `translate(${dragVisual.x}px, ${dragVisual.y * 0.3}px) rotate(${rotation}deg)`,
       }}
     >
-      {/* Image area */}
-      <div className="relative aspect-[4/5] bg-[var(--muted)]">
+      {/* Image-Area + vertikaler Thumb-Strip nebeneinander */}
+      <div className="flex" style={{ aspectRatio: "4/5" }}>
+      {/* Image area (Swipe-Handler hängt hier — nicht auf Thumbs) */}
+      <div
+        ref={swipeAreaRef}
+        className={cn(
+          "relative flex-1 bg-[var(--muted)] overflow-hidden",
+          isTop ? "touch-none" : ""
+        )}
+      >
         {total > 0 && !brokenIdx.has(imgIdx) ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
@@ -361,42 +371,47 @@ export function MatchCard({
         </div>
       </div>
 
-      {/* Thumbnail strip */}
+      {/* Vertikaler Thumb-Strip (rechts neben dem Bild) — eigener Scroll, keine
+          Geste-Kollision mit Like/Skip */}
       {total > 1 && (
         <div
           ref={stripRef}
-          className="px-3 pt-3 pb-1 flex gap-2 overflow-x-auto snap-x snap-mandatory scrollbar-hidden"
+          className="w-16 shrink-0 overflow-y-auto bg-[var(--card)] border-l border-[var(--border)] scrollbar-hidden"
+          style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}
         >
-          {images.map((src, i) => (
-            <button
-              key={`${data.id}-thumb-${i}`}
-              data-thumb-idx={i}
-              onClick={() => setImgIdx(i)}
-              className={cn(
-                "relative shrink-0 size-16 rounded-md overflow-hidden border-2 snap-start transition-all",
-                i === imgIdx
-                  ? "border-rose-500 ring-2 ring-rose-200"
-                  : "border-transparent opacity-70 hover:opacity-100"
-              )}
-              aria-label={`Bild ${i + 1} anzeigen`}
-            >
-              {!brokenIdx.has(i) ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={src}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  draggable={false}
-                />
-              ) : (
-                <div className="h-full w-full flex items-center justify-center text-[8px] text-[var(--muted-foreground)] bg-[var(--muted)]">
-                  ✗
-                </div>
-              )}
-            </button>
-          ))}
+          <div className="p-1.5 space-y-1.5">
+            {images.map((src, i) => (
+              <button
+                key={`${data.id}-thumb-${i}`}
+                data-thumb-idx={i}
+                onClick={() => setImgIdx(i)}
+                className={cn(
+                  "relative w-full aspect-square rounded-md overflow-hidden border-2 transition-all",
+                  i === imgIdx
+                    ? "border-rose-500 ring-2 ring-rose-200"
+                    : "border-transparent opacity-70 hover:opacity-100"
+                )}
+                aria-label={`Bild ${i + 1} anzeigen`}
+              >
+                {!brokenIdx.has(i) ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={src}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-[8px] text-[var(--muted-foreground)] bg-[var(--muted)]">
+                    ✗
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       )}
+      </div>{/* /flex image+thumbs */}
 
       {/* Facts row */}
       <div className="px-4 py-3 grid grid-cols-3 gap-2 text-center text-sm">
