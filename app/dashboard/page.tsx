@@ -124,13 +124,23 @@ export default async function DashboardPage({
         <h1 className="text-2xl sm:text-3xl font-semibold mb-2">
           Dein Dashboard
         </h1>
-        <p className="text-sm text-[var(--muted-foreground)] mb-6">
-          {user.email ? (
-            <>
-              Angemeldet als <strong>{user.email}</strong>
-            </>
-          ) : (
-            <>Angemeldet</>
+        <p className="text-sm text-[var(--muted-foreground)] mb-6 flex items-center gap-3 flex-wrap">
+          <span>
+            {user.email ? (
+              <>
+                Angemeldet als <strong>{user.email}</strong>
+              </>
+            ) : (
+              <>Angemeldet</>
+            )}
+          </span>
+          {user.role === "admin" && (
+            <Link
+              href="/dashboard/admin"
+              className="text-xs underline text-purple-700 hover:text-purple-900"
+            >
+              Admin-Panel
+            </Link>
           )}
         </p>
 
