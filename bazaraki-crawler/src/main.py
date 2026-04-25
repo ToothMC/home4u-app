@@ -9,8 +9,8 @@ from collections import defaultdict
 
 from dotenv import load_dotenv
 
-from .config import PROPERTY_SUBTYPES, selected_cities, selected_types
-from .crawler import RawListing, crawl_city, fetch_disallowed_paths, with_browser
+from .config import PROPERTY_SUBTYPES, RATE_LIMIT_SECONDS, selected_cities, selected_types
+from .crawler import RawListing, crawl_city, crawl_detail, fetch_disallowed_paths, with_browser
 from .supabase_writer import mark_stale_old_listings, upsert_listings
 
 
@@ -45,6 +45,8 @@ def main() -> int:
     all_items: list[RawListing] = []
     per_city_counts: dict[tuple[str, str], int] = defaultdict(int)
 
+    skip_details = os.getenv("SKIP_DETAILS") == "1"
+
     with with_browser() as p:
         browser = p.chromium.launch(headless=True)
         try:
@@ -54,6 +56,31 @@ def main() -> int:
                         items = list(crawl_city(browser, city, listing_type, subtype, disallowed))
                         per_city_counts[(city.display, listing_type)] += len(items)
                         all_items.extend(items)
+
+            list_done = time.time() - started
+            log.info("List-Phase fertig: %d items in %.1fs", len(all_items), list_done)
+
+            # Detail-Drilling: pro Listing district + size_sqm + Bilder + chars holen
+            if skip_details:
+                log.info("SKIP_DETAILS=1 — Detail-Drilling übersprungen.")
+            else:
+                log.info("Detail-Drilling für %d Listings (rate-limit %ds) …", len(all_items), RATE_LIMIT_SECONDS)
+                detail_started = time.time()
+                ok = 0
+                for idx, item in enumerate(all_items, start=1):
+                    crawl_detail(browser, item)
+                    if item.district or item.size_sqm:
+                        ok += 1
+                    if idx % 25 == 0:
+                        log.info(
+                            "  detail-progress %d/%d (ok %d, %.1fs)",
+                            idx, len(all_items), ok, time.time() - detail_started,
+                        )
+                    time.sleep(RATE_LIMIT_SECONDS)
+                log.info(
+                    "Detail-Phase fertig: %d/%d enriched in %.1fs",
+                    ok, len(all_items), time.time() - detail_started,
+                )
         finally:
             browser.close()
 

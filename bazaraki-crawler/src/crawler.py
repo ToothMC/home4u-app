@@ -5,7 +5,7 @@ import logging
 import re
 import time
 import urllib.parse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterator
 
 import httpx
@@ -27,14 +27,28 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class RawListing:
-    """Roh-Datensatz pro Listing — wird vom Writer ins Schema gemappt."""
+    """Roh-Datensatz pro Listing — wird vom Writer ins Schema gemappt.
+
+    Werte aus der Listenseite werden ggf. von der Detail-Page überschrieben
+    (z. B. city: Listenseite-Stadt vs. echte Adresse aus Detail).
+    """
     external_id: str        # Bazaraki adv-ID (Primärschlüssel)
     listing_type: str       # rent|sale
-    city: str               # Anzeigename, e.g. "Limassol"
+    city: str               # Anzeigename — wird ggf. von Detail überschrieben
     price: float            # numerisch, EUR
     rooms: int | None       # 0 = Studio
-    image_url: str | None   # Cover-Bild URL (cdn1.bazaraki.com/...)
+    image_url: str | None   # Cover-Bild (Listenseite)
     title: str | None       # für Debug-Logs
+    detail_url: str         # für Detail-Drilling
+
+    # Detail-Felder (None solange noch nicht gedrillt)
+    district: str | None = None
+    size_sqm: int | None = None
+    media: list[str] = field(default_factory=list)  # alle Bilder, [0] = Cover
+    description: str | None = None
+    energy_class: str | None = None
+    furnishing: str | None = None
+    pets_allowed: bool | None = None
 
 
 # ---------- robots.txt ----------
@@ -92,9 +106,9 @@ def parse_rooms_from_slug(url: str) -> int | None:
     return None
 
 
-# ---------- Playwright-Crawl ----------
+# ---------- Playwright-Crawl: Listenseite ----------
 
-EXTRACT_JS = r"""
+LIST_EXTRACT_JS = r"""
 () => {
   const cards = Array.from(document.querySelectorAll('li[itemtype*="Product"]'));
   return cards.map(card => {
@@ -116,16 +130,127 @@ EXTRACT_JS = r"""
 """
 
 
+# ---------- Playwright-Crawl: Detail-Page ----------
+
+DETAIL_EXTRACT_JS = r"""
+() => {
+  const text = (sel, attr) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    return attr ? (el.getAttribute(attr) || null) : (el.textContent?.trim() || null);
+  };
+
+  // Adresse aus Schema.org → "City, District" oder "City, District - Sub-area"
+  const address = text('[itemprop="address"]');
+
+  // Beschreibung — itemprop="description" enthält oft Übersetzungs-Widget,
+  // og:description liefert sauber den ersten Absatz
+  let description = text('meta[property="og:description"]', 'content');
+  if (!description) {
+    description = text('[itemprop="description"]');
+  }
+  if (description) description = description.trim().slice(0, 4000);
+
+  // Characteristics-Block: Plain-Text → label: value je Zeile
+  const charsBlock = document.querySelector('.announcement-characteristics, [class*="chars"]');
+  const charsRaw = charsBlock?.innerText?.trim() || null;
+
+  // Alle Bilder
+  const allImages = [...new Set(Array.from(document.querySelectorAll('img'))
+    .map(i => i.src || i.getAttribute('data-src'))
+    .filter(s => s && s.includes('bazaraki.com/media') && /\.(jpe?g|png|webp)/i.test(s))
+  )];
+
+  // Cover (og:image)
+  const cover = text('meta[property="og:image"]', 'content');
+
+  return { address, description, charsRaw, cover, allImages };
+}
+"""
+
+
+# Charakteristik-Parser: parse "Property area: 50 m²\nBedrooms: Studio\n..."
+_CHARS_LINE_RE = re.compile(r"^([^:]+):\s*(.+)$")
+
+
+def parse_chars(raw: str | None) -> dict[str, str]:
+    if not raw:
+        return {}
+    out: dict[str, str] = {}
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = _CHARS_LINE_RE.match(line)
+        if m:
+            label = m.group(1).strip()
+            value = m.group(2).strip()
+            if label and value:
+                out[label] = value
+    return out
+
+
+def parse_size_sqm(chars: dict[str, str]) -> int | None:
+    val = chars.get("Property area") or chars.get("Covered area") or chars.get("Area")
+    if not val:
+        return None
+    m = re.search(r"(\d+)", val)
+    return int(m.group(1)) if m else None
+
+
+def parse_rooms_from_chars(chars: dict[str, str]) -> int | None:
+    val = chars.get("Bedrooms")
+    if not val:
+        return None
+    if "studio" in val.lower():
+        return 0
+    m = re.search(r"(\d+)", val)
+    return int(m.group(1)) if m else None
+
+
+def parse_pets_allowed(chars: dict[str, str]) -> bool | None:
+    val = chars.get("Pets")
+    if not val:
+        return None
+    v = val.lower()
+    if "allowed" in v and "not" not in v:
+        return True
+    if "not allowed" in v or "not" in v:
+        return False
+    return None
+
+
+def parse_address(address: str | None) -> tuple[str | None, str | None]:
+    """'Nicosia, Lakatameia - Agios Mamas' → ('Nicosia', 'Lakatameia - Agios Mamas')."""
+    if not address:
+        return None, None
+    parts = [p.strip() for p in address.split(",", 1)]
+    if len(parts) == 1:
+        return parts[0] or None, None
+    return parts[0] or None, parts[1] or None
+
+
+# ---------- Navigation ----------
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
-def _navigate(page: Page, url: str) -> None:
-    log.info("→ %s", url)
+def _navigate_list(page: Page, url: str) -> None:
+    log.info("→ list %s", url)
     page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-    # Cards laden async — kurz warten
     page.wait_for_selector('li[itemtype*="Product"]', timeout=15_000)
 
 
-def _extract_page(page: Page, city: str, listing_type: str) -> list[RawListing]:
-    raw = page.evaluate(EXTRACT_JS)
+@retry(stop=stop_after_attempt(2), wait=wait_exponential(min=2, max=10))
+def _navigate_detail(page: Page, url: str) -> None:
+    page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+    # Detail-Seite: warten auf Schema.org-Address oder Characteristics-Block
+    page.wait_for_selector(
+        '[itemprop="address"], .announcement-characteristics, [class*="chars"]',
+        timeout=10_000,
+    )
+
+
+def _extract_list_page(page: Page, city: str, listing_type: str) -> list[RawListing]:
+    raw = page.evaluate(LIST_EXTRACT_JS)
     out: list[RawListing] = []
     for entry in raw:
         if not entry["price"] or not entry["advId"]:
@@ -139,9 +264,66 @@ def _extract_page(page: Page, city: str, listing_type: str) -> list[RawListing]:
                 rooms=parse_rooms_from_slug(entry["url"]),
                 image_url=entry["img"] if entry["img"] and "bazaraki" in entry["img"] else None,
                 title=entry["name"],
+                detail_url=entry["url"],
             )
         )
     return out
+
+
+def crawl_detail(browser: Browser, item: RawListing) -> None:
+    """Drill in die Detail-Page und reichere RawListing in-place an.
+
+    Schreibt city (override), district, size_sqm, rooms (override wenn präziser),
+    media (komplette Galerie inkl. Cover), description, energy_class, furnishing, pets_allowed.
+    Bei Fehler: nichts ändern, Log-Warnung.
+    """
+    page = browser.new_page(user_agent=USER_AGENT)
+    try:
+        _navigate_detail(page, item.detail_url)
+        data = page.evaluate(DETAIL_EXTRACT_JS)
+    except Exception as e:
+        log.warning("detail-fetch failed for %s: %s", item.external_id, e)
+        page.close()
+        return
+    page.close()
+
+    # City + District aus echter Adresse
+    city, district = parse_address(data.get("address"))
+    if city:
+        item.city = city
+    if district:
+        item.district = district
+
+    # Characteristics
+    chars = parse_chars(data.get("charsRaw"))
+    size = parse_size_sqm(chars)
+    if size:
+        item.size_sqm = size
+    rooms_from_chars = parse_rooms_from_chars(chars)
+    if rooms_from_chars is not None:
+        item.rooms = rooms_from_chars  # genauer als URL-Slug
+    item.energy_class = chars.get("Energy Efficiency")
+    item.furnishing = chars.get("Furnishing")
+    item.pets_allowed = parse_pets_allowed(chars)
+
+    # Media: Cover zuerst, dann Rest dedupliziert
+    cover = data.get("cover")
+    all_images = data.get("allImages") or []
+    media: list[str] = []
+    if cover:
+        media.append(cover)
+    for img in all_images:
+        if img and img not in media:
+            media.append(img)
+    if media:
+        item.media = media[:24]
+    elif item.image_url:
+        item.media = [item.image_url]
+
+    # Description (clamped via JS auf 4000)
+    desc = data.get("description")
+    if desc:
+        item.description = desc
 
 
 def crawl_city(
@@ -152,7 +334,10 @@ def crawl_city(
     disallowed: list[str],
     max_pages: int = MAX_PAGES_PER_CITY,
 ) -> Iterator[RawListing]:
-    """Iteriert Pages für eine City+Type+Subtype-Kombination, yieldet RawListings."""
+    """Iteriert Pages für eine City+Type+Subtype-Kombination, yieldet RawListings.
+
+    Liefert nur die Listenseiten-Daten — Detail-Drilling macht der Caller.
+    """
     seen_external_ids: set[str] = set()
 
     for page_num in range(1, max_pages + 1):
@@ -164,8 +349,8 @@ def crawl_city(
 
         page = browser.new_page(user_agent=USER_AGENT)
         try:
-            _navigate(page, url)
-            items = _extract_page(page, city.display, listing_type)
+            _navigate_list(page, url)
+            items = _extract_list_page(page, city.display, listing_type)
         except Exception as e:
             log.warning("Page %s/%s/%s p%d failed: %s", city.display, listing_type, subtype, page_num, e)
             page.close()
@@ -183,11 +368,10 @@ def crawl_city(
             yield item
 
         log.info(
-            "  %s %s %s p%d: %d cards, %d new (cum %d)",
+            "  list %s %s %s p%d: %d cards, %d new (cum %d)",
             city.display, listing_type, subtype, page_num, len(items), new_count, len(seen_external_ids),
         )
         if new_count == 0:
-            # Keine neuen → wahrscheinlich am Ende der Pagination
             return
         time.sleep(RATE_LIMIT_SECONDS)
 
@@ -195,12 +379,3 @@ def crawl_city(
 def with_browser():
     """Context-Manager-Wrapper für Playwright Browser."""
     return sync_playwright()
-
-
-def image_url_full(path_or_url: str | None) -> str | None:
-    """Bazaraki-Bilder kommen als kompletter URL — durchreichen."""
-    if not path_or_url:
-        return None
-    if path_or_url.startswith("http"):
-        return path_or_url
-    return f"{BASE_URL.rstrip('/')}{path_or_url}"
