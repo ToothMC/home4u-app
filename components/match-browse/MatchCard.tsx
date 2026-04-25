@@ -9,6 +9,9 @@ import {
   ExternalLink,
   ChevronUp,
   ChevronDown,
+  ChevronsUpDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -254,14 +257,65 @@ export function MatchCard({
           <ExternalLink className="size-4" />
         </Link>
 
-        {/* Up/Down Hint bei vertical-Drag */}
+        {/* Always-visible direction hints — werden opaker beim Drag */}
+        {/* Links: Weiter */}
+        <div
+          className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 pointer-events-none transition-all"
+          style={{
+            opacity: 0.45 + opacityHorizontal * 0.55,
+            transform: `translateY(-50%) scale(${1 + (showSkipOverlay ? opacityHorizontal * 0.3 : 0)})`,
+          }}
+        >
+          <span className="size-9 rounded-full bg-black/55 backdrop-blur flex items-center justify-center text-white shadow">
+            <ChevronLeft className="size-5" />
+          </span>
+          <span className="text-[9px] font-medium text-white bg-black/55 backdrop-blur px-1.5 py-0.5 rounded">
+            Kein Interesse
+          </span>
+        </div>
+
+        {/* Rechts: Interesse */}
+        <div
+          className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 pointer-events-none transition-all"
+          style={{
+            opacity: 0.45 + opacityHorizontal * 0.55,
+            transform: `translateY(-50%) scale(${1 + (showLikeOverlay ? opacityHorizontal * 0.3 : 0)})`,
+          }}
+        >
+          <span className="size-9 rounded-full bg-rose-500/85 backdrop-blur flex items-center justify-center text-white shadow">
+            <Heart className="size-5 fill-white" />
+          </span>
+          <span className="text-[9px] font-medium text-white bg-rose-500/85 backdrop-blur px-1.5 py-0.5 rounded">
+            Interesse
+          </span>
+        </div>
+
+        {/* Oben Mitte: mehr Bilder (nur wenn >1) */}
+        {total > 1 && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 top-12 flex flex-col items-center gap-1 pointer-events-none transition-all"
+            style={{
+              opacity: 0.45 + verticalHint * 0.55,
+              transform: `translateX(-50%) scale(${1 + verticalHint * 0.3})`,
+            }}
+          >
+            <span className="size-9 rounded-full bg-black/55 backdrop-blur flex items-center justify-center text-white shadow">
+              <ChevronsUpDown className="size-5" />
+            </span>
+            <span className="text-[9px] font-medium text-white bg-black/55 backdrop-blur px-1.5 py-0.5 rounded">
+              mehr Bilder
+            </span>
+          </div>
+        )}
+
+        {/* Up/Down Active-Indicator beim Vertical-Drag */}
         {verticalHint > 0 && total > 1 && (
           <div
             className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none"
             style={{ opacity: verticalHint }}
           >
-            <span className="size-12 rounded-full bg-black/60 backdrop-blur flex items-center justify-center text-white">
-              {dragVisual.y < 0 ? <ChevronUp className="size-6" /> : <ChevronDown className="size-6" />}
+            <span className="size-14 rounded-full bg-black/70 backdrop-blur flex items-center justify-center text-white">
+              {dragVisual.y < 0 ? <ChevronUp className="size-7" /> : <ChevronDown className="size-7" />}
             </span>
           </div>
         )}
@@ -285,7 +339,7 @@ export function MatchCard({
             style={{ opacity: opacityHorizontal }}
           >
             <div className="rounded-2xl border-4 border-white text-white px-6 py-3 rotate-12 flex items-center gap-2 text-2xl font-bold tracking-wide">
-              <XIcon className="size-7" /> WEITER
+              <XIcon className="size-7" /> KEIN INTERESSE
             </div>
           </div>
         )}

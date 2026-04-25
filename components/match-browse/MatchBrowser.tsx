@@ -223,10 +223,10 @@ export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
           onClick={skip}
           disabled={status !== "browsing"}
           className="h-14 rounded-full border-2"
-          aria-label="Weiter"
+          aria-label="Kein Interesse"
         >
           <X className="size-5" />
-          Weiter
+          Kein Interesse
         </Button>
         <Button
           size="lg"
@@ -279,7 +279,7 @@ function SwipeHintOverlay({ onDismiss }: { onDismiss: () => void }) {
         </div>
         <div className="flex items-center gap-3 justify-center">
           <span className="text-2xl">←</span>
-          <span>Wischen links = Weiter</span>
+          <span>Wischen links = Kein Interesse</span>
         </div>
         <div className="flex items-center gap-3 justify-center">
           <ChevronUp className="size-5" />
