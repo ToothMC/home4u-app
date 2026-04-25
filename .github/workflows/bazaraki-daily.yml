@@ -23,6 +23,11 @@ on:
         type: boolean
         required: false
         default: false
+      skip_details:
+        description: "Detail-Page-Drilling überspringen (5x schneller, ohne district/m²/Galerie)"
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: bazaraki-crawl
@@ -31,7 +36,7 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: ./bazaraki-crawler
@@ -59,4 +64,5 @@ jobs:
           TYPES: ${{ inputs.types }}
           MAX_PAGES_PER_CITY: ${{ inputs.max_pages || '10' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          SKIP_DETAILS: ${{ inputs.skip_details && '1' || '' }}
         run: python -m src.main

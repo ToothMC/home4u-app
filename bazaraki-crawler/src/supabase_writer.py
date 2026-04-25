@@ -21,21 +21,28 @@ def _build_dedup_hash(external_id: str) -> str:
 
 
 def _to_row(item: RawListing) -> dict:
-    media = [item.image_url] if item.image_url else []
+    # Media: Detail-Page-Galerie wenn gedrillt, sonst Listenseiten-Cover
+    media = item.media if item.media else ([item.image_url] if item.image_url else [])
+    location_raw = (
+        f"{item.district}, {item.city}" if item.district else item.city
+    )
     return {
         "source": "bazaraki",
         "external_id": item.external_id,
         "type": item.listing_type,
         "status": "active",
         "location_city": item.city,
+        "location_district": item.district,
+        "location_raw": location_raw,
         "price": item.price,
         "currency": "EUR",
         "price_period": "month" if item.listing_type == "rent" else "total",
         "rooms": item.rooms,
+        "size_sqm": item.size_sqm,
         "media": media,
         "language": "en",
         "dedup_hash": _build_dedup_hash(item.external_id),
-        # first_seen wird vom Default gesetzt; last_seen wird via Conflict-Update neu gesetzt
+        # first_seen via DB-default; last_seen via on-conflict-update neu gesetzt
     }
 
 
