@@ -35,7 +35,7 @@ export default async function ListingDetailPage({
        property_type, floor, year_built, energy_class, furnishing,
        features, pets_allowed, available_from, contact_channel, language, media,
        floorplan_url, tour_3d_url, video_url,
-       contract_min_months, contract_notes,
+       contract_min_months, contract_notes, ai_analyzed_at,
        owner_user_id, source, external_id`
     )
     .eq("id", id)
@@ -88,6 +88,7 @@ export default async function ListingDetailPage({
     video_url: data.video_url ?? null,
     contract_min_months: data.contract_min_months ?? null,
     contract_notes: data.contract_notes ?? null,
+    ai_analyzed_at: data.ai_analyzed_at ?? null,
   };
 
   return (

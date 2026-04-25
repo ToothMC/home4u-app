@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MediaUploader, type AttachedMedia } from "@/components/chat/MediaUploader";
 import { DeleteRecordButton } from "@/components/dashboard/DeleteRecordButton";
+import { AnalyzeWithSophieButton } from "@/components/dashboard/AnalyzeWithSophieButton";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -77,6 +78,7 @@ export type EditableListing = {
   video_url: string | null;
   contract_min_months: number | null;
   contract_notes: string | null;
+  ai_analyzed_at: string | null;
 };
 
 const PROPERTY_TYPES = [
@@ -239,6 +241,13 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
         </div>
         <span className="text-xs text-emerald-700 underline">Öffnen ↗</span>
       </Link>
+
+      {/* Sophie-Vision: alle Felder auto-befüllen */}
+      <AnalyzeWithSophieButton
+        listingId={initial.id}
+        hasMedia={media.length > 0}
+        alreadyAnalyzed={Boolean(initial.ai_analyzed_at)}
+      />
 
       {/* Cover + Galerie verwalten */}
       <section>
