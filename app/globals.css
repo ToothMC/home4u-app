@@ -68,3 +68,11 @@ body {
 * {
   border-color: var(--border);
 }
+
+/* Horizontaler Scroll ohne Scrollbar (Match-Card Thumbnail-Strip etc.) */
+.scrollbar-hidden {
+  scrollbar-width: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}

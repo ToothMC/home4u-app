@@ -21,11 +21,24 @@ export function MatchCard({ data }: { data: MatchCardData }) {
   const images = data.media && data.media.length > 0 ? data.media : [];
   const [imgIdx, setImgIdx] = React.useState(0);
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
+  const [brokenIdx, setBrokenIdx] = React.useState<Set<number>>(() => new Set());
+  const stripRef = React.useRef<HTMLDivElement | null>(null);
+  const heroRef = React.useRef<HTMLImageElement | null>(null);
 
-  // Reset image index when card changes
+  // Reset image index + broken-set when card changes
   React.useEffect(() => {
     setImgIdx(0);
+    setBrokenIdx(new Set());
   }, [data.id]);
+
+  // Active thumbnail in den View scrollen
+  React.useEffect(() => {
+    if (!stripRef.current) return;
+    const target = stripRef.current.querySelector<HTMLElement>(
+      `[data-thumb-idx="${imgIdx}"]`
+    );
+    target?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [imgIdx]);
 
   const total = images.length;
   const hasImages = total > 0;
@@ -51,13 +64,21 @@ export function MatchCard({ data }: { data: MatchCardData }) {
     <article className="rounded-2xl overflow-hidden bg-[var(--card)] border shadow-sm">
       {/* Image area */}
       <div className="relative aspect-[4/5] bg-[var(--muted)]">
-        {hasImages ? (
+        {hasImages && !brokenIdx.has(imgIdx) ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
+            ref={heroRef}
             src={images[imgIdx]}
             alt=""
             className="absolute inset-0 h-full w-full object-cover"
             draggable={false}
+            onError={() =>
+              setBrokenIdx((prev) => {
+                const next = new Set(prev);
+                next.add(imgIdx);
+                return next;
+              })
+            }
             onTouchStart={(e) => setTouchStart(e.touches[0].clientX)}
             onTouchEnd={(e) => {
               if (touchStart === null) return;
@@ -68,7 +89,7 @@ export function MatchCard({ data }: { data: MatchCardData }) {
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted-foreground)]">
-            Kein Bild
+            {hasImages ? "Bild nicht ladbar" : "Kein Bild"}
           </div>
         )}
 
@@ -96,27 +117,19 @@ export function MatchCard({ data }: { data: MatchCardData }) {
           </>
         )}
 
-        {/* Image dots indicator */}
+        {/* Counter badge top-left */}
         {total > 1 && (
-          <div className="absolute top-3 inset-x-0 flex items-center justify-center gap-1 px-4 pointer-events-none">
-            {Array.from({ length: total }).map((_, i) => (
-              <span
-                key={i}
-                className={cn(
-                  "h-1 rounded-full transition-all",
-                  i === imgIdx
-                    ? "bg-white w-6"
-                    : "bg-white/60 w-1.5"
-                )}
-              />
-            ))}
+          <div className="absolute top-3 left-3 rounded-full bg-black/60 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-white">
+            {imgIdx + 1} / {total}
           </div>
         )}
 
-        {/* Score badge */}
-        <div className="absolute top-3 right-3 rounded-full bg-white/90 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-          {Math.round(data.score * 100)} % Match
-        </div>
+        {/* Score badge — nur ab 60 % zeigen, sonst zu schwach */}
+        {data.score >= 0.6 && (
+          <div className="absolute top-3 right-3 rounded-full bg-white/90 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+            {Math.round(data.score * 100)} % Match
+          </div>
+        )}
 
         {/* Info gradient overlay */}
         <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent text-white">
@@ -134,6 +147,51 @@ export function MatchCard({ data }: { data: MatchCardData }) {
           </div>
         </div>
       </div>
+
+      {/* Thumbnail strip — Bilder-Variety auf einen Blick */}
+      {total > 1 && (
+        <div
+          ref={stripRef}
+          className="px-3 pt-3 pb-1 flex gap-2 overflow-x-auto snap-x snap-mandatory scrollbar-hidden"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {images.map((src, i) => (
+            <button
+              key={`${data.id}-thumb-${i}`}
+              data-thumb-idx={i}
+              onClick={() => setImgIdx(i)}
+              className={cn(
+                "relative shrink-0 size-16 rounded-md overflow-hidden border-2 snap-start transition-all",
+                i === imgIdx
+                  ? "border-rose-500 ring-2 ring-rose-200"
+                  : "border-transparent opacity-70 hover:opacity-100"
+              )}
+              aria-label={`Bild ${i + 1} anzeigen`}
+            >
+              {!brokenIdx.has(i) ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={src}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  draggable={false}
+                  onError={() =>
+                    setBrokenIdx((prev) => {
+                      const next = new Set(prev);
+                      next.add(i);
+                      return next;
+                    })
+                  }
+                />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center text-[8px] text-[var(--muted-foreground)] bg-[var(--muted)]">
+                  ✗
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Facts row */}
       <div className="px-4 py-3 grid grid-cols-3 gap-2 text-center text-sm">
