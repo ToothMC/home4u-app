@@ -3,6 +3,7 @@ import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { verifyPreviewToken } from "@/lib/import/preview-token";
 import { bulkUpsertListings, ImporterUnavailableError } from "@/lib/repo/listings";
+import { embedAndStoreListingsByHash } from "@/lib/embeddings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -104,6 +105,13 @@ export async function POST(req: Request) {
       finished_at: new Date().toISOString(),
     })
     .eq("id", importRow.id);
+
+  // Embeddings für alle erfolgreich geschriebenen Zeilen — fire-and-forget,
+  // blockiert die Response nicht. Bei Fehler wird per Backfill nachgezogen.
+  const successfulHashes = payload.rows
+    .filter((_, idx) => !result.failed.some((f) => f.index === idx))
+    .map((r) => r.dedup_hash);
+  void embedAndStoreListingsByHash(user.id, successfulHashes);
 
   return Response.json({
     importId: importRow.id,

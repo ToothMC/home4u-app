@@ -81,7 +81,13 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
             media: {
               type: "array",
               items: { type: "string" },
-              description: "Bild-URLs. Nur http(s)://-URLs übernehmen.",
+              description:
+                "Bild- oder Video-URLs (Endung .jpg/.jpeg/.png/.webp/.heic/.gif/.avif/.mp4/.webm/.mov). NIEMALS Listing-Detail-Seiten oder Übersichtsseiten hier reintun — die gehören nach source_url.",
+            },
+            source_url: {
+              type: "string",
+              description:
+                "Original-Inserat-URL (z. B. Bazaraki/ImmoScout-Detailseite). NICHT in media. Wird als Kontext gespeichert.",
             },
             language: {
               type: "string",
@@ -136,6 +142,7 @@ export type RawExtraction = {
   contact_name?: string;
   contact_channel?: string;
   external_id?: string;
+  source_url?: string;
   media?: string[];
   language?: string;
   confidence?: number;
@@ -322,8 +329,18 @@ function buildItem(
   }
 
   const sizeSqm = raw.size_sqm != null ? toInt(raw.size_sqm) : null;
+  // Hard-Filter: nur Bild-/Video-URLs in media, sonst landen Listing-Detail-Seiten
+  // (z. B. bazaraki.com/adv/...) als <img src> im Dashboard und werden vom
+  // Adblocker geblockt.
+  const MEDIA_EXT = /\.(jpe?g|png|webp|heic|gif|avif|mp4|webm|mov)(\?|$)/i;
+  const STORAGE_PATH = /\/storage\/v1\/object\//i;
   const media = (raw.media ?? [])
-    .filter((u) => typeof u === "string" && /^https?:\/\//i.test(u))
+    .filter(
+      (u) =>
+        typeof u === "string" &&
+        /^https?:\/\//i.test(u) &&
+        (MEDIA_EXT.test(u) || STORAGE_PATH.test(u))
+    )
     .slice(0, 12);
   const language =
     raw.language && ["de", "en", "ru", "el"].includes(raw.language)
@@ -341,7 +358,13 @@ function buildItem(
     contact_phone: normalizePhone(raw.contact_phone),
     contact_name: (raw.contact_name ?? "").trim() || null,
     contact_channel: (raw.contact_channel ?? "").trim() || null,
-    external_id: (raw.external_id ?? "").trim() || null,
+    // Fallback: source_url als external_id verwenden, wenn keiner explizit
+    // angegeben ist (Bazaraki/ImmoScout-URLs sind stabile Referenzen → besserer
+    // Dedup-Key als Stadt+Preis+Zimmer)
+    external_id:
+      (raw.external_id ?? "").trim() ||
+      (raw.source_url ?? "").trim() ||
+      null,
     media,
     language,
   };
