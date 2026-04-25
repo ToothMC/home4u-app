@@ -57,6 +57,10 @@ const patchSchema = z
           .enum(["included", "tenant_pays", "landlord_pays", "not_provided"])
           .nullable()
           .optional(),
+        garbage: z
+          .enum(["included", "tenant_pays", "landlord_pays", "estimated"])
+          .nullable()
+          .optional(),
         bills_in_tenant_name: z.boolean().nullable().optional(),
         estimated_monthly_total: z.number().min(0).max(50_000).nullable().optional(),
         notes: z.string().max(500).nullable().optional(),

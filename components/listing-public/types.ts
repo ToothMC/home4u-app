@@ -94,6 +94,7 @@ export type PublicListingData = {
     water?: string | null;
     electricity?: string | null;
     internet?: string | null;
+    garbage?: string | null;
     bills_in_tenant_name?: boolean | null;
     estimated_monthly_total?: number | null;
     notes?: string | null;

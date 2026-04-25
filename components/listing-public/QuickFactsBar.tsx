@@ -95,7 +95,12 @@ export function QuickFactsBar({ listing }: { listing: PublicListingData }) {
 function hasUtilityInfo(u: PublicListingData["utilities"]): boolean {
   if (!u) return false;
   return Boolean(
-    u.water || u.electricity || u.internet || u.bills_in_tenant_name != null || u.notes
+    u.water ||
+      u.electricity ||
+      u.internet ||
+      u.garbage ||
+      u.bills_in_tenant_name != null ||
+      u.notes
   );
 }
 
@@ -119,6 +124,8 @@ function UtilitiesNote({
     items.push({ label: "Wasser", value: UTILITY_LABEL[utilities.water] ?? utilities.water });
   if (utilities.internet)
     items.push({ label: "Internet", value: UTILITY_LABEL[utilities.internet] ?? utilities.internet });
+  if (utilities.garbage)
+    items.push({ label: "Müll", value: UTILITY_LABEL[utilities.garbage] ?? utilities.garbage });
 
   return (
     <div id="costs" className="mt-3 rounded-xl border bg-[var(--card)] px-4 py-3 space-y-2 text-sm">
@@ -126,7 +133,7 @@ function UtilitiesNote({
         Nebenkosten-Aufstellung
       </div>
       {items.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {items.map((i) => (
             <div key={i.label}>
               <div className="text-[10px] text-[var(--muted-foreground)]">{i.label}</div>

@@ -33,6 +33,7 @@ export type Utilities = {
   water?: UtilityArrangement | null;
   electricity?: UtilityArrangement | null;
   internet?: UtilityArrangement | null;
+  garbage?: UtilityArrangement | null;
   bills_in_tenant_name?: boolean | null;
   estimated_monthly_total?: number | null;
   notes?: string | null;
@@ -765,6 +766,12 @@ function UtilitiesEditor({
         value={u.internet ?? null}
         options={INTERNET_OPTIONS}
         onChange={(v) => update("internet", v as UtilityArrangement)}
+      />
+      <UtilityRow
+        label="Müll"
+        value={u.garbage ?? null}
+        options={UTILITY_OPTIONS}
+        onChange={(v) => update("garbage", v as UtilityArrangement)}
       />
 
       <Field label="Geschätzte Nebenkosten / Monat (€)">
