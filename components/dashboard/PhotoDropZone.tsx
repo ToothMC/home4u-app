@@ -1,16 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, Check, Loader2, Upload, X } from "lucide-react";
+import { AlertCircle, Check, Loader2, Upload, Wand2, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { compressImage } from "@/lib/upload/compress";
 import { cn } from "@/lib/utils";
 
 const BUCKET = "listing-media";
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB pro Bild
+const MAX_IMAGE_INPUT_BYTES = 50 * 1024 * 1024; // 50 MB Original (vor Compression)
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB pro Video
-const MAX_PARALLEL = 4; // gleichzeitig laufende Uploads
+const MAX_PARALLEL = 4;
 
-type FileStatus = "queued" | "uploading" | "done" | "error";
+type FileStatus = "queued" | "compressing" | "uploading" | "done" | "error";
 
 type Track = {
   id: string;
@@ -20,6 +21,7 @@ type Track = {
   status: FileStatus;
   error?: string;
   url?: string;
+  finalSize?: number;
 };
 
 export function PhotoDropZone({
@@ -80,21 +82,37 @@ export function PhotoDropZone({
     const queue = [...newTracks];
     const workers: Promise<void>[] = [];
     const upload = async (track: Track) => {
-      const file = trackById.get(track.id);
-      if (!file) return;
+      const original = trackById.get(track.id);
+      if (!original) return;
 
-      const max = track.isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
-      if (file.size > max) {
+      // 1) Validate input size
+      const maxInput = track.isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_INPUT_BYTES;
+      if (original.size > maxInput) {
         updateTrack(track.id, {
           status: "error",
-          error: `Zu groß (${Math.round(file.size / 1024 / 1024)} MB, max ${Math.round(max / 1024 / 1024)} MB)`,
+          error: `Zu groß (${Math.round(original.size / 1024 / 1024)} MB, max ${Math.round(maxInput / 1024 / 1024)} MB)`,
         });
         return;
       }
 
+      // 2) Compression (nur Bilder)
+      let toUpload: File = original;
+      if (!track.isVideo) {
+        updateTrack(track.id, { status: "compressing" });
+        try {
+          const result = await compressImage(original);
+          toUpload = result.file;
+          updateTrack(track.id, { finalSize: result.newSize });
+        } catch (err) {
+          console.warn("[compress] failed for", original.name, err);
+          // Original durchreichen
+        }
+      }
+
+      // 3) Upload
       updateTrack(track.id, { status: "uploading" });
 
-      const safeName = file.name
+      const safeName = toUpload.name
         .toLowerCase()
         .replace(/[^a-z0-9.\-_]/g, "_")
         .slice(0, 80);
@@ -103,7 +121,7 @@ export function PhotoDropZone({
       try {
         const { error: upErr } = await supabase.storage
           .from(BUCKET)
-          .upload(path, file, { upsert: false });
+          .upload(path, toUpload, { upsert: false });
         if (upErr) {
           updateTrack(track.id, { status: "error", error: upErr.message });
           return;
@@ -112,7 +130,7 @@ export function PhotoDropZone({
         updateTrack(track.id, { status: "done", url: pub.publicUrl });
         onUploaded({
           url: pub.publicUrl,
-          name: file.name,
+          name: toUpload.name,
           isVideo: track.isVideo,
         });
       } catch (err) {
@@ -181,7 +199,7 @@ export function PhotoDropZone({
           Bilder oder Videos hier ablegen — oder klicken
         </div>
         <div className="text-xs text-[var(--muted-foreground)]">
-          Mehrere gleichzeitig möglich · max 10 MB pro Bild · max 100 MB pro Video
+          Beliebig viele gleichzeitig · iPhone-HEIC wird automatisch konvertiert · große Bilder werden komprimiert
         </div>
         <input
           ref={inputRef}
@@ -237,10 +255,23 @@ export function PhotoDropZone({
 }
 
 function TrackRow({ track, onDismiss }: { track: Track; onDismiss: () => void }) {
+  const formatSize = (b: number) =>
+    b >= 1024 * 1024
+      ? `${(b / 1024 / 1024).toFixed(1)} MB`
+      : `${Math.round(b / 1024)} KB`;
+  const compressed = track.finalSize != null && track.finalSize < track.size * 0.9;
+  const savedPct =
+    compressed && track.finalSize
+      ? Math.round((1 - track.finalSize / track.size) * 100)
+      : 0;
+
   return (
     <div className="flex items-center gap-2 px-3 py-2 text-xs">
       {track.status === "queued" && (
         <span className="size-3 rounded-full border-2 border-[var(--muted-foreground)]/40" />
+      )}
+      {track.status === "compressing" && (
+        <Wand2 className="size-3 text-purple-700 animate-pulse" />
       )}
       {track.status === "uploading" && (
         <Loader2 className="size-3 animate-spin text-[var(--muted-foreground)]" />
@@ -254,9 +285,17 @@ function TrackRow({ track, onDismiss }: { track: Track; onDismiss: () => void })
         <span className="text-red-700 truncate max-w-[200px]" title={track.error}>
           {track.error}
         </span>
+      ) : track.status === "compressing" ? (
+        <span className="text-purple-700">komprimiere…</span>
+      ) : compressed && track.finalSize ? (
+        <span className="text-[var(--muted-foreground)] tabular-nums">
+          {formatSize(track.size)} →{" "}
+          <span className="text-emerald-700">{formatSize(track.finalSize)}</span>
+          <span className="ml-1 text-[10px]">−{savedPct} %</span>
+        </span>
       ) : (
         <span className="text-[var(--muted-foreground)] tabular-nums">
-          {Math.round(track.size / 1024)} KB
+          {formatSize(track.size)}
         </span>
       )}
 
