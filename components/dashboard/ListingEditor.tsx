@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -11,6 +12,7 @@ import {
   ChevronUp,
   Check,
   X,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,36 +113,56 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
     set("features", next);
   };
 
+  // Mehrfach-Upload: jeder File-Upload ruft appendMedia einzeln; wir
+  // aktualisieren den State synchron mit functional-updater, dann persistieren
+  // wir mit einem 350ms-Debounce die zusammengewachsene Liste in einer einzigen
+  // DB-Update-Roundtrip. So überschreibt sich nichts gegenseitig.
+  const persistTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistMediaRef = React.useRef<string[] | null>(null);
+
+  function schedulePersistMedia(next: string[]) {
+    persistMediaRef.current = next;
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(async () => {
+      const toSave = persistMediaRef.current;
+      if (!toSave) return;
+      persistMediaRef.current = null;
+      const supabase = createSupabaseBrowserClient();
+      setBusy("media-persist");
+      const { error } = await supabase
+        .from("listings")
+        .update({ media: toSave })
+        .eq("id", initial.id);
+      setBusy(null);
+      if (error) setError(error.message);
+    }, 350);
+  }
+
   async function appendMedia(m: AttachedMedia) {
-    const next = Array.from(new Set([...media, m.url]));
-    const supabase = createSupabaseBrowserClient();
-    setBusy("media-append");
-    const { error } = await supabase
-      .from("listings")
-      .update({ media: next })
-      .eq("id", initial.id);
-    setBusy(null);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setMedia(next);
+    setError(null);
+    setMedia((prev) => {
+      const next = Array.from(new Set([...prev, m.url]));
+      schedulePersistMedia(next);
+      return next;
+    });
   }
 
   async function removeMedia(url: string) {
-    const next = media.filter((m) => m !== url);
-    const supabase = createSupabaseBrowserClient();
+    setError(null);
     setBusy(`media-remove-${url}`);
+    const supabase = createSupabaseBrowserClient();
+    let next: string[] = [];
+    setMedia((prev) => {
+      next = prev.filter((m) => m !== url);
+      return next;
+    });
+    // Direct-write (kein Debounce für Delete — soll sofort weg sein)
     const { error } = await supabase
       .from("listings")
       .update({ media: next })
       .eq("id", initial.id);
     setBusy(null);
-    if (error) {
-      setError(error.message);
-      return;
-    }
-    setMedia(next);
+    if (error) setError(error.message);
   }
 
   async function save() {
@@ -172,6 +194,22 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
 
   return (
     <div className="space-y-6">
+      {/* Vorschau-Link → so sieht es für Suchende aus */}
+      <Link
+        href={`/listings/${initial.id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-between rounded-xl border bg-emerald-50/60 hover:bg-emerald-50 transition-colors px-4 py-3"
+      >
+        <div className="flex items-center gap-2 text-sm">
+          <Eye className="size-4 text-emerald-700" />
+          <span>
+            <strong>Vorschau:</strong> So sieht das Inserat für Suchende aus
+          </span>
+        </div>
+        <span className="text-xs text-emerald-700 underline">Öffnen ↗</span>
+      </Link>
+
       {/* Cover + Galerie verwalten */}
       <section>
         <h2 className="text-sm font-semibold mb-2">Bilder & Videos</h2>
