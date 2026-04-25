@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Inbox, Send, Check, X, Loader2, Handshake } from "lucide-react";
+import { Inbox, Send, Check, X, Loader2, Handshake, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -218,49 +219,60 @@ export function MatchSections({
         </Card>
       ) : (
         <div className="space-y-3">
-          {outbox.map((m) => (
-            <Card key={m.match_id}>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  {m.listing_city}
-                  {m.listing_district ? ` · ${m.listing_district}` : ""}
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  {m.listing_rooms ?? "?"} Zi ·{" "}
-                  {Number(m.listing_price).toLocaleString("de-DE")} €
-                  {m.listing_size_sqm ? ` · ${m.listing_size_sqm} m²` : ""}
-                  {m.connected_at ? (
-                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-300">
-                      <Handshake className="size-3" /> verbunden
-                    </span>
-                  ) : m.owner_interest === false ? (
-                    <span className="ml-2 text-[10px] uppercase tracking-wider text-[var(--destructive)]">
-                      abgelehnt
-                    </span>
+          {outbox.map((m) => {
+            const cover = m.listing_media?.[0];
+            return (
+              <Link
+                key={m.match_id}
+                href={`/matches/${m.match_id}`}
+                className="group flex items-stretch gap-3 rounded-lg border bg-[var(--card)] p-2 hover:bg-[var(--accent)] transition-colors"
+              >
+                <div className="relative shrink-0 size-20 overflow-hidden rounded-md bg-[var(--muted)] border">
+                  {cover ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={cover}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
-                    <span className="ml-2 text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
-                      wartet
-                    </span>
+                    <div className="h-full w-full flex items-center justify-center text-[10px] text-[var(--muted-foreground)]">
+                      kein Bild
+                    </div>
                   )}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 text-xs">
-                {m.connected_at && m.owner_contact?.email ? (
-                  <p className="rounded bg-[var(--accent)] px-2 py-1">
-                    Kontakt: {m.owner_contact.email}
-                    {m.owner_contact.channel
-                      ? ` · ${m.owner_contact.channel}`
-                      : ""}
-                  </p>
-                ) : !m.connected_at && m.owner_interest !== false ? (
-                  <p className="text-[var(--muted-foreground)]">
-                    Wir warten auf die Bestätigung des Anbieters. Du wirst
-                    hier informiert sobald es weitergeht.
-                  </p>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                  <div>
+                    <p className="truncate text-sm font-medium">
+                      {m.listing_city}
+                      {m.listing_district ? ` · ${m.listing_district}` : ""}
+                    </p>
+                    <p className="truncate text-xs text-[var(--muted-foreground)]">
+                      {m.listing_rooms ?? "?"} Zi ·{" "}
+                      {Number(m.listing_price).toLocaleString("de-DE")} €
+                      {m.listing_size_sqm ? ` · ${m.listing_size_sqm} m²` : ""}
+                    </p>
+                  </div>
+                  <div className="text-[10px]">
+                    {m.connected_at ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-emerald-700 dark:text-emerald-300">
+                        <Handshake className="size-3" /> verbunden
+                      </span>
+                    ) : m.owner_interest === false ? (
+                      <span className="uppercase tracking-wider text-[var(--destructive)]">
+                        abgelehnt
+                      </span>
+                    ) : (
+                      <span className="uppercase tracking-wider text-[var(--muted-foreground)]">
+                        wartet auf Anbieter
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <ChevronRight className="size-4 self-center text-[var(--muted-foreground)] opacity-0 group-hover:opacity-100 transition-opacity" />
+              </Link>
+            );
+          })}
         </div>
       )}
     </section>
