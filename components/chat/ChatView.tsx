@@ -9,6 +9,8 @@ import {
   Check,
   X,
   MapPin,
+  Search,
+  ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -324,8 +326,13 @@ export function ChatView({
 
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
+  // Spezial-Renderer für find_matches-Result: prominente 'Treffer ansehen'-Card
+  const matchTool = message.toolCalls?.find(
+    (t) => t.name === "find_matches" && t.result?.ok
+  );
+
   return (
-    <div className={isUser ? "flex justify-end" : "flex justify-start"}>
+    <div className={isUser ? "flex justify-end" : "flex flex-col items-start"}>
       <div
         className={
           "rounded-2xl px-4 py-2 max-w-[85%] whitespace-pre-wrap text-sm " +
@@ -356,6 +363,28 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           </div>
         )}
       </div>
+
+      {!isUser && matchTool && (
+        <Link
+          href="/matches"
+          className="mt-2 max-w-[85%] w-full sm:w-auto sm:min-w-[280px] flex items-center justify-between gap-3 rounded-2xl border-2 border-rose-200 bg-gradient-to-br from-rose-50 to-white px-4 py-3 hover:border-rose-300 hover:shadow-sm transition-all group"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="size-9 rounded-full bg-rose-500 text-white flex items-center justify-center shrink-0">
+              <Search className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-[var(--foreground)]">
+                Treffer ansehen
+              </div>
+              <div className="text-[11px] text-[var(--muted-foreground)]">
+                Bilder, Karten, alle Details — wisch dich durch
+              </div>
+            </div>
+          </div>
+          <ArrowRight className="size-4 text-rose-700 group-hover:translate-x-0.5 transition-transform shrink-0" />
+        </Link>
+      )}
     </div>
   );
 }
