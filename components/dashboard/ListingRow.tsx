@@ -28,7 +28,7 @@ export function ListingRow({
 
   return (
     <Link
-      href="#match-inbox"
+      href={`/dashboard/listings/${listing.id}`}
       className="group flex items-center gap-3 rounded-lg border p-2 hover:bg-[var(--accent)] transition-colors"
     >
       <div className="shrink-0 size-14 overflow-hidden rounded-md bg-[var(--muted)] border">
