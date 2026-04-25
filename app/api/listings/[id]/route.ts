@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { geocodeListingLocation } from "@/lib/geocoding/nominatim";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -122,7 +123,7 @@ export async function PATCH(
     .from("listings")
     .update({ ...parsed.data, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .select("id")
+    .select("id, location_address, location_district, location_city, lat, lng")
     .single();
 
   if (error || !data) {
@@ -131,6 +132,31 @@ export async function PATCH(
       { error: "update_failed", detail: error?.message ?? "unknown" },
       { status: 500 }
     );
+  }
+
+  // Geocoding nachziehen wenn Adress-Felder verändert wurden ODER lat/lng noch leer
+  // sind (Adresse vorhanden). User-Geo-Override (manueller lat/lng-Patch) vermeidet
+  // Re-Geocode automatisch.
+  const addressTouched =
+    parsed.data.location_address !== undefined ||
+    parsed.data.location_district !== undefined ||
+    parsed.data.location_city !== undefined;
+  const userSetGeo = parsed.data.lat !== undefined || parsed.data.lng !== undefined;
+  const needsGeo = !userSetGeo && (addressTouched || data.lat == null);
+
+  if (needsGeo) {
+    void geocodeListingLocation({
+      address: data.location_address,
+      district: data.location_district,
+      city: data.location_city,
+    }).then(async (hit) => {
+      if (!hit) return;
+      const { error: geoErr } = await owner.supabase
+        .from("listings")
+        .update({ lat: hit.lat, lng: hit.lng })
+        .eq("id", id);
+      if (geoErr) console.error("[geocode] persist failed", id, geoErr);
+    });
   }
 
   return Response.json({ ok: true, id });
