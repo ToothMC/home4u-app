@@ -34,7 +34,7 @@ const SEED_MESSAGE: Record<string, string> = {
   seeker:
     "Hi, ich bin Sophie. Ich helfe dir, eine Wohnung zu finden, die wirklich passt. Erzähl mir kurz: In welcher Stadt oder Region suchst du — und zur Miete oder zum Kauf?",
   owner:
-    "Hi, ich bin Sophie. Schön, dass du deine Immobilie bei Home4U anbieten möchtest. Für ein Inserat musst du nur einmal angemeldet sein — oben rechts auf 'Anmelden' klicken, Code aus der E-Mail eingeben. Danach erzähl mir einfach wo die Immobilie liegt, Zimmer, Preis und ab wann sie verfügbar wäre.",
+    "Hi, lass uns dein Inserat anlegen. Erzähl mir bitte:\n\n1) Wo liegt die Immobilie? (Stadt + Viertel)\n2) Miete oder Kauf, wieviele Zimmer?\n3) Preis (bei Miete pro Monat, bei Kauf gesamt)\n\nBilder/Videos kannst du unten anhängen — die machen den Unterschied. Falls du noch nicht angemeldet bist, klick oben rechts auf 'Anmelden' bevor wir speichern.",
   agent:
     "Hi, ich bin Sophie. Schön, dass du dich für den Makler-Beirat interessierst. In welcher Stadt oder Region arbeitest du aktuell, und wie viele Inserate hast du typischerweise parallel?",
   default:
@@ -66,7 +66,12 @@ export function ChatView({
   const endRef = useRef<HTMLDivElement | null>(null);
 
   // Letzte Conversation des Users/der Session beim Mount laden.
+  // ABER: wenn flow explizit gesetzt ist (z.B. via "+ Inserat" / "+ Suche"-
+  // Button), starten wir bewusst frisch mit dem flow-spezifischen Seed —
+  // sonst landet man in der alten Konversation und Sophie reagiert nicht
+  // auf die Intent.
   useEffect(() => {
+    if (flow) return; // explizite Flow-Wahl ignoriert History
     let cancelled = false;
     (async () => {
       try {

@@ -178,7 +178,7 @@ function SeekerView({
           Meine Suchen ({profiles.length})
         </h2>
         <Button asChild size="sm" variant="outline">
-          <Link href="/chat">+ Suche</Link>
+          <Link href="/chat?flow=seeker">+ Suche</Link>
         </Button>
       </div>
       {profiles.length === 0 ? (
@@ -230,7 +230,7 @@ function ProviderView({
             </Button>
           )}
           <Button asChild size="sm" variant="outline">
-            <Link href="/chat">+ Inserat</Link>
+            <Link href="/chat?flow=owner">+ Inserat</Link>
           </Button>
         </div>
       </div>
