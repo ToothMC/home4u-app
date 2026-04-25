@@ -23,6 +23,7 @@ export async function loadPublicListing(
        pets_allowed, available_from, features, media,
        honest_assessment, nearby_pois,
        floorplan_url, tour_3d_url, video_url,
+       contract_min_months, contract_notes,
        source, external_id, ai_analyzed_at, created_at`
     )
     .eq("id", id)
@@ -95,6 +96,8 @@ export async function loadPublicListing(
     floorplan_url: l.floorplan_url ?? null,
     tour_3d_url: l.tour_3d_url ?? null,
     video_url: l.video_url ?? null,
+    contract_min_months: l.contract_min_months ?? null,
+    contract_notes: l.contract_notes ?? null,
     source: l.source as string,
     external_id: l.external_id ?? null,
     ai_analyzed_at: l.ai_analyzed_at ?? null,

@@ -6,6 +6,7 @@ import {
   Shield,
   Building,
   Zap,
+  FileSignature,
 } from "lucide-react";
 import type { PublicListingData } from "./types";
 
@@ -60,6 +61,20 @@ export function QuickFactsBar({ listing }: { listing: PublicListingData }) {
       value: `~${formatPrice(listing.utilities.estimated_monthly_total, listing.currency, "rent")}`,
     });
   }
+  if (listing.type === "rent" && listing.contract_min_months != null) {
+    facts.push({
+      icon: <FileSignature className="size-4" />,
+      label: "Mindestlaufzeit",
+      value:
+        listing.contract_min_months === 0
+          ? "flexibel"
+          : listing.contract_min_months === 12
+            ? "1 Jahr"
+            : listing.contract_min_months === 24
+              ? "2 Jahre"
+              : `${listing.contract_min_months} Mt.`,
+    });
+  }
 
   return (
     <section>
@@ -87,6 +102,15 @@ export function QuickFactsBar({ listing }: { listing: PublicListingData }) {
 
       {listing.utilities && hasUtilityInfo(listing.utilities) && (
         <UtilitiesNote utilities={listing.utilities} />
+      )}
+
+      {listing.contract_notes && (
+        <div className="mt-3 rounded-xl border bg-[var(--card)] px-4 py-3 text-sm">
+          <div className="font-semibold text-xs uppercase tracking-wider text-[var(--muted-foreground)] mb-1">
+            Vertragsdetails
+          </div>
+          <p className="text-sm">{listing.contract_notes}</p>
+        </div>
       )}
     </section>
   );

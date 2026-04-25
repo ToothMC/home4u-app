@@ -71,6 +71,9 @@ const patchSchema = z
     floorplan_url: z.string().url().max(1024).nullable().optional(),
     tour_3d_url: z.string().url().max(1024).nullable().optional(),
     video_url: z.string().url().max(1024).nullable().optional(),
+    // Mietvertrag
+    contract_min_months: z.number().int().min(0).max(120).nullable().optional(),
+    contract_notes: z.string().max(500).nullable().optional(),
   })
   .strict();
 

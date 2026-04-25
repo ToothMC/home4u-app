@@ -118,6 +118,8 @@ export type PublicListingData = {
   floorplan_url: string | null;
   tour_3d_url: string | null;
   video_url: string | null;
+  contract_min_months: number | null;
+  contract_notes: string | null;
   source: string;
   external_id: string | null;
   ai_analyzed_at: string | null;

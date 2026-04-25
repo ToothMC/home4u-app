@@ -75,6 +75,8 @@ export type EditableListing = {
   floorplan_url: string | null;
   tour_3d_url: string | null;
   video_url: string | null;
+  contract_min_months: number | null;
+  contract_notes: string | null;
 };
 
 const PROPERTY_TYPES = [
@@ -413,6 +415,10 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
             onChange={(e) => set("available_from", e.target.value || null)}
           />
         </Field>
+
+        {get("type") === "rent" && (
+          <ContractTermEditor get={get} set={set} />
+        )}
 
         {get("type") === "rent" && <UtilitiesEditor get={get} set={set} />}
 
@@ -816,6 +822,71 @@ function UtilitiesEditor({
           value={u.notes ?? ""}
           onChange={(e) => update("notes", e.target.value || null)}
           placeholder="z. B. Solar-Boiler, kein Klimaanlagen-Stromverbrauch im Sommer"
+          maxLength={500}
+        />
+      </Field>
+    </div>
+  );
+}
+
+// ---------- Contract-Term-Editor ----------
+
+const CONTRACT_OPTIONS = [
+  { value: 6, label: "6 Monate" },
+  { value: 12, label: "1 Jahr" },
+  { value: 24, label: "2 Jahre" },
+  { value: 0, label: "flexibel / kurzfristig" },
+];
+
+function ContractTermEditor({
+  get,
+  set,
+}: {
+  get: <K extends keyof EditableListing>(key: K) => EditableListing[K];
+  set: <K extends keyof EditableListing>(key: K, value: EditableListing[K]) => void;
+}) {
+  const months = get("contract_min_months") as number | null;
+  const notes = (get("contract_notes") as string | null) ?? "";
+
+  return (
+    <div className="rounded-lg border bg-[var(--accent)]/40 p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Mietvertrag</h3>
+        <span className="text-[10px] text-[var(--muted-foreground)]">
+          CY-üblich: 1-Jahres-Vertrag
+        </span>
+      </div>
+
+      <Field label="Mindestlaufzeit">
+        <div className="flex flex-wrap gap-2">
+          {CONTRACT_OPTIONS.map((o) => {
+            const active = months === o.value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() =>
+                  set("contract_min_months", active ? null : o.value)
+                }
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs",
+                  active
+                    ? "bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]"
+                    : "bg-[var(--background)] hover:bg-[var(--accent)]"
+                )}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+
+      <Field label="Hinweise zum Vertrag">
+        <Input
+          value={notes}
+          onChange={(e) => set("contract_notes", e.target.value || null)}
+          placeholder="z. B. '1+1 mit Verlängerungsoption', 'Kündigung 1 Monat zum Monatsende'"
           maxLength={500}
         />
       </Field>
