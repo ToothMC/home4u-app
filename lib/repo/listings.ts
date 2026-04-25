@@ -1,4 +1,74 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import type { NormalizedListing } from "@/lib/import/types";
+
+export class ImporterUnavailableError extends Error {
+  constructor() {
+    super("Supabase service-role client not configured");
+    this.name = "ImporterUnavailableError";
+  }
+}
+
+export type BulkImportResult = {
+  inserted: number;
+  updated: number;
+  failed: { index: number; reason: string }[];
+};
+
+/**
+ * Bulk-Upsert über die bulk_upsert_listings-RPC (Migration 0009).
+ * Re-Imports aktualisieren bestehende Zeilen via dedup_hash, blocken nicht.
+ */
+export async function bulkUpsertListings(
+  brokerId: string,
+  rows: NormalizedListing[]
+): Promise<BulkImportResult> {
+  const supabase = createSupabaseServiceClient();
+  if (!supabase) throw new ImporterUnavailableError();
+
+  const payload = rows.map((r) => ({
+    type: r.type,
+    location_city: r.location_city,
+    location_district: r.location_district,
+    price: r.price,
+    currency: r.currency,
+    rooms: r.rooms,
+    size_sqm: r.size_sqm,
+    contact_name: r.contact_name,
+    contact_phone: r.contact_phone,
+    contact_channel: r.contact_channel,
+    language: r.language,
+    external_id: r.external_id,
+    media: r.media,
+    dedup_hash: r.dedup_hash,
+  }));
+
+  const { data, error } = await supabase.rpc("bulk_upsert_listings", {
+    p_broker_id: brokerId,
+    p_rows: payload,
+  });
+
+  if (error) {
+    throw new Error(`bulk_upsert_listings failed: ${error.message}`);
+  }
+
+  const result = (data ?? {}) as {
+    ok?: boolean;
+    inserted?: number;
+    updated?: number;
+    failed?: { index: number; reason: string }[];
+    error?: string;
+  };
+
+  if (!result.ok) {
+    throw new Error(`bulk_upsert_listings returned error: ${result.error ?? "unknown"}`);
+  }
+
+  return {
+    inserted: result.inserted ?? 0,
+    updated: result.updated ?? 0,
+    failed: result.failed ?? [],
+  };
+}
 
 export type Listing = {
   id: string;

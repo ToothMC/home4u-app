@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { MessageCircle, KeyRound, SearchIcon } from "lucide-react";
+import { MessageCircle, KeyRound, SearchIcon, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -143,6 +143,7 @@ export default async function DashboardPage({
             listings={listings}
             newCounts={listingRequestCounts}
             handledCounts={listingHandledCounts}
+            canBulkImport={user.role === "agent" || user.role === "admin"}
           />
         )}
 
@@ -206,10 +207,12 @@ function ProviderView({
   listings,
   newCounts,
   handledCounts,
+  canBulkImport,
 }: {
   listings: Listing[];
   newCounts: Record<string, number>;
   handledCounts: Record<string, number>;
+  canBulkImport: boolean;
 }) {
   return (
     <section className="mt-6">
@@ -218,9 +221,18 @@ function ProviderView({
           <KeyRound className="size-4" />
           Meine Inserate ({listings.length})
         </h2>
-        <Button asChild size="sm" variant="outline">
-          <Link href="/chat">+ Inserat</Link>
-        </Button>
+        <div className="flex gap-2">
+          {canBulkImport && (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/import">
+                <Upload className="size-3" /> Bulk-Import
+              </Link>
+            </Button>
+          )}
+          <Button asChild size="sm" variant="outline">
+            <Link href="/chat">+ Inserat</Link>
+          </Button>
+        </div>
       </div>
       {listings.length === 0 ? (
         <Card>
