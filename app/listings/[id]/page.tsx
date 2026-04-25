@@ -1,0 +1,276 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft, MapPin, Heart, Share2 } from "lucide-react";
+import { AuthMenu } from "@/components/auth/AuthMenu";
+import { HeroGallery } from "@/components/listing-public/HeroGallery";
+import { RoomGalleryGrid } from "@/components/listing-public/RoomGalleryGrid";
+import { QuickFactsBar } from "@/components/listing-public/QuickFactsBar";
+import { QuickActionsRow } from "@/components/listing-public/QuickActionsRow";
+import { HonestAssessmentBlock } from "@/components/listing-public/HonestAssessmentBlock";
+import { LocationBlock } from "@/components/listing-public/LocationBlock";
+import { RequestVisitButton } from "@/components/listing-public/RequestVisitButton";
+import { loadPublicListing } from "@/lib/repo/public-listing";
+
+export const dynamic = "force-dynamic";
+
+export default async function PublicListingPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const listing = await loadPublicListing(id);
+
+  if (!listing || listing.status !== "active") {
+    notFound();
+  }
+
+  const heroImages = listing.photos.map((p) => p.url);
+  const formattedPrice = formatPrice(
+    listing.price_warm ?? listing.price,
+    listing.currency
+  );
+  const priceLabel = listing.type === "rent" ? "/ Monat" : "";
+  const priceTitle = listing.price_warm ? "Warmmiete" : listing.type === "rent" ? "Miete" : "Kaufpreis";
+
+  return (
+    <main className="bg-[var(--background)]">
+      {/* Top bar */}
+      <header className="mx-auto max-w-7xl w-full px-4 pt-4 pb-2 flex items-center justify-between">
+        <Link
+          href="/matches"
+          className="text-sm text-[var(--muted-foreground)] hover:underline flex items-center gap-1"
+        >
+          <ArrowLeft className="size-4" /> Zurück zur Suche
+        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="hidden sm:inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            aria-label="Speichern"
+          >
+            <Heart className="size-4" /> Speichern
+          </button>
+          <button
+            type="button"
+            className="hidden sm:inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            aria-label="Teilen"
+          >
+            <Share2 className="size-4" /> Teilen
+          </button>
+          <AuthMenu />
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-7xl w-full px-4 pb-10 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8">
+        {/* Main column */}
+        <div className="space-y-6 min-w-0">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+              {listing.title ??
+                fallbackTitle(
+                  listing.rooms,
+                  listing.property_type,
+                  listing.location_district,
+                  listing.location_city
+                )}
+            </h1>
+            <p className="text-sm text-[var(--muted-foreground)] flex items-center gap-1 mt-1">
+              <MapPin className="size-3" />
+              {listing.location_address ??
+                [listing.location_district, listing.location_city]
+                  .filter(Boolean)
+                  .join(", ")}
+            </p>
+          </div>
+
+          <HeroGallery images={heroImages} />
+
+          <RoomGalleryGrid photos={listing.photos} />
+
+          <QuickFactsBar listing={listing} />
+
+          <QuickActionsRow listing={listing} />
+
+          {listing.description && (
+            <section className="space-y-2">
+              <h2 className="text-base font-semibold">Beschreibung</h2>
+              <p className="text-sm whitespace-pre-wrap leading-relaxed text-[var(--foreground)]/90">
+                {listing.description}
+              </p>
+            </section>
+          )}
+
+          {listing.features.length > 0 && (
+            <section id="features" className="space-y-2">
+              <h2 className="text-base font-semibold">Ausstattung</h2>
+              <div className="flex flex-wrap gap-2">
+                {listing.features.map((f) => (
+                  <span
+                    key={f}
+                    className="rounded-full border bg-[var(--card)] px-3 py-1 text-xs"
+                  >
+                    {featureLabel(f)}
+                  </span>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Mobile: Sidebar elements rein in den Flow */}
+          <div className="lg:hidden space-y-4">
+            <PriceBox
+              priceLabel={priceLabel}
+              formattedPrice={formattedPrice}
+              priceTitle={priceTitle}
+              listingId={listing.id}
+            />
+            <HonestAssessmentBlock assessment={listing.honest_assessment} />
+            <LocationBlock
+              city={listing.location_city}
+              district={listing.location_district}
+              address={listing.location_address}
+              lat={listing.lat}
+              lng={listing.lng}
+              pois={listing.nearby_pois}
+            />
+          </div>
+
+          <FooterMeta
+            externalId={listing.external_id}
+            createdAt={listing.created_at}
+          />
+        </div>
+
+        {/* Right Sidebar (desktop) */}
+        <aside className="hidden lg:block space-y-4">
+          <div className="sticky top-4 space-y-4">
+            <PriceBox
+              priceLabel={priceLabel}
+              formattedPrice={formattedPrice}
+              priceTitle={priceTitle}
+              listingId={listing.id}
+            />
+            <HonestAssessmentBlock assessment={listing.honest_assessment} />
+            <LocationBlock
+              city={listing.location_city}
+              district={listing.location_district}
+              address={listing.location_address}
+              lat={listing.lat}
+              lng={listing.lng}
+              pois={listing.nearby_pois}
+            />
+          </div>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
+function PriceBox({
+  formattedPrice,
+  priceLabel,
+  priceTitle,
+  listingId,
+}: {
+  formattedPrice: string;
+  priceLabel: string;
+  priceTitle: string;
+  listingId: string;
+}) {
+  return (
+    <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-3">
+      <div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-3xl font-semibold">{formattedPrice}</span>
+          {priceLabel && (
+            <span className="text-sm text-[var(--muted-foreground)]">{priceLabel}</span>
+          )}
+        </div>
+        <div className="text-xs text-[var(--muted-foreground)] mt-0.5">
+          {priceTitle}
+        </div>
+      </div>
+      <RequestVisitButton listingId={listingId} full />
+    </section>
+  );
+}
+
+function FooterMeta({
+  externalId,
+  createdAt,
+}: {
+  externalId: string | null;
+  createdAt: string;
+}) {
+  return (
+    <div className="text-xs text-[var(--muted-foreground)] flex items-center justify-between border-t pt-4">
+      <span>
+        Inserat online seit{" "}
+        {new Date(createdAt).toLocaleDateString("de-DE")}
+      </span>
+      {externalId && (
+        <span className="font-mono">Objekt-ID {externalId.slice(0, 30)}</span>
+      )}
+    </div>
+  );
+}
+
+function formatPrice(amount: number, currency: string) {
+  return new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: currency || "EUR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function fallbackTitle(
+  rooms: number | null,
+  propertyType: string | null,
+  district: string | null,
+  city: string
+): string {
+  const roomsLabel = rooms === 0 ? "Studio" : rooms ? `${rooms}-Zimmer-` : "";
+  const typeLabel = propertyType
+    ? PROPERTY_LABEL[propertyType] ?? "Wohnung"
+    : "Wohnung";
+  const place = district ? `${district}, ${city}` : city;
+  return `${roomsLabel}${typeLabel} in ${place}`.trim();
+}
+
+const PROPERTY_LABEL: Record<string, string> = {
+  apartment: "Wohnung",
+  house: "Haus",
+  villa: "Villa",
+  maisonette: "Maisonette",
+  studio: "Studio",
+  townhouse: "Stadthaus",
+  penthouse: "Penthouse",
+  bungalow: "Bungalow",
+  land: "Grundstück",
+  commercial: "Gewerbe",
+};
+
+function featureLabel(value: string): string {
+  return (
+    {
+      parking: "Parkplatz",
+      covered_parking: "Garage",
+      pool: "Pool",
+      garden: "Garten",
+      balcony: "Balkon",
+      terrace: "Terrasse",
+      elevator: "Aufzug",
+      air_conditioning: "Klimaanlage",
+      solar: "Solar",
+      sea_view: "Meerblick",
+      mountain_view: "Bergblick",
+      storage: "Abstellraum",
+      fireplace: "Kamin",
+      jacuzzi: "Jacuzzi",
+      gym: "Fitnessraum",
+      smart_home: "Smart Home",
+      accessible: "Barrierefrei",
+    }[value] ?? value
+  );
+}
