@@ -68,75 +68,96 @@ export function MatchCard({
   }, [total]);
 
   // ---------- Swipe-Gesture ----------
-  const [drag, setDrag] = React.useState({ x: 0, y: 0, active: false, axis: "" as "" | "x" | "y" });
+  // dragRef = live state für Handler (kein closure-stale)
+  // dragVisual = state für Render
+  const dragRef = React.useRef({ x: 0, y: 0, axis: "" as "" | "x" | "y" });
+  const [dragVisual, setDragVisual] = React.useState({
+    x: 0,
+    y: 0,
+    axis: "" as "" | "x" | "y",
+  });
   const startRef = React.useRef<{ x: number; y: number } | null>(null);
-  const flyOutRef = React.useRef<"left" | "right" | null>(null);
+  const animatingRef = React.useRef(false);
+
+  // Refs für die aktuellen Callbacks/Funktionen → handler bleibt stabil
+  const onSwipeRef = React.useRef(onSwipe);
+  const nextRef = React.useRef(next);
+  const prevRef = React.useRef(prev);
+  React.useEffect(() => {
+    onSwipeRef.current = onSwipe;
+    nextRef.current = next;
+    prevRef.current = prev;
+  }, [onSwipe, next, prev]);
 
   React.useEffect(() => {
     if (!isTop || !cardRef.current) return;
     const el = cardRef.current;
 
     const onTouchStart = (e: TouchEvent) => {
+      if (animatingRef.current) return;
       const t = e.touches[0];
       startRef.current = { x: t.clientX, y: t.clientY };
-      setDrag({ x: 0, y: 0, active: true, axis: "" });
+      dragRef.current = { x: 0, y: 0, axis: "" };
+      setDragVisual({ x: 0, y: 0, axis: "" });
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (!startRef.current) return;
+      if (!startRef.current || animatingRef.current) return;
       const t = e.touches[0];
       const dx = t.clientX - startRef.current.x;
       const dy = t.clientY - startRef.current.y;
       const absX = Math.abs(dx);
       const absY = Math.abs(dy);
 
-      // Achse einrasten ab 10px Bewegung
-      let axis: "" | "x" | "y" = drag.axis;
+      let axis = dragRef.current.axis;
       if (!axis && (absX > 10 || absY > 10)) {
         axis = absX > absY ? "x" : "y";
       }
 
       if (axis === "x" || axis === "y") {
-        // Während Card-Drag: Page-Scroll verhindern
         e.preventDefault();
       }
 
-      setDrag({
+      const nextDrag = {
         x: axis === "x" ? dx : 0,
         y: axis === "y" ? dy : 0,
-        active: true,
         axis,
-      });
+      };
+      dragRef.current = nextDrag;
+      setDragVisual(nextDrag);
     };
 
     const onTouchEnd = () => {
-      const { x, y, axis } = drag;
-      const swipeWidth = window.innerWidth * 0.28;
+      const { x, y, axis } = dragRef.current;
+      const swipeWidth = window.innerWidth * 0.25;
+
       if (axis === "x" && Math.abs(x) > swipeWidth) {
         // Animate fly-out, dann Action
-        flyOutRef.current = x > 0 ? "right" : "left";
-        setDrag({
-          x: x > 0 ? window.innerWidth : -window.innerWidth,
-          y: 0,
-          active: false,
-          axis: "",
-        });
+        animatingRef.current = true;
+        const flyTo = x > 0 ? window.innerWidth : -window.innerWidth;
+        setDragVisual({ x: flyTo, y: 0, axis: "x" });
         setTimeout(() => {
-          onSwipe?.(x > 0 ? "like" : "skip");
-        }, 180);
-      } else if (axis === "y" && Math.abs(y) > 60) {
+          onSwipeRef.current?.(x > 0 ? "like" : "skip");
+          // Reset für nächste Karte
+          animatingRef.current = false;
+          dragRef.current = { x: 0, y: 0, axis: "" };
+          setDragVisual({ x: 0, y: 0, axis: "" });
+        }, 200);
+      } else if (axis === "y" && Math.abs(y) > 50) {
         // Vertikal: Bild wechseln
-        if (y < 0) next();
-        else prev();
-        setDrag({ x: 0, y: 0, active: false, axis: "" });
+        if (y < 0) nextRef.current();
+        else prevRef.current();
+        dragRef.current = { x: 0, y: 0, axis: "" };
+        setDragVisual({ x: 0, y: 0, axis: "" });
       } else {
-        setDrag({ x: 0, y: 0, active: false, axis: "" });
+        // Snap back
+        dragRef.current = { x: 0, y: 0, axis: "" };
+        setDragVisual({ x: 0, y: 0, axis: "" });
       }
       startRef.current = null;
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
-    // touchmove muss non-passive sein, damit preventDefault wirkt
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd);
     el.addEventListener("touchcancel", onTouchEnd);
@@ -146,7 +167,7 @@ export function MatchCard({
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [isTop, drag, next, prev, onSwipe]);
+  }, [isTop]);
 
   const formatPrice = (n: number) =>
     new Intl.NumberFormat("de-DE", {
@@ -159,12 +180,15 @@ export function MatchCard({
     data.rooms === 0 ? "Studio" : data.rooms === 1 ? "1 Zi" : `${data.rooms ?? "?"} Zi`;
 
   // Drag-Visualisierung
-  const isFlying = flyOutRef.current !== null && !drag.active;
-  const rotation = drag.axis === "x" ? Math.max(-12, Math.min(12, drag.x * 0.04)) : 0;
-  const opacityHorizontal = drag.axis === "x" ? Math.min(1, Math.abs(drag.x) / 200) : 0;
-  const showLikeOverlay = drag.axis === "x" && drag.x > 30;
-  const showSkipOverlay = drag.axis === "x" && drag.x < -30;
-  const verticalHint = drag.axis === "y" ? Math.min(1, Math.abs(drag.y) / 80) : 0;
+  const rotation =
+    dragVisual.axis === "x" ? Math.max(-12, Math.min(12, dragVisual.x * 0.04)) : 0;
+  const opacityHorizontal =
+    dragVisual.axis === "x" ? Math.min(1, Math.abs(dragVisual.x) / 200) : 0;
+  const showLikeOverlay = dragVisual.axis === "x" && dragVisual.x > 30;
+  const showSkipOverlay = dragVisual.axis === "x" && dragVisual.x < -30;
+  const verticalHint =
+    dragVisual.axis === "y" ? Math.min(1, Math.abs(dragVisual.y) / 80) : 0;
+  const isAnimating = animatingRef.current;
 
   return (
     <article
@@ -172,10 +196,13 @@ export function MatchCard({
       className={cn(
         "rounded-2xl overflow-hidden bg-[var(--card)] border shadow-sm relative select-none",
         isTop ? "touch-none" : "",
-        isFlying ? "transition-transform duration-200" : drag.active ? "" : "transition-transform duration-200"
+        // Smooth transition wenn snap-back oder fly-out, nicht während aktivem Drag
+        dragVisual.axis === "" || isAnimating
+          ? "transition-transform duration-200 ease-out"
+          : ""
       )}
       style={{
-        transform: `translate(${drag.x}px, ${drag.y * 0.3}px) rotate(${rotation}deg)`,
+        transform: `translate(${dragVisual.x}px, ${dragVisual.y * 0.3}px) rotate(${rotation}deg)`,
       }}
     >
       {/* Image area */}
@@ -234,7 +261,7 @@ export function MatchCard({
             style={{ opacity: verticalHint }}
           >
             <span className="size-12 rounded-full bg-black/60 backdrop-blur flex items-center justify-center text-white">
-              {drag.y < 0 ? <ChevronUp className="size-6" /> : <ChevronDown className="size-6" />}
+              {dragVisual.y < 0 ? <ChevronUp className="size-6" /> : <ChevronDown className="size-6" />}
             </span>
           </div>
         )}
