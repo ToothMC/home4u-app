@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { pickPrimarySheet, readXlsxRaw, rowsToHeaderRecords } from "./xlsx-fallback";
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 export const MAX_ROWS = 5000;
@@ -84,14 +85,51 @@ function parseCsv(buffer: ArrayBuffer): ParseResult {
 }
 
 async function parseXlsx(buffer: ArrayBuffer): Promise<ParseResult> {
+  // Versuch 1: ExcelJS (schnell, funktioniert für Standard-Excel/LibreOffice)
+  try {
+    const result = await parseXlsxViaExcelJS(buffer);
+    if (result.headers.length > 0 || result.rows.length > 0) {
+      if (result.rows.length > MAX_ROWS) {
+        throw new ParseError(`Zu viele Zeilen (max ${MAX_ROWS})`, "too_many_rows");
+      }
+      return { kind: "rows", format: "xlsx", ...result };
+    }
+  } catch (err) {
+    if (err instanceof ParseError) throw err;
+    // ExcelJS schluckt Files mit x:-Namespace-Präfix (openpyxl/Bazaraki) → fallback
+    console.warn("[parser] ExcelJS failed, falling back to raw XLSX reader:", err);
+  }
+
+  // Versuch 2: Raw-XML-Reader (deckt openpyxl, Python-erzeugte XLSX, etc.)
+  const sheets = await readXlsxRaw(buffer);
+  const primary = pickPrimarySheet(sheets);
+  if (!primary) {
+    throw new ParseError("Keine Datentabelle in der Excel-Datei gefunden", "empty_workbook");
+  }
+  const { headers, rows } = rowsToHeaderRecords(primary);
+  if (headers.length === 0 || rows.length === 0) {
+    throw new ParseError(
+      "Excel-Datei enthält keine erkennbare Datentabelle (Header + Zeilen)",
+      "no_data_table"
+    );
+  }
+  if (rows.length > MAX_ROWS) {
+    throw new ParseError(`Zu viele Zeilen (max ${MAX_ROWS})`, "too_many_rows");
+  }
+  return { kind: "rows", format: "xlsx", headers, rows };
+}
+
+async function parseXlsxViaExcelJS(buffer: ArrayBuffer) {
   const ExcelJS = (await import("exceljs")).default;
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
 
-  const sheet = workbook.worksheets[0];
-  if (!sheet) {
-    throw new ParseError("Keine Tabelle in der Datei gefunden", "empty_workbook");
+  // Sheet mit den meisten Datenzeilen wählen (skippt Cover/Summary-Sheets)
+  let sheet = workbook.worksheets[0];
+  for (const ws of workbook.worksheets) {
+    if (ws.rowCount > (sheet?.rowCount ?? 0)) sheet = ws;
   }
+  if (!sheet) return { headers: [], rows: [] as Record<string, string>[] };
 
   const headerRow = sheet.getRow(1);
   const headers: string[] = [];
@@ -100,15 +138,8 @@ async function parseXlsx(buffer: ArrayBuffer): Promise<ParseResult> {
   });
   const cleanHeaders = headers.filter(Boolean);
 
-  if (cleanHeaders.length === 0) {
-    throw new ParseError("Keine Spalten-Header gefunden", "no_headers");
-  }
-
   const rows: Record<string, string>[] = [];
   for (let i = 2; i <= sheet.rowCount; i++) {
-    if (rows.length >= MAX_ROWS) {
-      throw new ParseError(`Zu viele Zeilen (max ${MAX_ROWS})`, "too_many_rows");
-    }
     const row = sheet.getRow(i);
     const record: Record<string, string> = {};
     let hasContent = false;
@@ -122,7 +153,7 @@ async function parseXlsx(buffer: ArrayBuffer): Promise<ParseResult> {
     if (hasContent) rows.push(record);
   }
 
-  return { kind: "rows", format: "xlsx", headers: cleanHeaders, rows };
+  return { headers: cleanHeaders, rows };
 }
 
 async function parsePdf(buffer: ArrayBuffer): Promise<ParseResult> {
