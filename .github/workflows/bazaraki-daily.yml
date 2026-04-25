@@ -1,0 +1,62 @@
+name: Daily Bazaraki Crawl
+
+on:
+  schedule:
+    # 04:00 UTC = 06:00 Cyprus Sommerzeit / 07:00 Winterzeit (vor Tagesgeschäft)
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      cities:
+        description: "Cities-Filter (kommagetrennt, leer = alle)"
+        required: false
+        default: ""
+      types:
+        description: "rent,sale (leer = beide)"
+        required: false
+        default: ""
+      max_pages:
+        description: "Max Pages pro City+Type"
+        required: false
+        default: "10"
+      dry_run:
+        description: "Nur loggen, kein DB-Write"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: bazaraki-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ./bazaraki-crawler
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run crawler
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CITIES: ${{ inputs.cities }}
+          TYPES: ${{ inputs.types }}
+          MAX_PAGES_PER_CITY: ${{ inputs.max_pages || '10' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+        run: python -m src.main

@@ -1,0 +1,18 @@
+[project]
+name = "home4u-bazaraki-crawler"
+version = "0.1.0"
+description = "Bazaraki listings indexer for Home4U (Spur 1.2)"
+requires-python = ">=3.11"
+dependencies = [
+    "playwright>=1.49,<2",
+    "httpx>=0.28,<1",
+    "python-dotenv>=1.0,<2",
+    "tenacity>=9.0,<10",
+]
+
+[project.scripts]
+crawl = "src.main:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
