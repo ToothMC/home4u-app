@@ -2,6 +2,27 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 export const SOPHIE_TOOLS: Anthropic.Tool[] = [
   {
+    name: "set_user_role",
+    description:
+      "Markiert die primäre Absicht des Nutzers fürs Dashboard: 'seeker' = sucht, 'owner' = bietet eigene Immobilie an, 'agent' = Makler. Das ist NUR ein Dashboard-Fokus — technisch darf der Nutzer jederzeit beides machen (suchen UND inserieren). Nutze das Tool, sobald die Hauptabsicht klar ist, damit das Dashboard auf die passende Ansicht voreingestellt ist. Bei Wechsel der Hauptabsicht einfach neu setzen.",
+    input_schema: {
+      type: "object",
+      properties: {
+        role: {
+          type: "string",
+          enum: ["seeker", "owner", "agent"],
+          description: "Dashboard-Fokus des Nutzers",
+        },
+        reason: {
+          type: "string",
+          description: "Kurz nachvollziehbar, warum du diesen Fokus setzt",
+        },
+      },
+      required: ["role", "reason"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "create_search_profile",
     description:
       "Legt ein neues Suchprofil für einen Wohnungssuchenden an, sobald Lage und Budget feststehen. Andere Felder dürfen leer bleiben und später per update_search_profile ergänzt werden.",

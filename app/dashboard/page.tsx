@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { MessageCircle, KeyRound, SearchIcon } from "lucide-react";
+import { MessageCircle, KeyRound, SearchIcon, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -10,17 +10,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { AuthMenu } from "@/components/auth/AuthMenu";
-import { ListingCard } from "@/components/dashboard/ListingCard";
+import { ListingRow } from "@/components/dashboard/ListingRow";
+import { SearchRow } from "@/components/dashboard/SearchRow";
 import { MatchSections } from "@/components/dashboard/MatchSections";
+import { DashboardViewTabs } from "@/components/dashboard/DashboardViewTabs";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+type View = "seeker" | "provider";
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
   const user = await getAuthUser();
   if (!user) {
-    // Nicht eingeloggt → zurück auf Landing (dort Login-Button)
     redirect("/?auth=required");
   }
 
@@ -28,9 +35,12 @@ export default async function DashboardPage() {
 
   let listings: Listing[] = [];
   let profiles: SearchProfile[] = [];
+  const listingRequestCounts: Record<string, number> = {}; // neu (offen)
+  const listingHandledCounts: Record<string, number> = {}; // bearbeitet
+  const profileMatchCounts: Record<string, number> = {};
 
   if (supabase) {
-    const [{ data: listingRows }, { data: profileRows }] = await Promise.all([
+    const [listingRes, profileRes] = await Promise.all([
       supabase
         .from("listings")
         .select(
@@ -46,9 +56,60 @@ export default async function DashboardPage() {
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false }),
     ]);
-    listings = (listingRows ?? []) as Listing[];
-    profiles = (profileRows ?? []) as SearchProfile[];
+    listings = (listingRes.data ?? []) as Listing[];
+    profiles = (profileRes.data ?? []) as SearchProfile[];
+
+    // Anfragen pro Listing — getrennt nach neu (owner_decided_at IS NULL)
+    // und bearbeitet (owner_decided_at IS NOT NULL)
+    if (listings.length > 0) {
+      const ids = listings.map((l) => l.id);
+      const { data: matchRows } = await supabase
+        .from("matches")
+        .select("listing_id, owner_decided_at")
+        .in("listing_id", ids)
+        .eq("seeker_interest", true);
+      for (const m of matchRows ?? []) {
+        const key = m.listing_id as string;
+        listingRequestCounts[key] = listingRequestCounts[key] ?? 0;
+        listingHandledCounts[key] = listingHandledCounts[key] ?? 0;
+        if (m.owner_decided_at) {
+          listingHandledCounts[key] += 1;
+        } else {
+          listingRequestCounts[key] += 1;
+        }
+      }
+    }
+
+    // Treffer pro Suchprofil (RPC pro Profil, für MVP ausreichend)
+    for (const p of profiles) {
+      const { data: matches } = await supabase.rpc(
+        "match_listings_for_profile",
+        {
+          p_user_id: user.id,
+          p_profile_id: p.id,
+          p_limit: 100,
+        }
+      );
+      profileMatchCounts[p.id] = (matches ?? []).length;
+    }
   }
+
+  // View-Default: URL-Param → profiles.role (seeker/owner/agent) → erste
+  // existierende Daten-Art → 'seeker'
+  const params = await searchParams;
+  const urlView = params.view;
+  const viewFromRole: View | null =
+    user.role === "owner" || user.role === "agent" ? "provider" : user.role === "seeker" ? "seeker" : null;
+  const viewFromData: View | null =
+    listings.length > 0 && profiles.length === 0
+      ? "provider"
+      : profiles.length > 0 && listings.length === 0
+        ? "seeker"
+        : null;
+  const view: View =
+    urlView === "seeker" || urlView === "provider"
+      ? urlView
+      : viewFromRole ?? viewFromData ?? "seeker";
 
   return (
     <main className="flex-1">
@@ -63,7 +124,7 @@ export default async function DashboardPage() {
         <h1 className="text-2xl sm:text-3xl font-semibold mb-2">
           Dein Dashboard
         </h1>
-        <p className="text-sm text-[var(--muted-foreground)] mb-8">
+        <p className="text-sm text-[var(--muted-foreground)] mb-6">
           {user.email ? (
             <>
               Angemeldet als <strong>{user.email}</strong>
@@ -73,85 +134,20 @@ export default async function DashboardPage() {
           )}
         </p>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Inserate */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <KeyRound className="size-4" />
-                Meine Inserate ({listings.length})
-              </h2>
-              <Button asChild size="sm" variant="outline">
-                <Link href="/chat?flow=owner">+ Inserat</Link>
-              </Button>
-            </div>
+        <DashboardViewTabs current={view} />
 
-            {listings.length === 0 ? (
-              <Card>
-                <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
-                  Noch keine Inserate angelegt. Klick oben auf{" "}
-                  <strong>+ Inserat</strong> — Sophie führt dich durch.
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {listings.map((l) => (
-                  <ListingCard key={l.id} listing={l} />
-                ))}
-              </div>
-            )}
-          </section>
+        {view === "seeker" ? (
+          <SeekerView profiles={profiles} matchCounts={profileMatchCounts} />
+        ) : (
+          <ProviderView
+            listings={listings}
+            newCounts={listingRequestCounts}
+            handledCounts={listingHandledCounts}
+            canBulkImport={user.role === "agent" || user.role === "admin"}
+          />
+        )}
 
-          {/* Suchprofile */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <SearchIcon className="size-4" />
-                Meine Suchen ({profiles.length})
-              </h2>
-              <Button asChild size="sm" variant="outline">
-                <Link href="/chat?flow=seeker">+ Suche</Link>
-              </Button>
-            </div>
-
-            {profiles.length === 0 ? (
-              <Card>
-                <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
-                  Noch keine Suchprofile. Klick oben auf{" "}
-                  <strong>+ Suche</strong> und erzähl Sophie, wonach du suchst.
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {profiles.map((p) => (
-                  <Card key={p.id}>
-                    <CardHeader>
-                      <CardTitle className="text-base">{p.location}</CardTitle>
-                      <CardDescription className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                        {p.rooms ? <span>{p.rooms} Zimmer</span> : null}
-                        {p.budget_max ? (
-                          <span>
-                            bis{" "}
-                            {Number(p.budget_max).toLocaleString("de-DE")} €
-                          </span>
-                        ) : null}
-                        {p.move_in_date ? (
-                          <span>ab {p.move_in_date}</span>
-                        ) : null}
-                        {p.household ? <span>{p.household}</span> : null}
-                        <span className="uppercase tracking-wider text-[10px]">
-                          {p.active ? "aktiv" : "pausiert"}
-                        </span>
-                      </CardDescription>
-                    </CardHeader>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-
-        <MatchSections />
+        <MatchSections role={view} />
 
         <div className="mt-10 rounded-lg border p-4 bg-[var(--accent)] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -164,6 +160,100 @@ export default async function DashboardPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+function SeekerView({
+  profiles,
+  matchCounts,
+}: {
+  profiles: SearchProfile[];
+  matchCounts: Record<string, number>;
+}) {
+  return (
+    <section className="mt-6">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <SearchIcon className="size-4" />
+          Meine Suchen ({profiles.length})
+        </h2>
+        <Button asChild size="sm" variant="outline">
+          <Link href="/chat">+ Suche</Link>
+        </Button>
+      </div>
+      {profiles.length === 0 ? (
+        <Card>
+          <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
+            Noch keine Suchprofile. Klick oben auf <strong>+ Suche</strong> und
+            erzähl Sophie, wonach du suchst.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {profiles.map((p) => (
+            <SearchRow
+              key={p.id}
+              profile={p}
+              matchCount={matchCounts[p.id] ?? 0}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProviderView({
+  listings,
+  newCounts,
+  handledCounts,
+  canBulkImport,
+}: {
+  listings: Listing[];
+  newCounts: Record<string, number>;
+  handledCounts: Record<string, number>;
+  canBulkImport: boolean;
+}) {
+  return (
+    <section className="mt-6">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <KeyRound className="size-4" />
+          Meine Inserate ({listings.length})
+        </h2>
+        <div className="flex gap-2">
+          {canBulkImport && (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/import">
+                <Upload className="size-3" /> Bulk-Import
+              </Link>
+            </Button>
+          )}
+          <Button asChild size="sm" variant="outline">
+            <Link href="/chat">+ Inserat</Link>
+          </Button>
+        </div>
+      </div>
+      {listings.length === 0 ? (
+        <Card>
+          <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
+            Noch keine Inserate angelegt. Klick oben auf{" "}
+            <strong>+ Inserat</strong> — Sophie führt dich durch.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {listings.map((l) => (
+            <ListingRow
+              key={l.id}
+              listing={l}
+              newCount={newCounts[l.id] ?? 0}
+              handledCount={handledCounts[l.id] ?? 0}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

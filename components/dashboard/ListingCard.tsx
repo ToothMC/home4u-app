@@ -25,7 +25,13 @@ export type ListingForCard = {
   media: string[] | null;
 };
 
-export function ListingCard({ listing }: { listing: ListingForCard }) {
+export function ListingCard({
+  listing,
+  requestCount = 0,
+}: {
+  listing: ListingForCard;
+  requestCount?: number;
+}) {
   const [media, setMedia] = useState<string[]>(listing.media ?? []);
   const [busy, setBusy] = useState<string | null>(null);
   const [showUploader, setShowUploader] = useState(false);
@@ -93,10 +99,25 @@ export function ListingCard({ listing }: { listing: ListingForCard }) {
       )}
 
       <CardHeader>
-        <CardTitle className="text-base">
-          {listing.location_city}
-          {listing.location_district ? ` · ${listing.location_district}` : ""}
-        </CardTitle>
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-base">
+            {listing.location_city}
+            {listing.location_district ? ` · ${listing.location_district}` : ""}
+          </CardTitle>
+          {requestCount > 0 ? (
+            <a
+              href="#match-inbox"
+              className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25"
+              title="Such-Anfragen für dieses Inserat"
+            >
+              {requestCount} Such-Anfragen →
+            </a>
+          ) : (
+            <span className="text-[10px] text-[var(--muted-foreground)]">
+              0 Anfragen
+            </span>
+          )}
+        </div>
         <CardDescription className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
           <span>{listing.rooms ?? "?"} Zimmer</span>
           {listing.size_sqm ? <span>{listing.size_sqm} m²</span> : null}
