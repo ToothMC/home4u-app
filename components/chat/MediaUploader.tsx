@@ -27,6 +27,7 @@ export function MediaUploader({
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function handleFiles(files: FileList | null) {
@@ -48,42 +49,64 @@ export function MediaUploader({
       return;
     }
 
+    const fileList = Array.from(files);
     setBusy(true);
-    for (const file of Array.from(files)) {
+    setProgress({ done: 0, total: fileList.length });
+
+    // Parallel-Upload (bis zu N gleichzeitig — Browser limitiert eh per Domain).
+    // Jede erfolgreiche Datei ruft sofort onAttached, damit der Editor sie
+    // ins Grid mit aufnimmt.
+    const errors: string[] = [];
+    let completed = 0;
+
+    const uploadOne = async (file: File) => {
+      const isVideo = file.type.startsWith("video/");
+      const max = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+      if (file.size > max) {
+        errors.push(
+          `${file.name}: zu groß (${Math.round(file.size / 1024 / 1024)} MB, max ${Math.round(max / 1024 / 1024)} MB)`
+        );
+        completed += 1;
+        setProgress({ done: completed, total: fileList.length });
+        return;
+      }
+
+      const safeName = file.name
+        .toLowerCase()
+        .replace(/[^a-z0-9.\-_]/g, "_")
+        .slice(0, 80);
+      const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`;
+
       try {
-        const isVideo = file.type.startsWith("video/");
-        const max = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
-        if (file.size > max) {
-          setError(
-            `${file.name}: zu groß (${Math.round(file.size / 1024 / 1024)} MB, max ${Math.round(max / 1024 / 1024)} MB)`
-          );
-          continue;
-        }
-
-        const safeName = file.name
-          .toLowerCase()
-          .replace(/[^a-z0-9.\-_]/g, "_")
-          .slice(0, 80);
-        const path = `${user.id}/${Date.now()}-${safeName}`;
-
         const { error: upErr } = await supabase.storage
           .from(BUCKET)
           .upload(path, file, { upsert: false });
         if (upErr) {
-          setError(`Upload fehlgeschlagen: ${upErr.message}`);
-          continue;
+          errors.push(`${file.name}: ${upErr.message}`);
+        } else {
+          const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
+          onAttached({
+            url: pub.publicUrl,
+            kind: isVideo ? "video" : "image",
+            name: file.name,
+          });
         }
-        const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-        onAttached({
-          url: pub.publicUrl,
-          kind: isVideo ? "video" : "image",
-          name: file.name,
-        });
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        errors.push(`${file.name}: ${err instanceof Error ? err.message : String(err)}`);
       }
+
+      completed += 1;
+      setProgress({ done: completed, total: fileList.length });
+    };
+
+    await Promise.all(fileList.map(uploadOne));
+
+    if (errors.length > 0) {
+      setError(errors.length === 1 ? errors[0] : `${errors.length} Fehler — siehe Konsole`);
+      if (errors.length > 1) console.error("[upload-errors]", errors);
     }
     setBusy(false);
+    setProgress(null);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -121,12 +144,19 @@ export function MediaUploader({
           onClick={() => inputRef.current?.click()}
           disabled={disabled || busy}
           aria-label="Bild oder Video anhängen"
-          className="flex h-10 w-10 items-center justify-center rounded-md border hover:bg-[var(--accent)] disabled:opacity-50"
+          className="flex h-10 items-center justify-center gap-2 rounded-md border px-3 hover:bg-[var(--accent)] disabled:opacity-50"
         >
           {busy ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <Paperclip className="size-4" />
+          )}
+          {busy && progress ? (
+            <span className="text-xs">
+              Upload {progress.done}/{progress.total}
+            </span>
+          ) : (
+            <span className="text-xs">Bilder/Videos wählen</span>
           )}
         </button>
         <input

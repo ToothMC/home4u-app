@@ -7,7 +7,6 @@ import {
   Loader2,
   Trash2,
   Sparkles,
-  Plus,
   ChevronDown,
   ChevronUp,
   Check,
@@ -17,9 +16,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { MediaUploader, type AttachedMedia } from "@/components/chat/MediaUploader";
 import { DeleteRecordButton } from "@/components/dashboard/DeleteRecordButton";
 import { AnalyzeWithSophieButton } from "@/components/dashboard/AnalyzeWithSophieButton";
+import { PhotoDropZone } from "@/components/dashboard/PhotoDropZone";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -121,7 +120,6 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
   const [form, setForm] = React.useState<FormState>({});
   const [media, setMedia] = React.useState<string[]>(initial.media ?? []);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
-  const [showUploader, setShowUploader] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [savedAt, setSavedAt] = React.useState<number | null>(null);
@@ -145,10 +143,9 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
     set("features", next);
   };
 
-  // Mehrfach-Upload: jeder File-Upload ruft appendMedia einzeln; wir
-  // aktualisieren den State synchron mit functional-updater, dann persistieren
-  // wir mit einem 350ms-Debounce die zusammengewachsene Liste in einer einzigen
-  // DB-Update-Roundtrip. So überschreibt sich nichts gegenseitig.
+  // Mehrfach-Upload: PhotoDropZone ruft onUploaded pro fertigem File.
+  // Wir aktualisieren media[] mit functional state-update + 400ms-Debounce
+  // für ein einziges DB-Write am Ende.
   const persistTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistMediaRef = React.useRef<string[] | null>(null);
 
@@ -160,17 +157,15 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
       if (!toSave) return;
       persistMediaRef.current = null;
       const supabase = createSupabaseBrowserClient();
-      setBusy("media-persist");
       const { error } = await supabase
         .from("listings")
         .update({ media: toSave })
         .eq("id", initial.id);
-      setBusy(null);
       if (error) setError(error.message);
-    }, 350);
+    }, 400);
   }
 
-  async function appendMedia(m: AttachedMedia) {
+  function appendMedia(m: { url: string; name: string; isVideo: boolean }) {
     setError(null);
     setMedia((prev) => {
       const next = Array.from(new Set([...prev, m.url]));
@@ -188,7 +183,6 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
       next = prev.filter((m) => m !== url);
       return next;
     });
-    // Direct-write (kein Debounce für Delete — soll sofort weg sein)
     const { error } = await supabase
       .from("listings")
       .update({ media: next })
@@ -249,29 +243,35 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
         alreadyAnalyzed={Boolean(initial.ai_analyzed_at)}
       />
 
-      {/* Cover + Galerie verwalten */}
-      <section>
-        <h2 className="text-sm font-semibold mb-2">Bilder & Videos</h2>
-        {media.length === 0 ? (
-          <div className="rounded-md border border-dashed p-6 text-center text-sm text-[var(--muted-foreground)]">
-            Noch keine Bilder. Lad welche hoch — die machen den Unterschied
-            beim Finden.
-          </div>
-        ) : (
+      {/* Bilder + Videos */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Bilder & Videos ({media.length})</h2>
+          <span className="text-[10px] text-[var(--muted-foreground)]">
+            Erstes Bild = Cover
+          </span>
+        </div>
+
+        {media.length > 0 && (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-            {media.map((url) => {
+            {media.map((url, idx) => {
               const isVideo = /\.(mp4|mov|webm)$/i.test(url);
               return (
                 <div
                   key={url}
                   className="group relative aspect-square overflow-hidden rounded-md border bg-[var(--muted)]"
                 >
+                  {idx === 0 && (
+                    <span className="absolute top-1 left-1 z-10 rounded bg-black/60 backdrop-blur px-1.5 py-0.5 text-[9px] font-medium text-white">
+                      Cover
+                    </span>
+                  )}
                   {isVideo ? (
                     /* eslint-disable-next-line jsx-a11y/media-has-caption */
                     <video src={url} className="h-full w-full object-cover" muted playsInline />
                   ) : (
                     /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={url} alt="" className="h-full w-full object-cover" />
+                    <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
                   )}
                   <button
                     onClick={() => removeMedia(url)}
@@ -290,25 +290,8 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
             })}
           </div>
         )}
-        <div className="mt-2">
-          {showUploader ? (
-            <div className="space-y-2">
-              <MediaUploader
-                attached={[]}
-                onAttached={appendMedia}
-                onRemove={(url) => removeMedia(url)}
-                disabled={busy === "media-append"}
-              />
-              <Button size="sm" variant="ghost" onClick={() => setShowUploader(false)}>
-                Schließen
-              </Button>
-            </div>
-          ) : (
-            <Button size="sm" variant="outline" onClick={() => setShowUploader(true)}>
-              <Plus className="size-3" /> Bilder hinzufügen
-            </Button>
-          )}
-        </div>
+
+        <PhotoDropZone onUploaded={appendMedia} />
       </section>
 
       {/* Quick-Facts */}
