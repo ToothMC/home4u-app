@@ -120,6 +120,21 @@ export type PublicListingData = {
   video_url: string | null;
   contract_min_months: number | null;
   contract_notes: string | null;
+  // Faire-Preis-Analyse
+  price_per_sqm: number | null;
+  market_position:
+    | "very_good"
+    | "good"
+    | "fair"
+    | "above"
+    | "expensive"
+    | "unknown"
+    | null;
+  market_compset_size: number;
+  market_p10_eur_sqm: number | null;
+  market_p25_eur_sqm: number | null;
+  market_median_eur_sqm: number | null;
+  market_p75_eur_sqm: number | null;
   source: string;
   external_id: string | null;
   ai_analyzed_at: string | null;

@@ -8,6 +8,7 @@ import { QuickFactsBar } from "@/components/listing-public/QuickFactsBar";
 import { QuickActionsRow } from "@/components/listing-public/QuickActionsRow";
 import { HonestAssessmentBlock } from "@/components/listing-public/HonestAssessmentBlock";
 import { LocationBlock } from "@/components/listing-public/LocationBlock";
+import { MarketPriceBlock } from "@/components/listing-public/MarketPriceBlock";
 import { RequestVisitButton } from "@/components/listing-public/RequestVisitButton";
 import { loadPublicListing } from "@/lib/repo/public-listing";
 
@@ -125,6 +126,21 @@ export default async function PublicListingPage({
               priceTitle={priceTitle}
               listingId={listing.id}
             />
+            {listing.market_position && (
+              <MarketPriceBlock
+                data={{
+                  position: listing.market_position,
+                  price_per_sqm: listing.price_per_sqm,
+                  median_eur_sqm: listing.market_median_eur_sqm,
+                  p25_eur_sqm: listing.market_p25_eur_sqm,
+                  p75_eur_sqm: listing.market_p75_eur_sqm,
+                  compset_size: listing.market_compset_size,
+                  city: listing.location_city,
+                  district: listing.location_district,
+                  rooms: listing.rooms,
+                }}
+              />
+            )}
             <HonestAssessmentBlock assessment={listing.honest_assessment} />
             <LocationBlock
               city={listing.location_city}
@@ -151,6 +167,21 @@ export default async function PublicListingPage({
               priceTitle={priceTitle}
               listingId={listing.id}
             />
+            {listing.market_position && (
+              <MarketPriceBlock
+                data={{
+                  position: listing.market_position,
+                  price_per_sqm: listing.price_per_sqm,
+                  median_eur_sqm: listing.market_median_eur_sqm,
+                  p25_eur_sqm: listing.market_p25_eur_sqm,
+                  p75_eur_sqm: listing.market_p75_eur_sqm,
+                  compset_size: listing.market_compset_size,
+                  city: listing.location_city,
+                  district: listing.location_district,
+                  rooms: listing.rooms,
+                }}
+              />
+            )}
             <HonestAssessmentBlock assessment={listing.honest_assessment} />
             <LocationBlock
               city={listing.location_city}

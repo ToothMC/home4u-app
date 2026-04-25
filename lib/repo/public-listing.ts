@@ -24,6 +24,8 @@ export async function loadPublicListing(
        honest_assessment, nearby_pois,
        floorplan_url, tour_3d_url, video_url,
        contract_min_months, contract_notes,
+       price_per_sqm, market_position, market_compset_size,
+       market_p10_eur_sqm, market_p25_eur_sqm, market_median_eur_sqm, market_p75_eur_sqm,
        source, external_id, ai_analyzed_at, created_at`
     )
     .eq("id", id)
@@ -98,6 +100,18 @@ export async function loadPublicListing(
     video_url: l.video_url ?? null,
     contract_min_months: l.contract_min_months ?? null,
     contract_notes: l.contract_notes ?? null,
+    price_per_sqm: l.price_per_sqm != null ? Number(l.price_per_sqm) : null,
+    market_position:
+      (l.market_position as PublicListingData["market_position"]) ?? null,
+    market_compset_size: l.market_compset_size ?? 0,
+    market_p10_eur_sqm:
+      l.market_p10_eur_sqm != null ? Number(l.market_p10_eur_sqm) : null,
+    market_p25_eur_sqm:
+      l.market_p25_eur_sqm != null ? Number(l.market_p25_eur_sqm) : null,
+    market_median_eur_sqm:
+      l.market_median_eur_sqm != null ? Number(l.market_median_eur_sqm) : null,
+    market_p75_eur_sqm:
+      l.market_p75_eur_sqm != null ? Number(l.market_p75_eur_sqm) : null,
     source: l.source as string,
     external_id: l.external_id ?? null,
     ai_analyzed_at: l.ai_analyzed_at ?? null,
