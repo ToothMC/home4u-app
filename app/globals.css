@@ -7,6 +7,12 @@
    ========================================================================== */
 
 :root {
+  /* App ist konsequent für die warme Cream-Palette designed; ein
+     unvollständiges Dark-Mode-Mapping würde Sektionen ohne expliziten
+     Background lesbar zerstören (Navy-Text auf Navy-Background).
+     Bis ein Dark-Theme explizit kuratiert ist: nur Light. */
+  color-scheme: light;
+
   /* Brand */
   --brand-navy: #1a2e44;
   --brand-navy-700: #243f5b;
@@ -56,32 +62,6 @@
   --shadow-warm-sm: 0 1px 2px 0 rgb(120 90 50 / 6%);
   --shadow-warm: 0 4px 14px -4px rgb(120 90 50 / 10%), 0 2px 4px -2px rgb(120 90 50 / 6%);
   --shadow-warm-lg: 0 14px 40px -10px rgb(120 90 50 / 15%), 0 8px 20px -10px rgb(120 90 50 / 10%);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f1d2c;
-    --foreground: #f5ecd9;
-    --card: #1a2e44;
-    --card-foreground: #f5ecd9;
-    --popover: #1a2e44;
-    --popover-foreground: #f5ecd9;
-    --muted: #243f5b;
-    --muted-foreground: #c8b890;
-    --border: rgb(168 130 76 / 25%);
-    --input: rgb(168 130 76 / 25%);
-    --ring: var(--brand-gold);
-
-    --primary: var(--brand-gold);
-    --primary-foreground: #0f1d2c;
-    --secondary: var(--warm-cream);
-    --secondary-foreground: var(--brand-navy);
-    --accent: rgb(168 130 76 / 18%);
-    --accent-foreground: #f5ecd9;
-
-    --destructive: #ef4444;
-    --destructive-foreground: #ffffff;
-  }
 }
 
 @theme inline {
