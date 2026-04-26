@@ -155,10 +155,15 @@ DETAIL_EXTRACT_JS = r"""
   const charsBlock = document.querySelector('.announcement-characteristics, [class*="chars"]');
   const charsRaw = charsBlock?.innerText?.trim() || null;
 
-  // Alle Bilder
-  const allImages = [...new Set(Array.from(document.querySelectorAll('img'))
-    .map(i => i.src || i.getAttribute('data-src'))
-    .filter(s => s && s.includes('bazaraki.com/media') && /\.(jpe?g|png|webp)/i.test(s))
+  // Galerie-Hauptbilder. Bazaraki nutzt Slick-Carousel mit Lazy-Load:
+  // - .announcement__images-item: trägt das hi-res Bild (1600px) im data-src;
+  //   src ist meist nur ein 160×104-Placeholder.
+  // - .announcement__thumbnails-item (Nav-Strip): tiny — bewusst ausschließen.
+  // Es gibt kein srcset und keine Größen-Pfad-Variante; data-src ist der einzige Hi-Res-Pfad.
+  const allImages = [...new Set(
+    Array.from(document.querySelectorAll('img.announcement__images-item'))
+      .map(i => i.getAttribute('data-src') || i.src)
+      .filter(s => s && s.includes('bazaraki.com/media') && /\.(jpe?g|png|webp)/i.test(s))
   )];
 
   // Cover (og:image)
