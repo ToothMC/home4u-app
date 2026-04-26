@@ -12,7 +12,15 @@ type AuthState =
   | { status: "anon" }
   | { status: "user"; email: string | null };
 
-export function AuthMenu({ compact = false }: { compact?: boolean }) {
+export function AuthMenu({
+  compact = false,
+  hideDashboard = false,
+}: {
+  compact?: boolean;
+  /** Auf Seiten, die bereits einen Dashboard-Backlink haben (z.B. /matches),
+   *  ist der zusätzliche Button im AuthMenu redundant — dann ausblenden. */
+  hideDashboard?: boolean;
+}) {
   const [state, setState] = useState<AuthState>({ status: "loading" });
   const [open, setOpen] = useState(false);
 
@@ -69,12 +77,14 @@ export function AuthMenu({ compact = false }: { compact?: boolean }) {
     const label = state.email ? state.email.split("@")[0] : "Account";
     return (
       <div className="flex items-center gap-2">
-        <Button asChild size="sm" variant="outline">
-          <Link href="/dashboard" aria-label="Dashboard">
-            <LayoutDashboard className="size-3" />
-            {compact ? null : <span>Dashboard</span>}
-          </Link>
-        </Button>
+        {!hideDashboard && (
+          <Button asChild size="sm" variant="outline">
+            <Link href="/dashboard" aria-label="Dashboard">
+              <LayoutDashboard className="size-3" />
+              {compact ? null : <span>Dashboard</span>}
+            </Link>
+          </Button>
+        )}
         <span
           className={
             "flex items-center gap-1 text-xs text-[var(--muted-foreground)] max-w-[160px] truncate" +

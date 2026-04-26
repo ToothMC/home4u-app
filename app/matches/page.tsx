@@ -41,7 +41,7 @@ export default async function MatchesPage() {
         >
           ← Dashboard
         </Link>
-        <AuthMenu />
+        <AuthMenu hideDashboard />
       </header>
 
       <section className="mx-auto max-w-md w-full px-4 pb-3 flex-1 flex flex-col min-h-0">
