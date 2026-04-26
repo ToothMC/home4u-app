@@ -11,10 +11,10 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-// Slide-Höhe als Anteil der Image-Area-Höhe. Rest = (1 - SLIDE_RATIO) / 2 als
-// Spacer oben und unten, damit beim aktiven Bild ein Stück voriges/nächstes
-// Bild peekt → Card-Stack-Metapher, "wischbar" wird selbsterklärend.
-const SLIDE_RATIO = 0.85;
+// Höhe der "Card-Stack-Peek-Chips" oben/unten — Vorschau-Streifen der
+// vorigen/nächsten Karte, die in die aktive Karte hineinragen.
+const PEEK_CHIP_HEIGHT = 36; // px
+const PEEK_CHIP_INSET = 10; // Abstand vom Image-Area-Rand
 import { cn } from "@/lib/utils";
 
 export type MatchCardData = {
@@ -75,47 +75,11 @@ export function MatchCard({
   React.useEffect(() => {
     const el = swipeAreaRef.current;
     if (!el || total === 0) return;
-    const slideH =
-      total > 1 ? el.clientHeight * SLIDE_RATIO : el.clientHeight;
-    const target = imgIdx * slideH;
+    const target = imgIdx * el.clientHeight;
     if (Math.abs(el.scrollTop - target) > 2) {
       el.scrollTo({ top: target, behavior: "smooth" });
     }
   }, [imgIdx, total]);
-
-  // 3D-Stack-Effekt: Während des Scrollens skalieren wir jede Slide in
-  // Abhängigkeit ihrer Distanz vom Viewport-Mittelpunkt. Aktive Slide = 1.0,
-  // Peek-Slides am Rand = 0.86 + reduzierte Opazität → wirkt wie hinter der
-  // aktiven Karte liegende Karten in einem physischen Stapel.
-  React.useEffect(() => {
-    const el = swipeAreaRef.current;
-    if (!el || total <= 1) return;
-
-    let frame = 0;
-    const apply = () => {
-      const center = el.scrollTop + el.clientHeight / 2;
-      const half = el.clientHeight / 2;
-      el.querySelectorAll<HTMLElement>("[data-slide-idx]").forEach((slide) => {
-        const slideCenter = slide.offsetTop + slide.offsetHeight / 2;
-        const distance = Math.abs(center - slideCenter);
-        const t = Math.min(1, distance / half);
-        const scale = 1 - t * 0.14; // 0.86 .. 1.0
-        const opacity = 1 - t * 0.55; // 0.45 .. 1.0
-        slide.style.transform = `scale(${scale})`;
-        slide.style.opacity = String(opacity);
-      });
-    };
-    const onScroll = () => {
-      if (frame) cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(apply);
-    };
-    apply();
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      if (frame) cancelAnimationFrame(frame);
-    };
-  }, [total, data.id]);
 
   const next = React.useCallback(() => {
     if (total > 1) setImgIdx((i) => (i + 1) % total);
@@ -262,19 +226,14 @@ export function MatchCard({
       {/* Image-Area-Container: relativ, enthält Scroll-Stack + Overlay-Layer */}
       <div className="relative flex-1 bg-[var(--muted)] overflow-hidden">
 
-        {/* Scroll-Stack: vertikal scrollbar mit Snap, Browser handhabt Momentum.
-            Bei mehreren Bildern: Slides sind 85 % der Viewport-Höhe + Spacer
-            oben/unten → ein Stück nächstes/voriges Bild peekt am Rand. */}
+        {/* Scroll-Stack: jede Slide ist ein voller Viewport, snap-start. */}
         <div
           ref={swipeAreaRef}
           className="absolute inset-0 overflow-y-auto snap-y snap-mandatory scrollbar-hidden"
           style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}
           onScroll={(e) => {
             const el = e.currentTarget;
-            if (total === 0) return;
-            const slideH =
-              total > 1 ? el.clientHeight * SLIDE_RATIO : el.clientHeight;
-            const idx = Math.round(el.scrollTop / slideH);
+            const idx = Math.round(el.scrollTop / el.clientHeight);
             if (idx !== imgIdx && idx >= 0 && idx < total) {
               setImgIdx(idx);
             }
@@ -285,57 +244,34 @@ export function MatchCard({
               Kein Bild
             </div>
           ) : (
-            <>
-              {/* Top-Spacer ermöglicht snap-center für das erste Bild und
-                  schafft den Peek-Bereich für das vorige Bild. */}
-              {total > 1 && (
-                <div aria-hidden className="h-[7.5%] shrink-0" />
-              )}
-              {images.map((src, i) => (
-                <div
-                  key={`${data.id}-img-${i}`}
-                  data-slide-idx={i}
-                  className={cn(
-                    "relative w-full shrink-0 bg-[var(--muted)]",
-                    // Stacked-Card-Look bei mehreren Bildern: starke Rundung,
-                    // weicher Schatten, Ring → wirkt wie physische Karten.
-                    // origin-center damit Scale-Down sauber aus der Mitte kommt.
-                    total > 1
-                      ? "h-[85%] snap-center rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/10 origin-center"
-                      : "h-full snap-start"
-                  )}
-                  style={
-                    // Initialer Wert; wird vom Scroll-Effekt sofort überschrieben.
-                    total > 1 ? { transform: "scale(1)", opacity: 1 } : undefined
-                  }
-                >
-                  {!brokenIdx.has(i) ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={src}
-                      alt=""
-                      className="absolute inset-0 h-full w-full object-cover"
-                      draggable={false}
-                      loading={i === 0 ? "eager" : "lazy"}
-                      onError={() =>
-                        setBrokenIdx((prev) => {
-                          const next = new Set(prev);
-                          next.add(i);
-                          return next;
-                        })
-                      }
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted-foreground)]">
-                      Bild nicht ladbar
-                    </div>
-                  )}
-                </div>
-              ))}
-              {total > 1 && (
-                <div aria-hidden className="h-[7.5%] shrink-0" />
-              )}
-            </>
+            images.map((src, i) => (
+              <div
+                key={`${data.id}-img-${i}`}
+                className="relative h-full w-full snap-start shrink-0 bg-[var(--muted)]"
+              >
+                {!brokenIdx.has(i) ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={src}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    draggable={false}
+                    loading={i === 0 ? "eager" : "lazy"}
+                    onError={() =>
+                      setBrokenIdx((prev) => {
+                        const next = new Set(prev);
+                        next.add(i);
+                        return next;
+                      })
+                    }
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted-foreground)]">
+                    Bild nicht ladbar
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </div>
 
@@ -418,7 +354,7 @@ export function MatchCard({
           )}
 
           {/* Info gradient overlay (Preis + Lage) */}
-          <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-white">
+          <div className="absolute bottom-0 inset-x-0 p-4 pb-3 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-white">
             <div className="text-2xl font-semibold leading-none">
               {formatPrice(data.price)}
               {data.type === "rent" && (
@@ -432,6 +368,59 @@ export function MatchCard({
                 : data.location_city}
             </div>
           </div>
+
+          {/* Card-Stack-Peek-Chips: zeigen das vorige/nächste Bild als kleine
+              Karte, die mit gerundeter Kante + 3D-Schlagschatten in die
+              aktive Karte hineinragen. Macht den Card-Stack visuell sofort
+              erkennbar. */}
+          {total > 1 && imgIdx > 0 && !brokenIdx.has(imgIdx - 1) && (
+            <div
+              aria-hidden
+              className="absolute z-10 pointer-events-none rounded-b-2xl overflow-hidden ring-1 ring-white/20"
+              style={{
+                top: 0,
+                left: PEEK_CHIP_INSET,
+                right: PEEK_CHIP_INSET,
+                height: PEEK_CHIP_HEIGHT,
+                boxShadow:
+                  "0 8px 18px -4px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25)",
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={images[imgIdx - 1]}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+                draggable={false}
+              />
+              {/* Verlauf abwärts: simuliert "von oben hereinragende" Karte */}
+              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-transparent" />
+            </div>
+          )}
+          {total > 1 && imgIdx < total - 1 && !brokenIdx.has(imgIdx + 1) && (
+            <div
+              aria-hidden
+              className="absolute z-10 pointer-events-none rounded-t-2xl overflow-hidden ring-1 ring-white/20"
+              style={{
+                bottom: 0,
+                left: PEEK_CHIP_INSET,
+                right: PEEK_CHIP_INSET,
+                height: PEEK_CHIP_HEIGHT,
+                boxShadow:
+                  "0 -8px 18px -4px rgba(0,0,0,0.45), 0 -2px 6px rgba(0,0,0,0.25)",
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={images[imgIdx + 1]}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+                draggable={false}
+              />
+              {/* Verlauf aufwärts: simuliert "von unten hereinragende" Karte */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/10 to-transparent" />
+            </div>
+          )}
         </div>
       </div>
 
