@@ -2,6 +2,10 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <!-- iOS/Mail soll OTP-Code nicht als Telefonnummer interpretieren —
+       sonst kein Kopieren möglich, nur Anrufen-Menü. -->
+  <meta name="format-detection" content="telephone=no,date=no,address=no,email=no">
+  <meta name="x-apple-disable-message-reformatting">
 </head>
 <body style="margin:0;padding:0;background-color:#ede8e2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
   <table cellpadding="0" cellspacing="0" width="100%" style="background-color:#ede8e2;padding:48px 16px;">
@@ -24,15 +28,19 @@
               dein Anmeldecode für Home4U steht unten. Sophie wartet schon.
             </p>
 
-            <!-- OTP Code -->
+            <!-- OTP Code. Wrapper-Attribute verhindern, dass iOS Mail die
+                 6-stellige Ziffernfolge als Telefonnummer erkennt
+                 (Long-Press → Anrufen statt Kopieren). -->
             <table cellpadding="0" cellspacing="0" width="100%">
               <tr>
                 <td align="center">
                   <p style="margin:0;font-size:14px;color:#6a5a4a;line-height:1.55;font-weight:600;">
-                    Code im Browser eintragen:
+                    Dein Anmelde-Code:
                   </p>
-                  <p style="margin:16px 0 0;font-size:38px;font-weight:700;letter-spacing:10px;color:#2c2420;font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;">
-                    {{ .Token }}
+                  <p style="margin:16px 0 0;font-size:38px;font-weight:700;letter-spacing:10px;color:#2c2420;font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;"
+                     x-apple-data-detectors="false">
+                    <span style="white-space:nowrap;color:#2c2420;text-decoration:none;"
+                          x-apple-data-detectors="false">{{ .Token }}</span>
                   </p>
                 </td>
               </tr>
