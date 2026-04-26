@@ -66,6 +66,19 @@ export function MatchCard({
     target?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
   }, [imgIdx]);
 
+  // Image-Stack auf das aktive Bild scrollen, wenn imgIdx von außen geändert wird
+  // (Thumbnail-Klick, prev/next-Button). Idempotent — wenn der Stack-Scroll
+  // selbst imgIdx via onScroll gesetzt hat, ist scrollTop schon korrekt und
+  // wir lösen kein zweites Scroll aus.
+  React.useEffect(() => {
+    const el = swipeAreaRef.current;
+    if (!el) return;
+    const target = imgIdx * el.clientHeight;
+    if (Math.abs(el.scrollTop - target) > 2) {
+      el.scrollTo({ top: target, behavior: "smooth" });
+    }
+  }, [imgIdx]);
+
   const next = React.useCallback(() => {
     if (total > 1) setImgIdx((i) => (i + 1) % total);
   }, [total]);
@@ -357,11 +370,13 @@ export function MatchCard({
       </div>
 
       {/* Vertikaler Thumb-Strip (rechts neben dem Bild) — eigener Scroll, keine
-          Geste-Kollision mit Like/Skip */}
+          Geste-Kollision mit Like/Skip. Auf Mobile ausgeblendet, da der Strip
+          dort dem Bild zu viel Breite klaut und Vertikal-Swipe + Counter "1/n"
+          die Navigation schon abdecken. */}
       {total > 1 && (
         <div
           ref={stripRef}
-          className="w-16 shrink-0 overflow-y-auto bg-[var(--card)] border-l border-[var(--border)] scrollbar-hidden"
+          className="hidden sm:block w-16 shrink-0 overflow-y-auto bg-[var(--card)] border-l border-[var(--border)] scrollbar-hidden"
           style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}
         >
           <div className="p-1.5 space-y-1.5">
