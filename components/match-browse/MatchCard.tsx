@@ -369,34 +369,9 @@ export function MatchCard({
             </div>
           </div>
 
-          {/* Card-Stack-Peek-Chips: zeigen das vorige/nächste Bild als kleine
-              Karte, die mit gerundeter Kante + 3D-Schlagschatten in die
-              aktive Karte hineinragen. Macht den Card-Stack visuell sofort
-              erkennbar. */}
-          {total > 1 && imgIdx > 0 && !brokenIdx.has(imgIdx - 1) && (
-            <div
-              aria-hidden
-              className="absolute z-10 pointer-events-none rounded-b-2xl overflow-hidden ring-1 ring-white/20"
-              style={{
-                top: 0,
-                left: PEEK_CHIP_INSET,
-                right: PEEK_CHIP_INSET,
-                height: PEEK_CHIP_HEIGHT,
-                boxShadow:
-                  "0 8px 18px -4px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25)",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={images[imgIdx - 1]}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                draggable={false}
-              />
-              {/* Verlauf abwärts: simuliert "von oben hereinragende" Karte */}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-transparent" />
-            </div>
-          )}
+          {/* Card-Stack-Peek-Chip: nächstes Bild ragt mit gerundeter Oberkante +
+              3D-Schlagschatten von unten in die aktive Karte hinein. Nur unten
+              — oberer Chip war zu unruhig (Counter + Score-Badge konkurrieren). */}
           {total > 1 && imgIdx < total - 1 && !brokenIdx.has(imgIdx + 1) && (
             <div
               aria-hidden
