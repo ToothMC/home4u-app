@@ -19,12 +19,12 @@
   --brand-gold-100: #f0e3cc;
   --brand-gold-50: #faf3e3;
 
-  /* Warm-Wohnlich Neutrals (statt grau-steril) */
-  --warm-cream: #fbf6ed;          /* Hauptbackground */
-  --warm-paper: #ffffff;           /* Karten */
-  --warm-sand: #f1e8d5;            /* Akzent / hover */
-  --warm-stone: #e7dcc4;           /* muted / dividers */
-  --warm-bark: #6b5d4a;            /* Sekundärtext (warmes Braungrau) */
+  /* Warm-Wohnlich Neutrals — sehr dezent, weniger ist mehr */
+  --warm-cream: #f7f5f1;          /* Hauptbackground — fast neutral, Hauch warm */
+  --warm-paper: #ffffff;           /* Karten — sauber weiß */
+  --warm-sand: #efeae0;            /* Akzent / hover — kaum sichtbar */
+  --warm-stone: #e6e0d3;           /* muted / dividers */
+  --warm-bark: #6b6a64;            /* Sekundärtext — warmes Grau, kein Braun */
   --warm-ink: #1a2e44;             /* Haupttext = navy */
 
   /* shadcn-Token-Mapping */
@@ -34,10 +34,10 @@
   --card-foreground: var(--warm-ink);
   --popover: var(--warm-paper);
   --popover-foreground: var(--warm-ink);
-  --muted: #f4ecdc;
+  --muted: #f1eee7;
   --muted-foreground: var(--warm-bark);
-  --border: #e4d8be;
-  --input: #e4d8be;
+  --border: #e8e3d8;
+  --input: #e8e3d8;
   --ring: var(--brand-gold);
 
   --primary: var(--brand-navy);
@@ -132,11 +132,14 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  /* Subtile, warme Textur — fast unsichtbar, gibt Tiefe */
-  background-image:
-    radial-gradient(at 12% 4%, rgb(168 130 76 / 5%) 0, transparent 45%),
-    radial-gradient(at 90% 90%, rgb(26 46 68 / 4%) 0, transparent 50%);
-  background-attachment: fixed;
+}
+
+/* Eleganter Serif für Hero-Headlines */
+.font-display {
+  font-family: var(--font-serif), "Cormorant Garamond", "Playfair Display",
+               Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 * {
@@ -167,16 +170,12 @@ body {
    Brand-Helper-Klassen
    ========================================================================== */
 
-/* Soft warmes Card-Pattern für Hero-Bereiche */
+/* Karten / Sektionen, ganz dezent */
 .bg-warm-gradient {
-  background:
-    radial-gradient(at 30% 0%, var(--brand-gold-50) 0, transparent 55%),
-    radial-gradient(at 100% 100%, var(--brand-navy-50) 0, transparent 55%),
-    var(--warm-cream);
+  background: var(--warm-cream);
 }
 
-/* Hero mit Hauch von Gold */
+/* Hero — neutral, nur Hauch warm */
 .bg-warm-hero {
-  background:
-    linear-gradient(135deg, var(--warm-cream) 0%, var(--brand-gold-50) 100%);
+  background: var(--warm-cream);
 }

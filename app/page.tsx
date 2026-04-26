@@ -1,79 +1,63 @@
 import { Suspense } from "react";
-import { ArrowRight, MessageCircle, ShieldCheck, Languages, MapPin, Sparkles } from "lucide-react";
+import { ArrowRight, MessageCircle, Target, Users, Home as HomeIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatLink, PathCards } from "@/components/landing/PathCards";
 import { RegionPicker } from "@/components/landing/RegionPicker";
 import { AuthMenu } from "@/components/auth/AuthMenu";
-import { BrandLockup, Logo } from "@/components/brand/Logo";
+import { BrandLockup } from "@/components/brand/Logo";
 
 export default function LandingPage() {
   return (
     <main className="flex-1">
-      {/* Header */}
+      {/* Header — minimal, viel Luft */}
       <header className="sticky top-0 z-30 backdrop-blur bg-[var(--warm-cream)]/85 border-b border-[var(--border)]">
-        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
-          <BrandLockup />
+        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
+          <BrandLockup iconSize={36} />
           <AuthMenu />
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative bg-warm-hero overflow-hidden">
-        <div className="mx-auto max-w-5xl px-4 pt-12 pb-16 sm:pt-20 sm:pb-24 text-center relative">
-          <div className="mx-auto mb-8 inline-flex">
-            <Logo variant="stacked" width={120} priority />
-          </div>
-          <p className="text-xs uppercase tracking-[0.25em] text-[var(--brand-gold-700)] font-medium mb-4">
-            Dein Zuhause auf Zypern
-          </p>
-          <h1 className="text-4xl sm:text-6xl font-semibold tracking-tight mb-6 text-[var(--brand-navy)]">
-            Schreib Sophie.
-            <br />
-            <span className="text-[var(--brand-gold)]">
-              Sie findet dein Zuhause.
-            </span>
-          </h1>
-          <p className="mx-auto max-w-2xl text-base sm:text-lg text-[var(--warm-bark)] mb-10 leading-relaxed">
-            KI-gestützte Immobilienplattform mit Double-Match-Prinzip.
-            Kein Kontakt-Chaos, keine Scam-Köder — nur Angebote, die wirklich passen.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Suspense
-              fallback={
-                <Button size="lg" disabled>
-                  <MessageCircle />
-                  Mit Sophie chatten
+      {/* Hero — Serif-Schlagzeile, ein Wort in Gold, ruhig */}
+      <section className="bg-warm-hero">
+        <div className="mx-auto max-w-6xl px-6 pt-16 pb-20 sm:pt-24 sm:pb-28">
+          <div className="max-w-3xl">
+            <h1 className="font-display text-5xl sm:text-7xl leading-[1.05] text-[var(--brand-navy)]">
+              Hier finde ich
+              <br />
+              mein <span className="text-[var(--brand-gold)]">Zuhause.</span>
+            </h1>
+            <p className="mt-6 max-w-xl text-base sm:text-lg text-[var(--warm-bark)] leading-relaxed">
+              Home4U verbindet dich mit passenden Immobilien — persönlich,
+              einfach und modern.
+            </p>
+            <div className="mt-8 flex flex-col sm:flex-row gap-3">
+              <Suspense
+                fallback={
+                  <Button size="lg" disabled>
+                    Jetzt starten
+                  </Button>
+                }
+              >
+                <Button asChild size="lg">
+                  <ChatLink>
+                    Jetzt starten
+                    <ArrowRight />
+                  </ChatLink>
                 </Button>
-              }
-            >
-              <Button asChild size="lg" className="bg-[var(--brand-navy)] hover:bg-[var(--brand-navy-700)] text-white shadow-[0_8px_24px_-8px_rgb(26_46_68/40%)]">
-                <ChatLink>
-                  <MessageCircle className="mr-1" />
-                  Mit Sophie chatten
-                  <ArrowRight />
-                </ChatLink>
+              </Suspense>
+              <Button asChild size="lg" variant="outline">
+                <a href="#region">Immobilien entdecken</a>
               </Button>
-            </Suspense>
-            <Button
-              asChild
-              size="lg"
-              variant="outline"
-              className="border-[var(--brand-gold)] text-[var(--brand-gold-700)] hover:bg-[var(--brand-gold-50)]"
-            >
-              <a href="#region">
-                <MapPin className="mr-1" />
-                Region wählen
-              </a>
-            </Button>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Region Picker */}
-      <section id="region" className="mx-auto max-w-5xl px-4 py-10 sm:py-14">
+      {/* Region-Suche — schlanker, weißes Card auf Cream */}
+      <section id="region" className="mx-auto max-w-6xl px-6 -mt-8 relative z-10">
         <Suspense
           fallback={
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 text-sm text-[var(--muted-foreground)]">
+            <div className="rounded-2xl bg-white border border-[var(--border)] p-6 text-sm text-[var(--muted-foreground)] shadow-[0_10px_30px_-12px_rgb(26_46_68/12%)]">
               Region lädt …
             </div>
           }
@@ -82,16 +66,35 @@ export default function LandingPage() {
         </Suspense>
       </section>
 
-      {/* Drei Wege */}
-      <section id="pfade" className="mx-auto max-w-5xl px-4 py-10 sm:py-14">
-        <div className="text-center mb-10">
-          <p className="text-xs uppercase tracking-[0.25em] text-[var(--brand-gold-700)] font-medium mb-2">
-            So funktioniert&apos;s
-          </p>
-          <h2 className="text-2xl sm:text-3xl font-semibold text-[var(--brand-navy)]">
-            Drei Wege zu Home4U
-          </h2>
+      {/* "Warum Home4U?" — drei stille Spalten, kein Gold-Wash */}
+      <section className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
+        <h2 className="font-display text-3xl sm:text-4xl text-center text-[var(--brand-navy)] mb-12 sm:mb-16">
+          Warum Home4U?
+        </h2>
+        <div className="grid sm:grid-cols-3 gap-10 sm:gap-12">
+          <Pillar
+            icon={<Target className="size-5" />}
+            title="Passende Angebote statt endlos suchen"
+            text="Unsere Technologie und unser Netzwerk zeigen dir nur Immobilien, die wirklich zu dir passen."
+          />
+          <Pillar
+            icon={<Users className="size-5" />}
+            title="Direkt & persönlich"
+            text="Kontaktiere Eigentümer und geprüfte Makler direkt — ohne Umwege und mit voller Transparenz."
+          />
+          <Pillar
+            icon={<HomeIcon className="size-5" />}
+            title="Zuhause-Gefühl"
+            text="Wir verstehen, dass es um mehr geht als Daten. Wir helfen dir, das richtige Zuhause zu finden."
+          />
         </div>
+      </section>
+
+      {/* Drei Wege */}
+      <section id="pfade" className="mx-auto max-w-6xl px-6 pb-16 sm:pb-24">
+        <h2 className="font-display text-3xl sm:text-4xl text-center text-[var(--brand-navy)] mb-10">
+          Drei Wege zu Home4U
+        </h2>
         <Suspense
           fallback={
             <div className="text-center text-sm text-[var(--muted-foreground)]">
@@ -103,65 +106,71 @@ export default function LandingPage() {
         </Suspense>
       </section>
 
-      {/* Double-Match */}
-      <section className="mx-auto max-w-5xl px-4 py-10 sm:py-16">
-        <div className="rounded-2xl bg-warm-gradient border border-[var(--brand-gold-100)] p-6 sm:p-12 shadow-[0_14px_40px_-10px_rgb(120_90_50/12%)]">
-          <div className="grid sm:grid-cols-[auto_1fr] gap-6 items-start">
-            <div className="size-14 rounded-2xl bg-[var(--brand-navy)] flex items-center justify-center shrink-0 shadow-[0_8px_24px_-6px_rgb(26_46_68/40%)]">
-              <Sparkles className="size-7 text-[var(--brand-gold)]" />
-            </div>
-            <div>
-              <h3 className="text-xl sm:text-2xl font-semibold mb-3 text-[var(--brand-navy)]">
-                Warum Double-Match?
-              </h3>
-              <p className="text-[var(--warm-bark)] mb-5 leading-relaxed">
-                Kontakt entsteht nur, wenn beide Seiten sich gegenseitig als passend
-                markieren. Keine Kaltanfragen, keine Belästigung. Sophie verbindet
-                euch erst, wenn&apos;s für beide passt.
-              </p>
-              <ul className="grid sm:grid-cols-2 gap-3 text-sm text-[var(--warm-bark)]">
-                <Feature icon={<ShieldCheck className="size-4 text-[var(--brand-gold)]" />}>
-                  Echte Lokation Pflicht, Provisionshöhe vorab sichtbar
-                </Feature>
-                <Feature icon={<ShieldCheck className="size-4 text-[var(--brand-gold)]" />}>
-                  14-Tage-Aktivitäts-Check — nichts Veraltetes
-                </Feature>
-                <Feature icon={<ShieldCheck className="size-4 text-[var(--brand-gold)]" />}>
-                  KI-Bild-Check gegen Stockfotos und Duplikate
-                </Feature>
-                <Feature icon={<Languages className="size-4 text-[var(--brand-gold)]" />}>
-                  Sophie spricht Deutsch, Englisch, Russisch, Griechisch
-                </Feature>
-              </ul>
-            </div>
+      {/* Closing-Block */}
+      <section className="mx-auto max-w-6xl px-6 pb-20">
+        <div className="rounded-2xl bg-white border border-[var(--border)] p-8 sm:p-14">
+          <h3 className="font-display text-3xl sm:text-4xl text-[var(--brand-navy)] leading-tight">
+            Bereit, dein Zuhause<br className="hidden sm:block" />
+            in Zypern zu finden?
+          </h3>
+          <p className="mt-4 max-w-xl text-[var(--warm-bark)]">
+            Lass uns gemeinsam den richtigen Ort für dich finden. Persönlich.
+            Einfach. Home4U.
+          </p>
+          <div className="mt-8">
+            <Suspense fallback={<Button size="lg" disabled>Jetzt starten</Button>}>
+              <Button asChild size="lg">
+                <ChatLink>
+                  Jetzt starten
+                  <ArrowRight />
+                </ChatLink>
+              </Button>
+            </Suspense>
           </div>
         </div>
       </section>
 
-      <footer className="mx-auto max-w-5xl px-4 py-10 mt-4 border-t border-[var(--border)]">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-[var(--muted-foreground)]">
+      {/* Footer — kompakt, nüchtern */}
+      <footer className="bg-[var(--brand-navy)] text-white/80">
+        <div className="mx-auto max-w-6xl px-6 py-10 flex flex-col sm:flex-row gap-6 sm:items-center justify-between text-sm">
           <div className="flex items-center gap-3">
-            <Logo variant="icon" width={28} />
-            <span>© {new Date().getFullYear()} Home4U · Dein Zuhause auf Zypern</span>
+            <span className="font-semibold tracking-tight text-white">
+              Home<span className="text-[var(--brand-gold)]">4</span>U
+            </span>
+            <span className="text-white/50">·</span>
+            <span className="text-white/60">
+              © {new Date().getFullYear()} Dein Zuhause auf Zypern
+            </span>
           </div>
-          <p className="opacity-70">MVP · made with care</p>
+          <div className="flex items-center gap-6 text-white/60 text-xs">
+            <a href="#region" className="hover:text-white">Entdecken</a>
+            <a href="#pfade" className="hover:text-white">Drei Wege</a>
+            <span>MVP</span>
+          </div>
         </div>
       </footer>
     </main>
   );
 }
 
-function Feature({
+function Pillar({
   icon,
-  children,
+  title,
+  text,
 }: {
   icon: React.ReactNode;
-  children: React.ReactNode;
+  title: string;
+  text: string;
 }) {
   return (
-    <li className="flex items-start gap-2">
-      <span className="mt-0.5 shrink-0">{icon}</span>
-      <span>{children}</span>
-    </li>
+    <div>
+      <div className="size-12 rounded-full bg-[var(--muted)] text-[var(--brand-gold-700)] flex items-center justify-center mb-5">
+        {icon}
+      </div>
+      <h3 className="text-lg font-semibold text-[var(--brand-navy)] mb-2 leading-snug">
+        {title}
+      </h3>
+      <p className="text-sm text-[var(--warm-bark)] leading-relaxed">{text}</p>
+    </div>
   );
 }
