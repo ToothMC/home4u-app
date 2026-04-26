@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import { ArrowRight, Heart, Target, Users, Home as HomeIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatLink, PathCards } from "@/components/landing/PathCards";
-import { RegionPicker } from "@/components/landing/RegionPicker";
 import { FeaturedListings } from "@/components/landing/FeaturedListings";
 import { StatsStrip } from "@/components/landing/StatsStrip";
 import { AuthMenu } from "@/components/auth/AuthMenu";
@@ -18,7 +17,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between gap-4">
           <BrandLockup iconSize={36} />
           <nav className="hidden lg:flex items-center gap-7 text-sm text-[var(--brand-navy)]">
-            <a href="#region" className="hover:text-[var(--brand-gold)] transition-colors">Entdecken</a>
+            <Link href="/matches" className="hover:text-[var(--brand-gold)] transition-colors">Entdecken</Link>
             <Link href="/chat?flow=owner" className="hover:text-[var(--brand-gold)] transition-colors">Vermieten</Link>
             <Link href="/chat?flow=owner&intent=sale" className="hover:text-[var(--brand-gold)] transition-colors">Verkaufen</Link>
             <Link href="/chat?flow=agent" className="hover:text-[var(--brand-gold)] transition-colors">Für Makler</Link>
@@ -94,24 +93,11 @@ export default function LandingPage() {
                 </Button>
               </Suspense>
               <Button asChild size="lg" variant="outline" className="bg-white/85 backdrop-blur">
-                <a href="#region">Immobilien entdecken</a>
+                <Link href="/matches">Immobilien entdecken</Link>
               </Button>
             </div>
           </div>
         </div>
-      </section>
-
-      {/* Region-Suche — schlanker, weißes Card auf Cream */}
-      <section id="region" className="mx-auto max-w-6xl px-6 -mt-8 relative z-10">
-        <Suspense
-          fallback={
-            <div className="rounded-2xl bg-white border border-[var(--border)] p-6 text-sm text-[var(--muted-foreground)] shadow-[0_10px_30px_-12px_rgb(26_46_68/12%)]">
-              Region lädt …
-            </div>
-          }
-        >
-          <RegionPicker />
-        </Suspense>
       </section>
 
       {/* "Warum Home4U?" — drei stille Spalten, kein Gold-Wash */}
@@ -223,7 +209,7 @@ export default function LandingPage() {
             <span>© {new Date().getFullYear()} Dein Zuhause auf Zypern</span>
           </div>
           <div className="flex items-center gap-5 text-white/50">
-            <a href="#region" className="hover:text-white">Entdecken</a>
+            <Link href="/matches" className="hover:text-white">Entdecken</Link>
             <a href="#pfade" className="hover:text-white">Drei Wege</a>
             <a href="#warum" className="hover:text-white">Über uns</a>
           </div>
