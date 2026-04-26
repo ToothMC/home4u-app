@@ -25,8 +25,8 @@ export default function LandingPage() {
             starkem Cream-Gradient; auf Desktop rechts ~58% breit */}
         <div className="absolute inset-0 sm:left-1/2">
           <Image
-            src="/hero/villa-terrace-sunset.jpg"
-            alt="Mediterrane Villa-Terrasse mit Meerblick bei Sonnenuntergang"
+            src="/hero/home4u-hero.png"
+            alt="Moderne Villa-Terrasse mit Meerblick"
             fill
             priority
             sizes="(min-width: 640px) 50vw, 100vw"
@@ -136,26 +136,54 @@ export default function LandingPage() {
         </Suspense>
       </section>
 
-      {/* Closing-Block */}
-      <section className="mx-auto max-w-6xl px-6 pb-20">
-        <div className="rounded-2xl bg-white border border-[var(--border)] p-8 sm:p-14">
-          <h3 className="font-display text-3xl sm:text-4xl text-[var(--brand-navy)] leading-tight">
-            Bereit, dein Zuhause<br className="hidden sm:block" />
-            in Zypern zu finden?
-          </h3>
-          <p className="mt-4 max-w-xl text-[var(--warm-bark)]">
-            Lass uns gemeinsam den richtigen Ort für dich finden. Persönlich.
-            Einfach. Home4U.
-          </p>
-          <div className="mt-8">
-            <Suspense fallback={<Button size="lg" disabled>Jetzt starten</Button>}>
-              <Button asChild size="lg">
-                <ChatLink>
-                  Jetzt starten
-                  <ArrowRight />
-                </ChatLink>
-              </Button>
-            </Suspense>
+      {/* Closing-Block — full bleed, Bild links bis zum Rand, Text rechts */}
+      <section className="relative bg-[var(--warm-cream)] overflow-hidden">
+        {/* Bild — Mobile: oben full width; Desktop: linke Hälfte bis zum Bildschirmrand */}
+        <div className="absolute inset-x-0 top-0 h-72 sm:inset-y-0 sm:right-1/2 sm:h-auto sm:left-0">
+          <Image
+            src="/hero/home4u-hero-sunset.png"
+            alt="Paar auf Terrasse beim Sonnenuntergang"
+            fill
+            sizes="(min-width: 640px) 50vw, 100vw"
+            className="object-cover"
+          />
+          {/* Cream-Übergang am Mobile-Rand bzw. rechten Bildrand auf Desktop */}
+          <div
+            className="absolute inset-0 sm:hidden"
+            style={{
+              background:
+                "linear-gradient(180deg, transparent 60%, rgb(247 245 241 / 70%) 90%, var(--warm-cream) 100%)",
+            }}
+          />
+          <div
+            className="absolute inset-0 hidden sm:block"
+            style={{
+              background:
+                "linear-gradient(270deg, var(--warm-cream) 0%, rgb(247 245 241 / 70%) 12%, rgb(247 245 241 / 0%) 35%)",
+            }}
+          />
+        </div>
+
+        <div className="relative mx-auto max-w-6xl px-6 pt-72 pb-20 sm:pt-24 sm:pb-28 min-h-[480px]">
+          <div className="sm:ml-[55%] sm:max-w-md">
+            <h3 className="font-display text-3xl sm:text-4xl text-[var(--brand-navy)] leading-tight">
+              Bereit, dein Zuhause<br className="hidden sm:block" />
+              in Zypern zu finden?
+            </h3>
+            <p className="mt-4 text-[var(--warm-bark)] leading-relaxed">
+              Lass uns gemeinsam den richtigen Ort für dich finden. Persönlich.
+              Einfach. Home4U.
+            </p>
+            <div className="mt-8">
+              <Suspense fallback={<Button size="lg" disabled>Jetzt starten</Button>}>
+                <Button asChild size="lg">
+                  <ChatLink>
+                    Jetzt starten
+                    <ArrowRight />
+                  </ChatLink>
+                </Button>
+              </Suspense>
+            </div>
           </div>
         </div>
       </section>
