@@ -1,50 +1,68 @@
 import Image from "next/image";
+import Link from "next/link";
 import { Suspense } from "react";
-import { ArrowRight, Target, Users, Home as HomeIcon } from "lucide-react";
+import { ArrowRight, Heart, Target, Users, Home as HomeIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatLink, PathCards } from "@/components/landing/PathCards";
 import { RegionPicker } from "@/components/landing/RegionPicker";
+import { FeaturedListings } from "@/components/landing/FeaturedListings";
+import { StatsStrip } from "@/components/landing/StatsStrip";
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { BrandLockup } from "@/components/brand/Logo";
 
 export default function LandingPage() {
   return (
     <main className="flex-1">
-      {/* Header — minimal, viel Luft */}
+      {/* Header — minimal, viel Luft, mobile = nur Logo+Auth */}
       <header className="sticky top-0 z-30 backdrop-blur bg-[var(--warm-cream)]/85 border-b border-[var(--border)]">
-        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
+        <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between gap-4">
           <BrandLockup iconSize={36} />
-          <AuthMenu />
+          <nav className="hidden lg:flex items-center gap-7 text-sm text-[var(--brand-navy)]">
+            <a href="#region" className="hover:text-[var(--brand-gold)] transition-colors">Entdecken</a>
+            <Link href="/chat?flow=owner" className="hover:text-[var(--brand-gold)] transition-colors">Vermieten</Link>
+            <Link href="/chat?flow=owner&intent=sale" className="hover:text-[var(--brand-gold)] transition-colors">Verkaufen</Link>
+            <Link href="/chat?flow=agent" className="hover:text-[var(--brand-gold)] transition-colors">Für Makler</Link>
+            <a href="#warum" className="hover:text-[var(--brand-gold)] transition-colors">Über uns</a>
+          </nav>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/matches"
+              aria-label="Meine Favoriten"
+              className="hidden sm:inline-flex size-9 items-center justify-center rounded-full text-[var(--brand-navy)] hover:bg-[var(--brand-gold-50)] hover:text-[var(--brand-gold)] transition-colors"
+            >
+              <Heart className="size-5" />
+            </Link>
+            <AuthMenu />
+          </div>
         </div>
       </header>
 
-      {/* Hero — Bild rechts (Mediterrane Terrasse bei Sonnenuntergang),
-          Headline links auf Cream mit weichem Übergang */}
+      {/* Hero — full-bleed Bild über die ganze Seite, Text links mit
+          weichem Cream-Verlauf für Lesbarkeit */}
       <section className="relative bg-[var(--warm-cream)] overflow-hidden">
-        {/* Bild — auf Mobile als ruhiger Background hinter dem Text mit
-            starkem Cream-Gradient; auf Desktop rechts ~58% breit */}
-        <div className="absolute inset-0 sm:left-1/2">
+        {/* Bild full bleed */}
+        <div className="absolute inset-0">
           <Image
             src="/hero/home4u-hero.png"
             alt="Moderne Villa-Terrasse mit Meerblick"
             fill
             priority
-            sizes="(min-width: 640px) 50vw, 100vw"
-            className="object-cover"
+            sizes="100vw"
+            className="object-cover object-center sm:object-right"
           />
-          {/* Cream-Verlauf: Mobile von oben, Desktop von links → schmale Übergangskante */}
+          {/* Cream-Verlauf für lesbaren Text */}
           <div
             className="absolute inset-0 sm:hidden"
             style={{
               background:
-                "linear-gradient(180deg, var(--warm-cream) 0%, rgb(247 245 241 / 88%) 30%, rgb(247 245 241 / 60%) 100%)",
+                "linear-gradient(180deg, rgb(247 245 241 / 92%) 0%, rgb(247 245 241 / 75%) 35%, rgb(247 245 241 / 30%) 70%, transparent 100%)",
             }}
           />
           <div
             className="absolute inset-0 hidden sm:block"
             style={{
               background:
-                "linear-gradient(90deg, var(--warm-cream) 0%, rgb(247 245 241 / 80%) 12%, rgb(247 245 241 / 0%) 35%)",
+                "linear-gradient(90deg, rgb(247 245 241 / 92%) 0%, rgb(247 245 241 / 78%) 28%, rgb(247 245 241 / 30%) 55%, transparent 75%)",
             }}
           />
         </div>
@@ -97,7 +115,7 @@ export default function LandingPage() {
       </section>
 
       {/* "Warum Home4U?" — drei stille Spalten, kein Gold-Wash */}
-      <section className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
+      <section id="warum" className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <h2 className="font-display text-3xl sm:text-4xl text-center text-[var(--brand-navy)] mb-12 sm:mb-16">
           Warum Home4U?
         </h2>
@@ -119,6 +137,11 @@ export default function LandingPage() {
           />
         </div>
       </section>
+
+      {/* Ausgewählte Immobilien — echte Daten */}
+      <Suspense fallback={null}>
+        <FeaturedListings />
+      </Suspense>
 
       {/* Drei Wege */}
       <section id="pfade" className="mx-auto max-w-6xl px-6 pb-16 sm:pb-24">
@@ -188,22 +211,21 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer — kompakt, nüchtern */}
-      <footer className="bg-[var(--brand-navy)] text-white/80">
-        <div className="mx-auto max-w-6xl px-6 py-10 flex flex-col sm:flex-row gap-6 sm:items-center justify-between text-sm">
+      {/* Stats-Strip + Footer-Mini auf Navy */}
+      <StatsStrip />
+      <footer className="bg-[var(--brand-navy)] text-white/60 border-t border-white/10">
+        <div className="mx-auto max-w-6xl px-6 py-6 flex flex-col sm:flex-row gap-3 sm:items-center justify-between text-xs">
           <div className="flex items-center gap-3">
             <span className="font-semibold tracking-tight text-white">
               Home<span className="text-[var(--brand-gold)]">4</span>U
             </span>
-            <span className="text-white/50">·</span>
-            <span className="text-white/60">
-              © {new Date().getFullYear()} Dein Zuhause auf Zypern
-            </span>
+            <span className="text-white/30">·</span>
+            <span>© {new Date().getFullYear()} Dein Zuhause auf Zypern</span>
           </div>
-          <div className="flex items-center gap-6 text-white/60 text-xs">
+          <div className="flex items-center gap-5 text-white/50">
             <a href="#region" className="hover:text-white">Entdecken</a>
             <a href="#pfade" className="hover:text-white">Drei Wege</a>
-            <span>MVP</span>
+            <a href="#warum" className="hover:text-white">Über uns</a>
           </div>
         </div>
       </footer>
