@@ -1,5 +1,6 @@
+import Image from "next/image";
 import { Suspense } from "react";
-import { ArrowRight, MessageCircle, Target, Users, Home as HomeIcon } from "lucide-react";
+import { ArrowRight, Target, Users, Home as HomeIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatLink, PathCards } from "@/components/landing/PathCards";
 import { RegionPicker } from "@/components/landing/RegionPicker";
@@ -17,16 +18,45 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Hero — Serif-Schlagzeile, ein Wort in Gold, ruhig */}
-      <section className="bg-warm-hero">
-        <div className="mx-auto max-w-6xl px-6 pt-16 pb-20 sm:pt-24 sm:pb-28">
-          <div className="max-w-3xl">
+      {/* Hero — Bild rechts (Mediterrane Terrasse bei Sonnenuntergang),
+          Headline links auf Cream mit weichem Übergang */}
+      <section className="relative bg-[var(--warm-cream)] overflow-hidden">
+        {/* Bild — auf Mobile als ruhiger Background hinter dem Text mit
+            starkem Cream-Gradient; auf Desktop rechts ~58% breit */}
+        <div className="absolute inset-0 sm:left-1/2">
+          <Image
+            src="/hero/villa-terrace-sunset.jpg"
+            alt="Mediterrane Villa-Terrasse mit Meerblick bei Sonnenuntergang"
+            fill
+            priority
+            sizes="(min-width: 640px) 50vw, 100vw"
+            className="object-cover"
+          />
+          {/* Cream-Verlauf: Mobile von oben, Desktop von links → schmale Übergangskante */}
+          <div
+            className="absolute inset-0 sm:hidden"
+            style={{
+              background:
+                "linear-gradient(180deg, var(--warm-cream) 0%, rgb(247 245 241 / 88%) 30%, rgb(247 245 241 / 60%) 100%)",
+            }}
+          />
+          <div
+            className="absolute inset-0 hidden sm:block"
+            style={{
+              background:
+                "linear-gradient(90deg, var(--warm-cream) 0%, rgb(247 245 241 / 80%) 12%, rgb(247 245 241 / 0%) 35%)",
+            }}
+          />
+        </div>
+
+        <div className="relative mx-auto max-w-6xl px-6 pt-16 pb-24 sm:pt-28 sm:pb-32 min-h-[560px] sm:min-h-[640px]">
+          <div className="max-w-xl sm:max-w-lg">
             <h1 className="font-display text-5xl sm:text-7xl leading-[1.05] text-[var(--brand-navy)]">
               Hier finde ich
               <br />
               mein <span className="text-[var(--brand-gold)]">Zuhause.</span>
             </h1>
-            <p className="mt-6 max-w-xl text-base sm:text-lg text-[var(--warm-bark)] leading-relaxed">
+            <p className="mt-6 text-base sm:text-lg text-[var(--warm-bark)] leading-relaxed max-w-md">
               Home4U verbindet dich mit passenden Immobilien — persönlich,
               einfach und modern.
             </p>
@@ -45,7 +75,7 @@ export default function LandingPage() {
                   </ChatLink>
                 </Button>
               </Suspense>
-              <Button asChild size="lg" variant="outline">
+              <Button asChild size="lg" variant="outline" className="bg-white/85 backdrop-blur">
                 <a href="#region">Immobilien entdecken</a>
               </Button>
             </div>
