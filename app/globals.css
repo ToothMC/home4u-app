@@ -127,6 +127,14 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+html, body {
+  /* Verhindert horizontalen Scroll/Wackeln auf Mobile, wenn full-bleed-Bilder
+     (sizes="100vw") oder absolut positionierte Layer (inset-x-0) minimal über
+     den Viewport ragen. Section-lokales overflow-hidden reicht nicht. */
+  overflow-x: clip;
+  max-width: 100%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
