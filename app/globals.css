@@ -1,39 +1,86 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   Home4U Brand Tokens
+   - Logo-Farben: Navy #1a2e44 + warmes Gold #a8824c
+   - Wohnlich-warme Palette (Creme/Sand statt steriles Weiß)
+   ========================================================================== */
+
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --radius: 0.625rem;
+  /* Brand */
+  --brand-navy: #1a2e44;
+  --brand-navy-700: #243f5b;
+  --brand-navy-300: #5b7090;
+  --brand-navy-50: #eef1f5;
+
+  --brand-gold: #a8824c;
+  --brand-gold-700: #8a6a3a;
+  --brand-gold-300: #c9a779;
+  --brand-gold-100: #f0e3cc;
+  --brand-gold-50: #faf3e3;
+
+  /* Warm-Wohnlich Neutrals (statt grau-steril) */
+  --warm-cream: #fbf6ed;          /* Hauptbackground */
+  --warm-paper: #ffffff;           /* Karten */
+  --warm-sand: #f1e8d5;            /* Akzent / hover */
+  --warm-stone: #e7dcc4;           /* muted / dividers */
+  --warm-bark: #6b5d4a;            /* Sekundärtext (warmes Braungrau) */
+  --warm-ink: #1a2e44;             /* Haupttext = navy */
+
+  /* shadcn-Token-Mapping */
+  --background: var(--warm-cream);
+  --foreground: var(--warm-ink);
+  --card: var(--warm-paper);
+  --card-foreground: var(--warm-ink);
+  --popover: var(--warm-paper);
+  --popover-foreground: var(--warm-ink);
+  --muted: #f4ecdc;
+  --muted-foreground: var(--warm-bark);
+  --border: #e4d8be;
+  --input: #e4d8be;
+  --ring: var(--brand-gold);
+
+  --primary: var(--brand-navy);
+  --primary-foreground: var(--warm-cream);
+  --secondary: var(--brand-gold);
+  --secondary-foreground: var(--warm-cream);
+  --accent: var(--brand-gold-50);
+  --accent-foreground: var(--brand-navy);
+
+  --destructive: #b3261e;
+  --destructive-foreground: #ffffff;
+
+  --radius: 0.75rem;
+
+  /* Schatten — weich, warm getönt */
+  --shadow-warm-sm: 0 1px 2px 0 rgb(120 90 50 / 6%);
+  --shadow-warm: 0 4px 14px -4px rgb(120 90 50 / 10%), 0 2px 4px -2px rgb(120 90 50 / 6%);
+  --shadow-warm-lg: 0 14px 40px -10px rgb(120 90 50 / 15%), 0 8px 20px -10px rgb(120 90 50 / 10%);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
+    --background: #0f1d2c;
+    --foreground: #f5ecd9;
+    --card: #1a2e44;
+    --card-foreground: #f5ecd9;
+    --popover: #1a2e44;
+    --popover-foreground: #f5ecd9;
+    --muted: #243f5b;
+    --muted-foreground: #c8b890;
+    --border: rgb(168 130 76 / 25%);
+    --input: rgb(168 130 76 / 25%);
+    --ring: var(--brand-gold);
+
+    --primary: var(--brand-gold);
+    --primary-foreground: #0f1d2c;
+    --secondary: var(--warm-cream);
+    --secondary-foreground: var(--brand-navy);
+    --accent: rgb(168 130 76 / 18%);
+    --accent-foreground: #f5ecd9;
+
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
   }
 }
 
@@ -42,6 +89,8 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
@@ -49,9 +98,29 @@
   --color-ring: var(--ring);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  /* Brand-Farben als Tailwind-Klassen verfügbar machen
+     → bg-brand-navy, text-brand-gold, border-brand-gold-300 etc. */
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-navy-700: var(--brand-navy-700);
+  --color-brand-navy-300: var(--brand-navy-300);
+  --color-brand-navy-50: var(--brand-navy-50);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-gold-700: var(--brand-gold-700);
+  --color-brand-gold-300: var(--brand-gold-300);
+  --color-brand-gold-100: var(--brand-gold-100);
+  --color-brand-gold-50: var(--brand-gold-50);
+  --color-warm-cream: var(--warm-cream);
+  --color-warm-sand: var(--warm-sand);
+  --color-warm-stone: var(--warm-stone);
+  --color-warm-bark: var(--warm-bark);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -63,10 +132,27 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Subtile, warme Textur — fast unsichtbar, gibt Tiefe */
+  background-image:
+    radial-gradient(at 12% 4%, rgb(168 130 76 / 5%) 0, transparent 45%),
+    radial-gradient(at 90% 90%, rgb(26 46 68 / 4%) 0, transparent 50%);
+  background-attachment: fixed;
 }
 
 * {
   border-color: var(--border);
+}
+
+/* Focus Ring in Brand-Gold */
+*:focus-visible {
+  outline: 2px solid var(--brand-gold);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: var(--brand-gold);
+  color: #fff;
 }
 
 /* Horizontaler Scroll ohne Scrollbar (Match-Card Thumbnail-Strip etc.) */
@@ -75,4 +161,22 @@ body {
 }
 .scrollbar-hidden::-webkit-scrollbar {
   display: none;
+}
+
+/* ==========================================================================
+   Brand-Helper-Klassen
+   ========================================================================== */
+
+/* Soft warmes Card-Pattern für Hero-Bereiche */
+.bg-warm-gradient {
+  background:
+    radial-gradient(at 30% 0%, var(--brand-gold-50) 0, transparent 55%),
+    radial-gradient(at 100% 100%, var(--brand-navy-50) 0, transparent 55%),
+    var(--warm-cream);
+}
+
+/* Hero mit Hauch von Gold */
+.bg-warm-hero {
+  background:
+    linear-gradient(135deg, var(--warm-cream) 0%, var(--brand-gold-50) 100%);
 }

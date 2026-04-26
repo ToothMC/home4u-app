@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { AuthMenu } from "@/components/auth/AuthMenu";
+import { BrandLockup } from "@/components/brand/Logo";
 import { ListingRow } from "@/components/dashboard/ListingRow";
 import { SearchRow } from "@/components/dashboard/SearchRow";
 import { MatchSections } from "@/components/dashboard/MatchSections";
@@ -113,15 +114,15 @@ export default async function DashboardPage({
 
   return (
     <main className="flex-1">
-      <div className="mx-auto max-w-5xl px-4 pt-4 flex items-center justify-between">
-        <Link href="/" className="text-sm text-[var(--muted-foreground)]">
-          ← Home4U
-        </Link>
-        <AuthMenu />
-      </div>
+      <header className="sticky top-0 z-30 backdrop-blur bg-[var(--warm-cream)]/85 border-b border-[var(--border)]">
+        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
+          <BrandLockup />
+          <AuthMenu />
+        </div>
+      </header>
 
-      <section className="mx-auto max-w-5xl px-4 pt-6 pb-10">
-        <h1 className="text-2xl sm:text-3xl font-semibold mb-2">
+      <section className="mx-auto max-w-5xl px-4 pt-8 pb-10">
+        <h1 className="text-2xl sm:text-3xl font-semibold mb-2 text-[var(--brand-navy)]">
           Dein Dashboard
         </h1>
         <p className="text-sm text-[var(--muted-foreground)] mb-6 flex items-center gap-3 flex-wrap">

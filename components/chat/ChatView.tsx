@@ -235,16 +235,19 @@ export function ChatView({
 
   return (
     <div className="flex flex-col flex-1 h-[100dvh] max-h-[100dvh]">
-      <header className="flex items-center gap-2 border-b px-4 py-3">
-        <Button asChild size="icon" variant="ghost">
+      <header className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--warm-cream)]/85 backdrop-blur px-4 py-3">
+        <Button asChild size="icon" variant="ghost" aria-label="Zurück">
           <Link href="/">
             <ArrowLeft />
           </Link>
         </Button>
-        <div className="flex-1">
-          <p className="font-semibold leading-tight">Sophie</p>
-          <p className="text-xs text-[var(--muted-foreground)] leading-tight">
-            Home4U · KI-Assistentin
+        <div className="size-9 rounded-full bg-[var(--brand-navy)] flex items-center justify-center text-[var(--brand-gold)] text-sm font-bold shadow-[0_4px_12px_-4px_rgb(26_46_68/40%)]">
+          S
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold leading-tight text-[var(--brand-navy)]">Sophie</p>
+          <p className="text-xs text-[var(--warm-bark)] leading-tight">
+            Home<span className="text-[var(--brand-gold)] font-semibold">4</span>U · KI-Assistentin
           </p>
         </div>
         {region && (
