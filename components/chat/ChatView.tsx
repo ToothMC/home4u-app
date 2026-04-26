@@ -34,13 +34,13 @@ type ChatMessage = {
 
 const SEED_MESSAGE: Record<string, string> = {
   seeker:
-    "Hi, ich bin Sophie. Ich helfe dir, eine Wohnung zu finden, die wirklich passt. Erzähl mir kurz: In welcher Stadt oder Region suchst du — und zur Miete oder zum Kauf?",
+    "Hi, ich bin Sophie — Dein KI-Agent von Home4U. In welcher Stadt oder Region darf ich dich beim Suchen unterstützen?",
   owner:
-    "Hi, lass uns dein Inserat anlegen. Erzähl mir bitte:\n\n1) Wo liegt die Immobilie? (Stadt + Viertel)\n2) Miete oder Kauf, wieviele Zimmer?\n3) Preis (bei Miete pro Monat, bei Kauf gesamt)\n\nBilder/Videos kannst du unten anhängen — die machen den Unterschied. Falls du noch nicht angemeldet bist, klick oben rechts auf 'Anmelden' bevor wir speichern.",
+    "Hi, ich bin Sophie — Dein KI-Agent von Home4U. Lass uns dein Inserat anlegen. In welcher Stadt und welchem Viertel liegt die Immobilie?",
   agent:
-    "Hi, ich bin Sophie. Schön, dass du dich für den Makler-Beirat interessierst. In welcher Stadt oder Region arbeitest du aktuell, und wie viele Inserate hast du typischerweise parallel?",
+    "Hi, ich bin Sophie — Dein KI-Agent von Home4U. Schön, dass du dich für den Makler-Beirat interessierst. In welcher Stadt oder Region arbeitest du aktuell?",
   default:
-    "Hi, ich bin Sophie — die KI-Assistentin von Home4U. Ich helfe Suchenden, Eigentümern und Maklern. In welcher Stadt oder Region soll ich dich unterstützen?",
+    "Hi, ich bin Sophie — Dein KI-Agent von Home4U. In welcher Stadt oder Region darf ich dich unterstützen?",
 };
 
 export function ChatView({
@@ -55,7 +55,7 @@ export function ChatView({
   // Für owner/agent bleibt der Flow-Seed erhalten, Region wird nur im Header angezeigt.
   const useRegionSeed = region && (flow === "seeker" || !flow || flow === "default");
   const seed = useRegionSeed
-    ? `Hi, ich bin Sophie. Ich arbeite gerade für dich in ${region!.label}. Was kann ich tun?`
+    ? `Hi, ich bin Sophie — Dein KI-Agent von Home4U. Ich arbeite gerade für dich in ${region!.label}. Was kann ich tun?`
     : baseSeed;
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: seed },
@@ -241,9 +241,14 @@ export function ChatView({
             <ArrowLeft />
           </Link>
         </Button>
-        <div className="size-9 rounded-full bg-[var(--brand-navy)] flex items-center justify-center text-[var(--brand-gold)] text-sm font-bold shadow-[0_4px_12px_-4px_rgb(26_46_68/40%)]">
-          S
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/sophie/apple-touch-icon.png"
+          alt="Sophie"
+          width={36}
+          height={36}
+          className="size-9 rounded-full object-cover ring-2 ring-[var(--brand-gold)]/40 shadow-[0_4px_12px_-4px_rgb(26_46_68/30%)]"
+        />
         <div className="flex-1 min-w-0">
           <p className="font-semibold leading-tight text-[var(--brand-navy)]">Sophie</p>
           <p className="text-xs text-[var(--warm-bark)] leading-tight">
