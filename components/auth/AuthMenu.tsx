@@ -65,7 +65,8 @@ export function AuthMenu({ compact = false }: { compact?: boolean }) {
   }
 
   if (state.status === "user") {
-    const label = state.email ?? "Account";
+    // Nur Local-Part anzeigen (vor dem @): michael@mmhammer.org → michael
+    const label = state.email ? state.email.split("@")[0] : "Account";
     return (
       <div className="flex items-center gap-2">
         <Button asChild size="sm" variant="outline">
@@ -79,10 +80,10 @@ export function AuthMenu({ compact = false }: { compact?: boolean }) {
             "flex items-center gap-1 text-xs text-[var(--muted-foreground)] max-w-[160px] truncate" +
             (compact ? "" : " sm:max-w-none")
           }
-          title={label}
+          title={state.email ?? "Account"}
         >
           <UserIcon className="size-3" />
-          {compact ? label.split("@")[0] : label}
+          {label}
         </span>
         <Button
           size="sm"

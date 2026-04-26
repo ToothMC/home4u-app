@@ -129,7 +129,10 @@ export default async function DashboardPage({
           <span>
             {user.email ? (
               <>
-                Angemeldet als <strong>{user.email}</strong>
+                Angemeldet als{" "}
+                <strong title={user.email}>
+                  {user.email.split("@")[0]}
+                </strong>
               </>
             ) : (
               <>Angemeldet</>
