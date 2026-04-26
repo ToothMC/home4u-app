@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  Heart,
   X,
   MessageCircle,
   Loader2,
@@ -14,7 +13,6 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { MatchCard, type MatchCardData, type SwipeDirection } from "./MatchCard";
 
 type Status = "browsing" | "submitting" | "done";
@@ -218,41 +216,9 @@ export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
         </div>
       )}
 
-      <div className="shrink-0 grid grid-cols-2 gap-3">
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={skip}
-          disabled={status !== "browsing"}
-          className="h-14 rounded-full border-2"
-          aria-label="Kein Interesse"
-        >
-          <X className="size-5" />
-          Kein Interesse
-        </Button>
-        <Button
-          size="lg"
-          onClick={like}
-          disabled={status !== "browsing"}
-          className={cn(
-            "h-14 rounded-full bg-rose-500 hover:bg-rose-600 text-white",
-            "disabled:opacity-70"
-          )}
-          aria-label="Interesse"
-        >
-          {status === "submitting" ? (
-            <Loader2 className="size-5 animate-spin" />
-          ) : (
-            <Heart className="size-5 fill-white" />
-          )}
-          Interesse
-        </Button>
-      </div>
-
-      <p className="shrink-0 text-[10px] text-center text-[var(--muted-foreground)]">
-        Mobile: ← → wischen · ↕ alle Bilder · Tap auf Symbol oben rechts =
-        Inserat öffnen
-      </p>
+      {/* Bottom-Buttons + Hint-Text entfernt: die Tap-Targets links/rechts auf
+          der Card (rote/grüne Pfeile) übernehmen die Funktion, der Card-Stack
+          mit Peek-of-Next/Prev macht das Vertikal-Wischen selbsterklärend. */}
 
       {toast && (
         <Toast

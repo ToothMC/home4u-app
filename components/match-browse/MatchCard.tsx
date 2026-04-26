@@ -7,12 +7,14 @@ import {
   X as XIcon,
   MapPin,
   ExternalLink,
-  ChevronUp,
-  ChevronDown,
-  ChevronsUpDown,
   ArrowLeft,
   ArrowRight,
 } from "lucide-react";
+
+// Slide-Höhe als Anteil der Image-Area-Höhe. Rest = (1 - SLIDE_RATIO) / 2 als
+// Spacer oben und unten, damit beim aktiven Bild ein Stück voriges/nächstes
+// Bild peekt → Card-Stack-Metapher, "wischbar" wird selbsterklärend.
+const SLIDE_RATIO = 0.85;
 import { cn } from "@/lib/utils";
 
 export type MatchCardData = {
@@ -72,12 +74,14 @@ export function MatchCard({
   // wir lösen kein zweites Scroll aus.
   React.useEffect(() => {
     const el = swipeAreaRef.current;
-    if (!el) return;
-    const target = imgIdx * el.clientHeight;
+    if (!el || total === 0) return;
+    const slideH =
+      total > 1 ? el.clientHeight * SLIDE_RATIO : el.clientHeight;
+    const target = imgIdx * slideH;
     if (Math.abs(el.scrollTop - target) > 2) {
       el.scrollTo({ top: target, behavior: "smooth" });
     }
-  }, [imgIdx]);
+  }, [imgIdx, total]);
 
   const next = React.useCallback(() => {
     if (total > 1) setImgIdx((i) => (i + 1) % total);
@@ -224,14 +228,19 @@ export function MatchCard({
       {/* Image-Area-Container: relativ, enthält Scroll-Stack + Overlay-Layer */}
       <div className="relative flex-1 bg-[var(--muted)] overflow-hidden">
 
-        {/* Scroll-Stack: vertikal scrollbar mit Snap, Browser handhabt Momentum */}
+        {/* Scroll-Stack: vertikal scrollbar mit Snap, Browser handhabt Momentum.
+            Bei mehreren Bildern: Slides sind 85 % der Viewport-Höhe + Spacer
+            oben/unten → ein Stück nächstes/voriges Bild peekt am Rand. */}
         <div
           ref={swipeAreaRef}
           className="absolute inset-0 overflow-y-auto snap-y snap-mandatory scrollbar-hidden"
           style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}
           onScroll={(e) => {
             const el = e.currentTarget;
-            const idx = Math.round(el.scrollTop / el.clientHeight);
+            if (total === 0) return;
+            const slideH =
+              total > 1 ? el.clientHeight * SLIDE_RATIO : el.clientHeight;
+            const idx = Math.round(el.scrollTop / slideH);
             if (idx !== imgIdx && idx >= 0 && idx < total) {
               setImgIdx(idx);
             }
@@ -242,34 +251,49 @@ export function MatchCard({
               Kein Bild
             </div>
           ) : (
-            images.map((src, i) => (
-              <div
-                key={`${data.id}-img-${i}`}
-                className="relative h-full w-full snap-start shrink-0 bg-[var(--muted)]"
-              >
-                {!brokenIdx.has(i) ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={src}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover"
-                    draggable={false}
-                    loading={i === 0 ? "eager" : "lazy"}
-                    onError={() =>
-                      setBrokenIdx((prev) => {
-                        const next = new Set(prev);
-                        next.add(i);
-                        return next;
-                      })
-                    }
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted-foreground)]">
-                    Bild nicht ladbar
-                  </div>
-                )}
-              </div>
-            ))
+            <>
+              {/* Top-Spacer ermöglicht snap-center für das erste Bild und
+                  schafft den Peek-Bereich für das vorige Bild. */}
+              {total > 1 && (
+                <div aria-hidden className="h-[7.5%] shrink-0" />
+              )}
+              {images.map((src, i) => (
+                <div
+                  key={`${data.id}-img-${i}`}
+                  className={cn(
+                    "relative w-full shrink-0 bg-[var(--muted)]",
+                    total > 1
+                      ? "h-[85%] snap-center rounded-xl overflow-hidden"
+                      : "h-full snap-start"
+                  )}
+                >
+                  {!brokenIdx.has(i) ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={src}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover"
+                      draggable={false}
+                      loading={i === 0 ? "eager" : "lazy"}
+                      onError={() =>
+                        setBrokenIdx((prev) => {
+                          const next = new Set(prev);
+                          next.add(i);
+                          return next;
+                        })
+                      }
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted-foreground)]">
+                      Bild nicht ladbar
+                    </div>
+                  )}
+                </div>
+              ))}
+              {total > 1 && (
+                <div aria-hidden className="h-[7.5%] shrink-0" />
+              )}
+            </>
           )}
         </div>
 
@@ -290,48 +314,43 @@ export function MatchCard({
             </div>
           )}
 
-          {/* Eye-Icon top-right → /listings/[id] */}
-          <Link
-            href={`/listings/${data.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Zum Inserat"
-            className="absolute top-3 right-3 size-8 rounded-full bg-white/95 hover:bg-white backdrop-blur flex items-center justify-center text-[var(--foreground)] shadow pointer-events-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ExternalLink className="size-4" />
-          </Link>
-
-          {/* Always-visible direction hints — Pfeile zeigen die Wisch-Richtung
-              an statt abstrakter X/Heart-Symbole */}
-          <div
-            className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 transition-all"
+          {/* Tap-Targets für Like/Skip — funktional gleichwertig zum Wischen.
+              Größe 12 (48 px) entspricht Apple-HIG-Tap-Mindestgröße.
+              Visuell semi-transparent, scaliert mit aktivem Drag. */}
+          <button
+            type="button"
+            onClick={() => onSwipe?.("skip")}
+            aria-label="Kein Interesse"
+            className="absolute left-2 top-1/2 flex flex-col items-center gap-1 transition-all pointer-events-auto"
             style={{
               opacity: 0.45 + opacityHorizontal * 0.55,
               transform: `translateY(-50%) scale(${1 + (showSkipOverlay ? opacityHorizontal * 0.3 : 0)})`,
             }}
           >
-            <span className="size-9 rounded-full bg-rose-600/85 backdrop-blur flex items-center justify-center text-white shadow">
-              <ArrowLeft className="size-5" />
+            <span className="size-12 rounded-full bg-rose-600/85 backdrop-blur flex items-center justify-center text-white shadow">
+              <ArrowLeft className="size-6" />
             </span>
-            <span className="text-[9px] font-medium text-white bg-rose-600/85 backdrop-blur px-1.5 py-0.5 rounded">
+            <span className="text-[10px] font-medium text-white bg-rose-600/85 backdrop-blur px-1.5 py-0.5 rounded">
               Kein Interesse
             </span>
-          </div>
-          <div
-            className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 transition-all"
+          </button>
+          <button
+            type="button"
+            onClick={() => onSwipe?.("like")}
+            aria-label="Interesse"
+            className="absolute right-2 top-1/2 flex flex-col items-center gap-1 transition-all pointer-events-auto"
             style={{
               opacity: 0.45 + opacityHorizontal * 0.55,
               transform: `translateY(-50%) scale(${1 + (showLikeOverlay ? opacityHorizontal * 0.3 : 0)})`,
             }}
           >
-            <span className="size-9 rounded-full bg-emerald-600/85 backdrop-blur flex items-center justify-center text-white shadow">
-              <ArrowRight className="size-5" />
+            <span className="size-12 rounded-full bg-emerald-600/85 backdrop-blur flex items-center justify-center text-white shadow">
+              <ArrowRight className="size-6" />
             </span>
-            <span className="text-[9px] font-medium text-white bg-emerald-600/85 backdrop-blur px-1.5 py-0.5 rounded">
+            <span className="text-[10px] font-medium text-white bg-emerald-600/85 backdrop-blur px-1.5 py-0.5 rounded">
               Interesse
             </span>
-          </div>
+          </button>
 
           {/* Like-Overlay (Stempel beim Threshold-Drag) — grün */}
           {showLikeOverlay && (
