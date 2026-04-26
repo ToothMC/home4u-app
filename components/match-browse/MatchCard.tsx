@@ -206,6 +206,9 @@ export function MatchCard({
       ref={cardRef}
       className={cn(
         "rounded-2xl overflow-hidden bg-[var(--card)] border shadow-sm relative select-none",
+        // Card füllt den von außen vorgegebenen Raum (viewport-locked Layout);
+        // keine fixe Höhe — Image-Area absorbiert per flex-1 was übrig bleibt.
+        "h-full flex flex-col",
         // Smooth transition wenn snap-back oder fly-out, nicht während aktivem Drag
         dragVisual.axis === "" || isAnimating
           ? "transition-transform duration-200 ease-out"
@@ -215,8 +218,9 @@ export function MatchCard({
         transform: `translate(${dragVisual.x}px, ${dragVisual.y * 0.3}px) rotate(${rotation}deg)`,
       }}
     >
-      {/* Image-Area + vertikaler Thumb-Strip nebeneinander */}
-      <div className="flex" style={{ aspectRatio: "4/5" }}>
+      {/* Image-Area + vertikaler Thumb-Strip nebeneinander.
+          flex-1 + min-h-0: nimmt den verbleibenden Platz, lässt Stack scrollen. */}
+      <div className="flex flex-1 min-h-0">
       {/* Image-Area-Container: relativ, enthält Scroll-Stack + Overlay-Layer */}
       <div className="relative flex-1 bg-[var(--muted)] overflow-hidden">
 
@@ -418,14 +422,14 @@ export function MatchCard({
         href={`/listings/${data.id}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center justify-center gap-2 border-t bg-slate-900 hover:bg-slate-800 text-white text-base font-semibold py-3.5 transition-colors"
+        className="shrink-0 flex items-center justify-center gap-2 border-t bg-slate-900 hover:bg-slate-800 text-white text-base font-semibold py-3 transition-colors"
       >
         <ExternalLink className="size-5" />
         Zum Inserat
       </Link>
 
       {/* Facts row */}
-      <div className="px-4 py-3 grid grid-cols-3 gap-2 text-center text-sm">
+      <div className="shrink-0 px-4 py-2.5 grid grid-cols-3 gap-2 text-center text-sm">
         <div>
           <div className="font-semibold">{roomsLabel}</div>
           <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">

@@ -30,8 +30,11 @@ export default async function MatchesPage() {
   }
 
   return (
-    <main className="flex-1 flex flex-col min-h-screen">
-      <header className="mx-auto max-w-3xl w-full px-4 pt-4 flex items-center justify-between">
+    // Viewport-locked Layout — kein Page-Scroll, damit interner Image-Swipe
+    // und Page-Scroll nicht gegeneinander kämpfen. dvh statt vh: passt sich
+    // an iOS-Safari-Toolbar an, ohne dass die Card hin- und herspringt.
+    <main className="flex flex-col h-[100dvh] overflow-hidden">
+      <header className="shrink-0 mx-auto max-w-3xl w-full px-4 pt-3 pb-2 flex items-center justify-between">
         <Link
           href="/dashboard"
           className="text-sm text-[var(--muted-foreground)] hover:underline"
@@ -41,9 +44,9 @@ export default async function MatchesPage() {
         <AuthMenu />
       </header>
 
-      <section className="mx-auto max-w-md w-full px-4 pt-4 pb-8 flex-1">
-        <div className="mb-3">
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+      <section className="mx-auto max-w-md w-full px-4 pb-3 flex-1 flex flex-col min-h-0">
+        <div className="shrink-0 mb-2">
+          <h1 className="text-xl font-semibold flex items-center gap-2">
             <Search className="size-5" />
             Deine Treffer
           </h1>

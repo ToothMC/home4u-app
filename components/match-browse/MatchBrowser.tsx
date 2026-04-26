@@ -193,8 +193,10 @@ export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
   }
 
   return (
-    <div className="space-y-3 relative">
-      <div className="text-xs text-[var(--muted-foreground)] flex items-center justify-between">
+    // flex-col mit Card als flex-1 — Card+Buttons füllen exakt einen Viewport,
+    // kein Page-Scroll. min-h-0 ist nötig, damit flex-1 Kinder schrumpfen dürfen.
+    <div className="flex flex-col flex-1 min-h-0 gap-2 relative">
+      <div className="shrink-0 text-xs text-[var(--muted-foreground)] flex items-center justify-between">
         <span>
           {idx + 1} / {queue.length} Treffer
         </span>
@@ -205,18 +207,18 @@ export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
         )}
       </div>
 
-      <div className="relative">
+      <div className="relative flex-1 min-h-0">
         <MatchCard data={current} onSwipe={handleSwipe} isTop />
         {hintVisible && <SwipeHintOverlay onDismiss={dismissHint} />}
       </div>
 
       {error && (
-        <div className="text-xs text-red-700 bg-red-50 rounded-md px-3 py-2">
+        <div className="shrink-0 text-xs text-red-700 bg-red-50 rounded-md px-3 py-2">
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="shrink-0 grid grid-cols-2 gap-3">
         <Button
           variant="outline"
           size="lg"
@@ -247,7 +249,7 @@ export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
         </Button>
       </div>
 
-      <p className="text-[10px] text-center text-[var(--muted-foreground)]">
+      <p className="shrink-0 text-[10px] text-center text-[var(--muted-foreground)]">
         Mobile: ← → wischen · ↕ alle Bilder · Tap auf Symbol oben rechts =
         Inserat öffnen
       </p>
