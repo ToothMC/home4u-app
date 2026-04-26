@@ -83,6 +83,40 @@ export function MatchCard({
     }
   }, [imgIdx, total]);
 
+  // 3D-Stack-Effekt: Während des Scrollens skalieren wir jede Slide in
+  // Abhängigkeit ihrer Distanz vom Viewport-Mittelpunkt. Aktive Slide = 1.0,
+  // Peek-Slides am Rand = 0.86 + reduzierte Opazität → wirkt wie hinter der
+  // aktiven Karte liegende Karten in einem physischen Stapel.
+  React.useEffect(() => {
+    const el = swipeAreaRef.current;
+    if (!el || total <= 1) return;
+
+    let frame = 0;
+    const apply = () => {
+      const center = el.scrollTop + el.clientHeight / 2;
+      const half = el.clientHeight / 2;
+      el.querySelectorAll<HTMLElement>("[data-slide-idx]").forEach((slide) => {
+        const slideCenter = slide.offsetTop + slide.offsetHeight / 2;
+        const distance = Math.abs(center - slideCenter);
+        const t = Math.min(1, distance / half);
+        const scale = 1 - t * 0.14; // 0.86 .. 1.0
+        const opacity = 1 - t * 0.55; // 0.45 .. 1.0
+        slide.style.transform = `scale(${scale})`;
+        slide.style.opacity = String(opacity);
+      });
+    };
+    const onScroll = () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(apply);
+    };
+    apply();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [total, data.id]);
+
   const next = React.useCallback(() => {
     if (total > 1) setImgIdx((i) => (i + 1) % total);
   }, [total]);
@@ -260,12 +294,20 @@ export function MatchCard({
               {images.map((src, i) => (
                 <div
                   key={`${data.id}-img-${i}`}
+                  data-slide-idx={i}
                   className={cn(
                     "relative w-full shrink-0 bg-[var(--muted)]",
+                    // Stacked-Card-Look bei mehreren Bildern: starke Rundung,
+                    // weicher Schatten, Ring → wirkt wie physische Karten.
+                    // origin-center damit Scale-Down sauber aus der Mitte kommt.
                     total > 1
-                      ? "h-[85%] snap-center rounded-xl overflow-hidden"
+                      ? "h-[85%] snap-center rounded-2xl overflow-hidden shadow-2xl ring-1 ring-black/10 origin-center"
                       : "h-full snap-start"
                   )}
+                  style={
+                    // Initialer Wert; wird vom Scroll-Effekt sofort überschrieben.
+                    total > 1 ? { transform: "scale(1)", opacity: 1 } : undefined
+                  }
                 >
                   {!brokenIdx.has(i) ? (
                     /* eslint-disable-next-line @next/next/no-img-element */
