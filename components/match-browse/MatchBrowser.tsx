@@ -206,7 +206,14 @@ export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
       </div>
 
       <div className="relative flex-1 min-h-0">
-        <MatchCard data={current} onSwipe={handleSwipe} isTop />
+        {/* key={data.id} → bei jedem Listing-Wechsel frische Instanz, damit
+            kein dragVisual aus einem unvollendeten Wisch hängen bleibt */}
+        <MatchCard
+          key={current.id}
+          data={current}
+          onSwipe={handleSwipe}
+          isTop
+        />
         {hintVisible && <SwipeHintOverlay onDismiss={dismissHint} />}
       </div>
 

@@ -11,10 +11,12 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-// Höhe der "Card-Stack-Peek-Chips" oben/unten — Vorschau-Streifen der
-// vorigen/nächsten Karte, die in die aktive Karte hineinragen.
-const PEEK_CHIP_HEIGHT = 36; // px
-const PEEK_CHIP_INSET = 10; // Abstand vom Image-Area-Rand
+// Höhe des "Card-Stack-Peek-Chip" — Vorschau-Streifen der nächsten Karte,
+// der vom unteren Rand in die aktive Karte hineinragt. Wird ÜBER dem
+// Preis-Overlay positioniert, damit beide klar lesbar sind.
+const PEEK_CHIP_HEIGHT = 32; // px
+const PEEK_CHIP_INSET = 12; // Abstand links/rechts vom Rand
+const PEEK_CHIP_BOTTOM = 96; // Abstand vom Image-Area-Boden (über Preis-Overlay)
 import { cn } from "@/lib/utils";
 
 export type MatchCardData = {
@@ -377,7 +379,7 @@ export function MatchCard({
               aria-hidden
               className="absolute z-10 pointer-events-none rounded-t-2xl overflow-hidden ring-1 ring-white/20"
               style={{
-                bottom: 0,
+                bottom: PEEK_CHIP_BOTTOM,
                 left: PEEK_CHIP_INSET,
                 right: PEEK_CHIP_INSET,
                 height: PEEK_CHIP_HEIGHT,
