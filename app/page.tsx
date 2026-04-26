@@ -176,8 +176,7 @@ export default function LandingPage() {
         <div className="relative mx-auto max-w-6xl px-6 pt-72 pb-20 sm:pt-24 sm:pb-28 min-h-[480px]">
           <div className="sm:ml-[55%] sm:max-w-md">
             <h3 className="font-display text-3xl sm:text-4xl text-[var(--brand-navy)] leading-tight">
-              Bereit, dein Zuhause<br className="hidden sm:block" />
-              in Zypern zu finden?
+              Bereit, dein Zuhause zu finden?
             </h3>
             <p className="mt-4 text-[var(--warm-bark)] leading-relaxed">
               Lass uns gemeinsam den richtigen Ort für dich finden. Persönlich.
