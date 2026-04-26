@@ -10,8 +10,8 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
-  ChevronLeft,
-  ChevronRight,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -302,7 +302,8 @@ export function MatchCard({
             <ExternalLink className="size-4" />
           </Link>
 
-          {/* Always-visible direction hints */}
+          {/* Always-visible direction hints — Pfeile zeigen die Wisch-Richtung
+              an statt abstrakter X/Heart-Symbole */}
           <div
             className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 transition-all"
             style={{
@@ -311,7 +312,7 @@ export function MatchCard({
             }}
           >
             <span className="size-9 rounded-full bg-rose-600/85 backdrop-blur flex items-center justify-center text-white shadow">
-              <XIcon className="size-5" />
+              <ArrowLeft className="size-5" />
             </span>
             <span className="text-[9px] font-medium text-white bg-rose-600/85 backdrop-blur px-1.5 py-0.5 rounded">
               Kein Interesse
@@ -325,7 +326,7 @@ export function MatchCard({
             }}
           >
             <span className="size-9 rounded-full bg-emerald-600/85 backdrop-blur flex items-center justify-center text-white shadow">
-              <Heart className="size-5 fill-white" />
+              <ArrowRight className="size-5" />
             </span>
             <span className="text-[9px] font-medium text-white bg-emerald-600/85 backdrop-blur px-1.5 py-0.5 rounded">
               Interesse
