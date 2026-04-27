@@ -50,6 +50,14 @@ class RawListing:
     furnishing: str | None = None
     pets_allowed: bool | None = None
 
+    # Indexer-Spec v2.0 §2.2 / §4.2: Roh-Output für Re-Processing.
+    # Bazaraki ist eine strukturierte Quelle (Schema.org + Characteristics-
+    # Block), darum konstante Confidence — keine LLM-Extraktion wie bei FB.
+    extracted_data: dict | None = None  # {chars_raw, schema_address, ...}
+    # 0.5 ohne Detail-Drilling (nur Listenseite), 0.85 mit Detail.
+    # crawl_detail() hebt das auf 0.85 bei erfolgreichem Drill.
+    confidence: float = 0.5
+
 
 # ---------- robots.txt ----------
 
@@ -310,6 +318,19 @@ def crawl_detail(browser: Browser, item: RawListing) -> None:
     item.energy_class = chars.get("Energy Efficiency")
     item.furnishing = chars.get("Furnishing")
     item.pets_allowed = parse_pets_allowed(chars)
+
+    # extracted_data für Re-Processing ohne Re-Crawl (Indexer-Spec v2.0 §2.2).
+    # Wir packen ALLE strukturierten Roh-Outputs rein, nicht das Final-Mapping —
+    # damit man bei Schema-Drift später re-extrahieren kann.
+    item.extracted_data = {
+        "schema_address": data.get("address"),
+        "chars_raw": data.get("charsRaw"),
+        "chars_parsed": chars,
+        "og_description": data.get("description"),
+        "og_cover": data.get("cover"),
+    }
+    # Detail-Drill war erfolgreich → höhere Confidence.
+    item.confidence = 0.85
 
     # Media: Cover zuerst, dann Rest dedupliziert
     cover = data.get("cover")

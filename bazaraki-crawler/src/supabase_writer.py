@@ -1,4 +1,13 @@
-"""Bulk-Upsert nach Supabase via REST API (PostgREST)."""
+"""Bulk-Upsert nach Supabase via RPC `bulk_upsert_bazaraki_listings` (Migration 0029).
+
+Vorher: PostgREST `/rest/v1/listings?on_conflict=...` mit Klartext-raw_text.
+Jetzt: RPC mit serverseitiger pgp_sym_encrypt-Verschlüsselung von raw_text
+(analog FB, Indexer-Spec v2.0 §4.2 / §6).
+
+Score-Felder werden NICHT mitgeschickt — der Async-Score-Worker
+(lib/scam/worker.ts) holt sich Listings mit scam_checked_at IS NULL und
+scort sie nachträglich (Sticky-Pattern via Migration 0028).
+"""
 from __future__ import annotations
 
 import logging
@@ -12,7 +21,7 @@ from .crawler import RawListing
 
 log = logging.getLogger(__name__)
 
-CHUNK_SIZE = 50  # PostgREST verträgt deutlich mehr, aber so bleibt ein Fehler isoliert
+CHUNK_SIZE = 50
 
 
 def _build_dedup_hash(external_id: str) -> str:
@@ -23,67 +32,85 @@ def _build_dedup_hash(external_id: str) -> str:
 def _to_row(item: RawListing) -> dict:
     # Media: Detail-Page-Galerie wenn gedrillt, sonst Listenseiten-Cover
     media = item.media if item.media else ([item.image_url] if item.image_url else [])
-    location_raw = (
-        f"{item.district}, {item.city}" if item.district else item.city
-    )
     return {
-        "source": "bazaraki",
         "external_id": item.external_id,
         "type": item.listing_type,
-        "status": "active",
         "location_city": item.city,
         "location_district": item.district,
-        "location_raw": location_raw,
         "price": item.price,
         "currency": "EUR",
-        "price_period": "month" if item.listing_type == "rent" else "total",
         "rooms": item.rooms,
         "size_sqm": item.size_sqm,
+        # Spec §4.2: alle Bilder ≥720px (gefiltert via DETAIL_EXTRACT_JS,
+        # verifiziert durch tests/test_detail_extract.py).
         "media": media,
+        # raw_text wird im RPC pgp_sym_encrypt'd in raw_text_enc.
+        # Detail-Page liefert die volle Beschreibung; Fallback ist None,
+        # dann bleibt raw_text_enc NULL.
+        "raw_text": item.description,
+        "title": item.title,
+        "description": item.description,
         "language": "en",
+        "energy_class": item.energy_class,
+        "furnishing": item.furnishing,
+        "pets_allowed": item.pets_allowed,
+        # Spec §2.2: confidence + extracted_data
+        "confidence": item.confidence,
+        "extracted_data": item.extracted_data,
+        # Score-Felder bewusst NICHT — Worker setzt scam_checked_at später.
         "dedup_hash": _build_dedup_hash(item.external_id),
-        # first_seen via DB-default; last_seen via on-conflict-update neu gesetzt
     }
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
-def _post_chunk(url: str, headers: dict, payload: list[dict]) -> int:
-    """POST mit on-conflict=resolution=merge-duplicates → upsert auf (source, dedup_hash)."""
-    resp = httpx.post(url, headers=headers, json=payload, timeout=30)
+def _post_chunk(url: str, headers: dict, payload: list[dict]) -> dict:
+    """RPC-Call mit p_rows JSON-Array. Response: {ok, inserted, updated, failed}."""
+    resp = httpx.post(url, headers=headers, json={"p_rows": payload}, timeout=60)
     if resp.status_code >= 400:
-        log.error("POST failed (%d): %s", resp.status_code, resp.text[:500])
+        log.error("RPC failed (%d): %s", resp.status_code, resp.text[:500])
         resp.raise_for_status()
-    # PostgREST liefert mit Prefer: return=representation die Rows zurück
-    return len(resp.json())
+    return resp.json()
 
 
 def upsert_listings(items: Iterable[RawListing]) -> dict[str, int]:
-    """Bulk-Upsert. Konfliktauflösung: on (source, dedup_hash) → update last_seen + price + status."""
+    """Bulk-Upsert via RPC. Konfliktauflösung: on (source='bazaraki', dedup_hash)."""
     url_base = os.environ["SUPABASE_URL"].rstrip("/")
     service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    url = f"{url_base}/rest/v1/listings?on_conflict=source,dedup_hash"
+    url = f"{url_base}/rest/v1/rpc/bulk_upsert_bazaraki_listings"
     headers = {
         "apikey": service_key,
         "Authorization": f"Bearer {service_key}",
         "Content-Type": "application/json",
-        # merge-duplicates → INSERT … ON CONFLICT … DO UPDATE für ALLE übergebenen Spalten
-        "Prefer": "resolution=merge-duplicates,return=representation",
     }
 
     rows = [_to_row(i) for i in items]
     if not rows:
-        return {"chunks": 0, "rows_attempted": 0, "rows_written": 0}
+        return {"chunks": 0, "rows_attempted": 0, "inserted": 0, "updated": 0, "failed": []}
 
-    written = 0
+    inserted = 0
+    updated = 0
     chunks = 0
+    failed: list = []
     for i in range(0, len(rows), CHUNK_SIZE):
         chunk = rows[i : i + CHUNK_SIZE]
-        n = _post_chunk(url, headers, chunk)
-        written += n
+        result = _post_chunk(url, headers, chunk)
         chunks += 1
-        log.info("  chunk %d: %d/%d rows", chunks, n, len(chunk))
+        inserted += int(result.get("inserted", 0))
+        updated += int(result.get("updated", 0))
+        chunk_failed = result.get("failed", []) or []
+        failed.extend(chunk_failed)
+        log.info(
+            "  chunk %d: ins=%d upd=%d fail=%d",
+            chunks, result.get("inserted", 0), result.get("updated", 0), len(chunk_failed),
+        )
 
-    return {"chunks": chunks, "rows_attempted": len(rows), "rows_written": written}
+    return {
+        "chunks": chunks,
+        "rows_attempted": len(rows),
+        "inserted": inserted,
+        "updated": updated,
+        "failed": failed,
+    }
 
 
 def mark_stale_old_listings(stale_days: int = 7) -> int:
