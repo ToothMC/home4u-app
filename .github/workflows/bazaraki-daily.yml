@@ -36,12 +36,15 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Detail-Drilling über ~550 Listings dauert mit 3s-Rate-Limit ~75 Min,
+    # vorher gecappt auf 60 → Job wurde täglich gekillt. Public-Repo hat
+    # unlimited Actions-Minuten, also komfortable 4h.
+    timeout-minutes: 240
     defaults:
       run:
         working-directory: ./bazaraki-crawler
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v5
         with:
