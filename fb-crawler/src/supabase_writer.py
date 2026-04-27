@@ -42,6 +42,15 @@ def _phone_hash(phone_e164: str | None) -> str | None:
 
 def _to_row(item: UpsertItem) -> dict:
     p, e = item.post, item.extraction
+    # extracted_data: Container für Re-Processing ohne Re-Crawl.
+    # Indexer-Spec v2.0 §2.1. Score-Worker fügt später unter "scam"
+    # seinen Sub-Key hinzu (siehe lib/scam/worker.ts).
+    extracted_data: dict = {}
+    if e.raw_extraction:
+        extracted_data["llm_extraction"] = e.raw_extraction
+    if e.note:
+        extracted_data["note"] = e.note
+
     return {
         "external_id": p.post_id,
         "type": e.type,
@@ -53,6 +62,10 @@ def _to_row(item: UpsertItem) -> dict:
         "size_sqm": e.size_sqm,
         "contact_name": e.contact_name,
         "contact_phone": e.contact_phone,
+        # contact_phone_hash hat zwei Verwendungen:
+        # 1) Blacklist-Check gegen fb_contact_blacklist (Migration 0021)
+        # 2) Cross-Listing-Image-Match (Indexer-Spec v2.0 §6.2 duplicate_images,
+        #    seit Migration 0022 wird der Hash auch in listings persistiert)
         "contact_phone_hash": _phone_hash(e.contact_phone),
         "contact_channel": e.contact_channel,
         # Sprache aus Extraction nicht direkt verfügbar — Caller setzt sie
@@ -64,6 +77,11 @@ def _to_row(item: UpsertItem) -> dict:
         "raw_text": p.text,
         "fb_user_id": p.author_id,
         "dedup_hash": _build_dedup_hash(p.post_id),
+        # Indexer-Spec v2.0 §2.2: confidence + extracted_data
+        # scam_checked_at NICHT setzen — das macht der Score-Worker
+        # (Sticky-Pattern, Migration 0028).
+        "confidence": e.confidence,
+        "extracted_data": extracted_data if extracted_data else None,
     }
 
 

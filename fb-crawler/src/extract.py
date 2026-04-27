@@ -115,6 +115,10 @@ class Extraction:
     contact_channel: str | None
     confidence: float
     note: str | None
+    # LLM-Rohausgabe (tool_use.input). Wird in listings.extracted_data
+    # persistiert, damit Re-Processing ohne Re-Crawl möglich ist
+    # (Indexer-Spec v2.0 §2.1 extracted_data).
+    raw_extraction: dict | None = None
 
 
 def _client() -> anthropic.Anthropic:
@@ -193,6 +197,7 @@ def extract_listing(post: RawPost, classification: Classification, city_hint: st
         contact_channel=_str_or_none(raw.get("contact_channel")),
         confidence=confidence,
         note=_str_or_none(raw.get("note")),
+        raw_extraction=dict(raw),
     )
 
 

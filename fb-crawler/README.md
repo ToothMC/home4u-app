@@ -91,9 +91,13 @@ GROUP_IDS=123456789,987654321 python -m src.main --watch
 | Klassifikator-`language` | `language` | de/en/ru/el |
 | Extraktor-`price` | `price` + `currency` | Haiku liefert beides |
 | Extraktor-`contact_phone` | `contact_phone_enc` | RPC-encrypted, E.164 |
+| sha256(E.164) | `contact_phone_hash` | (a) Blacklist-Check (`fb_contact_blacklist`), (b) Cross-Listing-Image-Match (Indexer-Spec v2.0 §6.2 `duplicate_images`) |
+| Extraktor-`confidence` | `confidence` | Selbsteinschätzung des LLM, 0..1 |
+| Extraktor-Roh-Output | `extracted_data.llm_extraction` | jsonb, Re-Processing ohne Re-Crawl |
 | Group-City-Hint | `location_city` (Default) | Extraktor kann überschreiben |
 | — | `dedup_hash` | `fb:<post_id>` |
 | — | `source` | `'fb'` |
+| — | `scam_score` / `scam_flags` | **Vom Score-Worker gesetzt** (Indexer-Spec v2.0 §6.3, §11 A2). Crawler lässt sie leer; Sticky-Pattern via `scam_checked_at`. |
 
 ## Bild-Qualität
 
