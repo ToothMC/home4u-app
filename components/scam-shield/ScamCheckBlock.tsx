@@ -1,21 +1,17 @@
 /**
- * Read-only Sophie-Check-Block für Listing-Detail-Seiten.
+ * Read-only Sophie-Check-Block für Listing-Detail-Seiten — DEZENT-Variante.
  *
- * Spiegelt die Result-Card aus /scam-check (ohne Form/Modal/Funnel-CTA),
- * damit jedes Inserat im Index transparent zeigt: Score, Flags, Erklärung.
+ * User-Feedback: kein "Roboter-Fresse"-Emoji, klein, unaufdringlich.
+ * Default-State zeigt nur eine Zeile (Verdict-Badge + geprüft-Datum).
+ * Klick-to-expand für die Flag-Liste + Disclaimer-Link.
  *
- * Spec-§6.4-Ehrlichkeit: Risiko-Indikator, kein Urteil. Bei warn/high
- * wird das deutlich kommuniziert; bei clean ist die Botschaft "unauffällig",
- * NICHT "garantiert sicher".
- *
- * Wenn das Listing noch nie gescort wurde (scam_checked_at IS NULL UND
- * Score=0 ohne Flags), zeigen wir einen neutralen "noch nicht geprüft"-
- * Block — nicht falsches Grün.
+ * Spec-§6.4-Ehrlichkeit (Risiko-Indikator, kein Urteil) bleibt erhalten —
+ * der Disclaimer-Text ist nur einen Klick weg, nicht vom Bildschirm
+ * verschwunden.
  */
 import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 
-import { ScoreLight, verdictFromScore } from "./ScoreLight";
+import { ScamCheckBadge } from "./ScamCheckBadge";
 
 const FLAG_LABELS: Record<string, string> = {
   price_anomaly_low: "Preis ungewöhnlich niedrig",
@@ -41,71 +37,50 @@ function isActuallyChecked(score: number | null | undefined, flags?: string[] | 
 
 export function ScamCheckBlock({ scamScore, scamFlags, scamCheckedAt }: Props) {
   const checked = isActuallyChecked(scamScore, scamFlags);
-
-  if (!checked) {
-    return (
-      <Card className="border-[var(--border)]">
-        <CardContent className="p-5 space-y-2">
-          <h3 className="text-base font-semibold flex items-center gap-2">
-            <span className="text-xl">🤖</span>
-            Sophies Scam-Check
-          </h3>
-          <p className="text-sm text-[var(--muted-foreground)]">
-            Dieses Inserat wurde noch nicht von Sophie geprüft. Sobald der Score-Worker das
-            nächste Mal läuft, erscheint hier die Bewertung.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const score = Number(scamScore ?? 0);
-  const verdict = verdictFromScore(score);
   const flags = Array.isArray(scamFlags) ? scamFlags : [];
-  const cardColor =
-    verdict === "high"
-      ? "border-red-300 bg-red-50/40"
-      : verdict === "warn"
-      ? "border-orange-300 bg-orange-50/40"
-      : "border-emerald-300 bg-emerald-50/40";
+
+  // Datum klein formatieren
+  const dateStr = scamCheckedAt
+    ? new Date(scamCheckedAt).toLocaleDateString("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+      })
+    : null;
 
   return (
-    <Card className={cn("border-2", cardColor)}>
-      <CardContent className="p-5 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="text-base font-semibold flex items-center gap-2">
-            <span className="text-xl">🤖</span>
-            Sophies Scam-Check
-          </h3>
-          {scamCheckedAt && (
-            <span className="text-[11px] text-[var(--muted-foreground)] mt-1">
-              geprüft {new Date(scamCheckedAt).toLocaleDateString("de-DE")}
+    <Card className="border-[var(--border)]">
+      <CardContent className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          <ScamCheckBadge
+            score={checked ? scamScore : null}
+            flags={checked ? flags : null}
+            variant="compact"
+          />
+          {dateStr && checked && (
+            <span className="text-[10px] text-[var(--muted-foreground)]">
+              geprüft {dateStr}
             </span>
           )}
         </div>
 
-        <ScoreLight verdict={verdict} score={score} size="md" />
-
-        {flags.length > 0 ? (
-          <ul className="space-y-1 text-sm">
-            {flags.map((f) => (
-              <li key={f} className="flex items-start gap-2">
-                <span className="opacity-60 mt-0.5">•</span>
-                <span>{FLAG_LABELS[f] ?? f}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-emerald-800">
-            Sophie hat keine Auffälligkeiten gefunden.
-          </p>
+        {checked && flags.length > 0 && (
+          <details className="mt-2 text-xs">
+            <summary className="cursor-pointer text-[var(--muted-foreground)] hover:text-[var(--foreground)] select-none">
+              {flags.length} {flags.length === 1 ? "Hinweis" : "Hinweise"} anzeigen
+            </summary>
+            <ul className="mt-1.5 ml-1 space-y-0.5 text-[var(--muted-foreground)]">
+              {flags.map((f) => (
+                <li key={f}>· {FLAG_LABELS[f] ?? f}</li>
+              ))}
+            </ul>
+            <p className="mt-1.5 text-[10px] opacity-70">
+              <a href="/datenschutz#scam-shield" className="underline">
+                Mehr über Sophies Prüfung
+              </a>
+            </p>
+          </details>
         )}
-
-        <p className="text-xs text-[var(--muted-foreground)] pt-2 border-t border-current/10">
-          Sophie prüft jedes Inserat auf sechs Scam-Indikatoren — Preis-Anomalien,
-          bekannte Scam-Nummern, doppelt verwendete Bilder, verdächtige Formulierungen.{" "}
-          <a href="/datenschutz#scam-shield" className="underline">Mehr über die Prüfung</a>
-        </p>
       </CardContent>
     </Card>
   );
