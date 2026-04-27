@@ -36,13 +36,6 @@ const LABELS = {
   none: "Noch nicht geprüft",
 } as const;
 
-const SHORT_LABELS = {
-  clean: "unauffällig",
-  warn: "prüfen",
-  high: "hoher Verdacht",
-  none: "ungeprüft",
-} as const;
-
 /**
  * Heuristik für "wirklich geprüft": Score > 0 ODER mindestens ein Flag.
  * Default-Zeile (score=0, flags=[]) bedeutet: Worker hat das Listing
@@ -68,10 +61,9 @@ export function ScamCheckBadge({ score, flags, variant = "compact", className }:
           c.text,
           className,
         )}
-        title={LABELS[verdict]}
       >
         <span className={cn("inline-block w-2 h-2 rounded-full", c.dot)} aria-hidden />
-        {SHORT_LABELS[verdict]}
+        {LABELS[verdict]}
       </span>
     );
   }
