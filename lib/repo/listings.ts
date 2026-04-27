@@ -94,6 +94,11 @@ export type ListingMatch = Listing & {
   score: number;
   external_id: string | null;
   media: string[] | null;
+  /** Indexer-Spec v2.0 §6: 0..1 Risiko-Indikator, NICHT als Urteil
+   *  anzeigen. UI muss in Spec B Erklärung + Beweis zeigen. Bei
+   *  Transient-Items: 0 (noch nicht gescort). */
+  scamScore?: number;
+  scamFlags?: string[];
   /** Indexer-Spec v2.0 §5: true → live von Quelle, nicht im Index. UI muss
    *  das markieren ("live von Bazaraki, noch nicht im Index"). */
   isTransient?: boolean;
@@ -108,9 +113,12 @@ export type ListingMatch = Listing & {
  * Ruft den match_listings_for_profile-RPC auf. Bevorzugt user_id (eingeloggt),
  * fällt auf anonymous_id zurück (anonyme Session). Liefert [] wenn kein
  * aktives Profil existiert oder Supabase nicht konfiguriert ist.
+ *
+ * `variantId` (Spec §7.2) wählt einen Eintrag aus match_score_experiments;
+ * unbekannte/abgelaufene Variants fallen serverseitig auf 'default' zurück.
  */
 export async function findMatchesForSession(
-  params: { anonymousId?: string | null; userId?: string | null },
+  params: { anonymousId?: string | null; userId?: string | null; variantId?: string | null },
   limit = 5
 ): Promise<ListingMatch[]> {
   const supabase = createSupabaseServiceClient();
@@ -120,6 +128,7 @@ export async function findMatchesForSession(
     p_anonymous_id: params.anonymousId ?? null,
     p_user_id: params.userId ?? null,
     p_limit: limit,
+    p_variant_id: params.variantId ?? null,
   });
   if (error) {
     console.error("[matching] rpc failed", error);
@@ -139,6 +148,8 @@ export async function findMatchesForSession(
     contact_channel: (row.contact_channel as string) ?? null,
     media: (row.media as string[]) ?? null,
     score: Number(row.score ?? 0),
+    scamScore: row.scam_score != null ? Number(row.scam_score) : undefined,
+    scamFlags: Array.isArray(row.scam_flags) ? (row.scam_flags as string[]) : undefined,
   }));
 
   // Indexer-Spec v2.0 §5: bei zu wenig Index-Treffern Transient-Mix.
