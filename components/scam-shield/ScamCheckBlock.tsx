@@ -76,7 +76,7 @@ export function ScamCheckBlock({ scamScore, scamFlags, scamCheckedAt }: Props) {
           )}
         </div>
 
-        <ScoreLight verdict={verdict} score={score} size="sm" />
+        <ScoreLight verdict={verdict} score={score} size="sm" showScoreLine={false} />
 
         {flags.length > 0 && (
           <details className="text-xs">
