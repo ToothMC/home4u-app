@@ -8,7 +8,8 @@ import { QuickFactsBar } from "@/components/listing-public/QuickFactsBar";
 import { QuickActionsRow } from "@/components/listing-public/QuickActionsRow";
 import { HonestAssessmentBlock } from "@/components/listing-public/HonestAssessmentBlock";
 import { LocationBlock } from "@/components/listing-public/LocationBlock";
-import { MarketPriceBlock } from "@/components/listing-public/MarketPriceBlock";
+import { MarketPriceBadge } from "@/components/listing-public/MarketPriceBadge";
+import type { MarketData } from "@/components/listing-public/MarketPriceBlock";
 import { ScamCheckBlock } from "@/components/scam-shield/ScamCheckBlock";
 import { RequestVisitButton } from "@/components/listing-public/RequestVisitButton";
 import { loadPublicListing } from "@/lib/repo/public-listing";
@@ -34,6 +35,20 @@ export default async function PublicListingPage({
   );
   const priceLabel = listing.type === "rent" ? "/ Monat" : "";
   const priceTitle = listing.price_warm ? "Warmmiete" : listing.type === "rent" ? "Miete" : "Kaufpreis";
+
+  const marketData: MarketData | null = listing.market_position
+    ? {
+        position: listing.market_position,
+        price_per_sqm: listing.price_per_sqm,
+        median_eur_sqm: listing.market_median_eur_sqm,
+        p25_eur_sqm: listing.market_p25_eur_sqm,
+        p75_eur_sqm: listing.market_p75_eur_sqm,
+        compset_size: listing.market_compset_size,
+        city: listing.location_city,
+        district: listing.location_district,
+        rooms: listing.rooms,
+      }
+    : null;
 
   return (
     <main className="bg-[var(--background)]">
@@ -126,22 +141,8 @@ export default async function PublicListingPage({
               formattedPrice={formattedPrice}
               priceTitle={priceTitle}
               listingId={listing.id}
+              marketData={marketData}
             />
-            {listing.market_position && (
-              <MarketPriceBlock
-                data={{
-                  position: listing.market_position,
-                  price_per_sqm: listing.price_per_sqm,
-                  median_eur_sqm: listing.market_median_eur_sqm,
-                  p25_eur_sqm: listing.market_p25_eur_sqm,
-                  p75_eur_sqm: listing.market_p75_eur_sqm,
-                  compset_size: listing.market_compset_size,
-                  city: listing.location_city,
-                  district: listing.location_district,
-                  rooms: listing.rooms,
-                }}
-              />
-            )}
             <ScamCheckBlock
               scamScore={listing.scam_score}
               scamFlags={listing.scam_flags}
@@ -172,22 +173,8 @@ export default async function PublicListingPage({
               formattedPrice={formattedPrice}
               priceTitle={priceTitle}
               listingId={listing.id}
+              marketData={marketData}
             />
-            {listing.market_position && (
-              <MarketPriceBlock
-                data={{
-                  position: listing.market_position,
-                  price_per_sqm: listing.price_per_sqm,
-                  median_eur_sqm: listing.market_median_eur_sqm,
-                  p25_eur_sqm: listing.market_p25_eur_sqm,
-                  p75_eur_sqm: listing.market_p75_eur_sqm,
-                  compset_size: listing.market_compset_size,
-                  city: listing.location_city,
-                  district: listing.location_district,
-                  rooms: listing.rooms,
-                }}
-              />
-            )}
             <ScamCheckBlock
               scamScore={listing.scam_score}
               scamFlags={listing.scam_flags}
@@ -214,24 +201,31 @@ function PriceBox({
   priceLabel,
   priceTitle,
   listingId,
+  marketData,
 }: {
   formattedPrice: string;
   priceLabel: string;
   priceTitle: string;
   listingId: string;
+  marketData: MarketData | null;
 }) {
   return (
     <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-3">
-      <div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-3xl font-semibold">{formattedPrice}</span>
-          {priceLabel && (
-            <span className="text-sm text-[var(--muted-foreground)]">{priceLabel}</span>
-          )}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl font-semibold">{formattedPrice}</span>
+            {priceLabel && (
+              <span className="text-sm text-[var(--muted-foreground)]">{priceLabel}</span>
+            )}
+          </div>
+          <div className="text-xs text-[var(--muted-foreground)] mt-0.5">
+            {priceTitle}
+          </div>
         </div>
-        <div className="text-xs text-[var(--muted-foreground)] mt-0.5">
-          {priceTitle}
-        </div>
+        {marketData && marketData.position !== "unknown" && (
+          <MarketPriceBadge data={marketData} />
+        )}
       </div>
       <RequestVisitButton listingId={listingId} full />
     </section>

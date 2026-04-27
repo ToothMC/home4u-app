@@ -20,7 +20,7 @@ export type MarketData = {
   rooms: number | null;
 };
 
-const CONFIG: Record<
+export const MARKET_POSITION_CONFIG: Record<
   Exclude<MarketPosition, "unknown">,
   { bars: number; label: string; tone: "green" | "orange" }
 > = {
@@ -30,6 +30,8 @@ const CONFIG: Record<
   above: { bars: 2, label: "Erhöhter Preis", tone: "orange" },
   expensive: { bars: 1, label: "Hoher Preis", tone: "orange" },
 };
+
+const CONFIG = MARKET_POSITION_CONFIG;
 
 export function MarketPriceBlock({ data }: { data: MarketData }) {
   if (data.position === "unknown") {
@@ -98,7 +100,7 @@ export function MarketPriceBlock({ data }: { data: MarketData }) {
   );
 }
 
-function MarketBars({ bars, tone }: { bars: number; tone: "green" | "orange" }) {
+export function MarketBars({ bars, tone }: { bars: number; tone: "green" | "orange" }) {
   return (
     <div className="flex items-end gap-1" role="img" aria-label={`${bars} von 5 Balken`}>
       {[1, 2, 3, 4, 5].map((i) => {

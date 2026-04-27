@@ -1,0 +1,75 @@
+/**
+ * Inline-Badge für die Preis-Einschätzung — neben dem Preis platziert.
+ * Klick öffnet Modal mit dem vollen MarketPriceBlock (Stats + Compset).
+ *
+ * User-Wunsch: nur das kleine 5-Bar-Indikator-Chip oben rechts neben
+ * dem Preis. Standalone-Block ist zu viel Bildschirm-Real-Estate.
+ */
+"use client";
+
+import { useState } from "react";
+
+import { cn } from "@/lib/utils";
+
+import {
+  MARKET_POSITION_CONFIG,
+  MarketBars,
+  MarketPriceBlock,
+  type MarketData,
+} from "./MarketPriceBlock";
+
+export function MarketPriceBadge({ data }: { data: MarketData }) {
+  const [open, setOpen] = useState(false);
+
+  if (data.position === "unknown") return null;
+
+  const cfg = MARKET_POSITION_CONFIG[data.position];
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={cn(
+          "inline-flex items-center gap-2 rounded-md px-2 py-1 transition-colors",
+          "hover:bg-[var(--brand-gold-50)]",
+          "border border-transparent hover:border-[var(--border)]",
+        )}
+        aria-label={`${cfg.label} — Details anzeigen`}
+      >
+        <MarketBars bars={cfg.bars} tone={cfg.tone} />
+        <span
+          className={cn(
+            "text-xs font-semibold",
+            cfg.tone === "green" ? "text-emerald-700" : "text-amber-700",
+          )}
+        >
+          {cfg.label}
+        </span>
+      </button>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="bg-[var(--card)] rounded-lg shadow-xl max-w-md w-full p-2 max-h-[90dvh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MarketPriceBlock data={data} />
+            <div className="px-2 pb-2 pt-1 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline hover:no-underline px-2 py-1"
+              >
+                Schließen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
