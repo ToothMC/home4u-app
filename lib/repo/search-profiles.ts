@@ -79,6 +79,50 @@ export async function upsertSearchProfile(
   return { id: data.id };
 }
 
+export type ActiveSearchProfile = {
+  id: string;
+  location: string;
+  type: "rent" | "sale";
+  rooms: number | null;
+  budget_min: number | null;
+  budget_max: number | null;
+};
+
+/**
+ * Lädt das aktive Suchprofil. Genutzt vom Transient-Lookup (lib/transient/),
+ * um die Live-Search-URL zu bauen, wenn match_listings_for_profile zu wenig
+ * Treffer liefert.
+ */
+export async function loadActiveSearchProfile(ctx: {
+  userId?: string | null;
+  anonymousId?: string | null;
+}): Promise<ActiveSearchProfile | null> {
+  const supabase = createSupabaseServiceClient();
+  if (!supabase) return null;
+
+  const keyColumn = ctx.userId ? "user_id" : "anonymous_id";
+  const keyValue = ctx.userId ?? ctx.anonymousId;
+  if (!keyValue) return null;
+
+  const { data, error } = await supabase
+    .from("search_profiles")
+    .select("id, location, type, rooms, budget_min, budget_max")
+    .eq(keyColumn, keyValue)
+    .eq("active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    id: data.id as string,
+    location: data.location as string,
+    type: data.type as "rent" | "sale",
+    rooms: (data.rooms as number) ?? null,
+    budget_min: data.budget_min != null ? Number(data.budget_min) : null,
+    budget_max: data.budget_max != null ? Number(data.budget_max) : null,
+  };
+}
+
 export async function updateSearchProfileField(
   ctx: { userId?: string | null; anonymousId?: string | null },
   field: string,

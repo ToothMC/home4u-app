@@ -1,5 +1,12 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { NormalizedListing } from "@/lib/import/types";
+import { loadActiveSearchProfile } from "@/lib/repo/search-profiles";
+import {
+  TRANSIENT_LIMIT_DEFAULT,
+  TRANSIENT_TRIGGER_BELOW,
+  dedupeAgainstIndex,
+  findTransientMatches,
+} from "@/lib/transient/lookup";
 
 export class ImporterUnavailableError extends Error {
   constructor() {
@@ -87,6 +94,14 @@ export type ListingMatch = Listing & {
   score: number;
   external_id: string | null;
   media: string[] | null;
+  /** Indexer-Spec v2.0 §5: true → live von Quelle, nicht im Index. UI muss
+   *  das markieren ("live von Bazaraki, noch nicht im Index"). */
+  isTransient?: boolean;
+  /** Nur für Transient: externe URL für "ansehen"-Klick. Index-Listings
+   *  haben einen eigenen /listings/[id]-Pfad. */
+  detailUrl?: string;
+  /** Nur für Transient: Title aus der Listing-Karte. */
+  title?: string | null;
 };
 
 /**
@@ -110,7 +125,7 @@ export async function findMatchesForSession(
     console.error("[matching] rpc failed", error);
     return [];
   }
-  return (data ?? []).map((row: Record<string, unknown>) => ({
+  const indexMatches: ListingMatch[] = (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.listing_id as string,
     source: row.source as string,
     type: row.type as "rent" | "sale",
@@ -125,4 +140,55 @@ export async function findMatchesForSession(
     media: (row.media as string[]) ?? null,
     score: Number(row.score ?? 0),
   }));
+
+  // Indexer-Spec v2.0 §5: bei zu wenig Index-Treffern Transient-Mix.
+  if (indexMatches.length >= TRANSIENT_TRIGGER_BELOW) return indexMatches;
+
+  const profile = await loadActiveSearchProfile(params);
+  if (!profile) return indexMatches;
+
+  const transient = await findTransientMatches(
+    {
+      city: profile.location,
+      type: profile.type,
+      rooms: profile.rooms,
+      price_min: profile.budget_min,
+      price_max: profile.budget_max,
+    },
+    Math.max(TRANSIENT_LIMIT_DEFAULT, limit - indexMatches.length),
+  );
+
+  // Dedup: keine Transient-Items, deren external_id schon im Index ist.
+  const indexExternalIds = new Map<string, Set<string>>();
+  for (const m of indexMatches) {
+    if (!m.external_id) continue;
+    if (!indexExternalIds.has(m.source)) indexExternalIds.set(m.source, new Set());
+    indexExternalIds.get(m.source)!.add(m.external_id);
+  }
+  const filtered = dedupeAgainstIndex(transient, indexExternalIds);
+
+  const transientAsMatches: ListingMatch[] = filtered.map((t) => ({
+    // Synthetic id: UI darf damit nicht /listings/<id> aufrufen.
+    id: `transient-${t.source}-${t.external_id}`,
+    source: t.source,
+    type: t.type,
+    external_id: t.external_id,
+    location_city: t.city,
+    location_district: t.district,
+    price: t.price,
+    currency: t.currency,
+    rooms: t.rooms,
+    size_sqm: t.size_sqm,
+    contact_channel: null,
+    media: t.media,
+    // Konservativer Score: kein Embedding-Match, hard-filter ist via Search-URL
+    // erfüllt, kein Scam-Check. Match-Score-Formel §7.2 (mit cosine=0):
+    // 0.6×0 + 0.3×1 + 0.1×1 = 0.4.
+    score: 0.4,
+    isTransient: true,
+    detailUrl: t.detail_url,
+    title: t.title,
+  }));
+
+  return [...indexMatches, ...transientAsMatches].slice(0, limit);
 }
