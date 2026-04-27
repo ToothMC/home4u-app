@@ -14,8 +14,13 @@
  * Edge-Case: scam_checked_at IS NULL → noch nicht geprüft
  *   (Aktuell sind alle 559 indexierten Listings via SQL-Bootstrap geprüft;
  *   relevant für künftig neu-gecrawlte vor dem nächsten Worker-Lauf.)
+ *
+ * KEIN "use client" — pure Render-Logik ohne State/Effects. Damit darf
+ * verdictFromScore aus Server Components (z.B. ScamCheckBlock auf
+ * /listings/[id]) importiert werden. Darüber bin ich zuvor gefallen:
+ * Next.js verbietet, aus "use client"-Modulen Funktionen (vs. Components)
+ * in Server Components zu rufen → 500 zur Render-Zeit.
  */
-"use client";
 
 import { cn } from "@/lib/utils";
 
