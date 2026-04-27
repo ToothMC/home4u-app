@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,6 +39,21 @@ const FLAG_LABELS: Record<string, string> = {
   duplicate_images: "Bilder mehrfach verwendet",
   text_scam_markers: "Verdächtige Formulierungen",
   low_evidence: "Wenig Vergleichsdaten",
+};
+
+const SIGNAL_LABELS: Record<string, string> = {
+  urgent_pressure: "Druck zur schnellen Zahlung",
+  deposit_before_viewing: "Anzahlung vor Besichtigung",
+  cash_only: "Nur Barzahlung",
+  remote_landlord: "Eigentümer im Ausland",
+  no_viewing: "Besichtigung nicht möglich",
+  excessive_emojis: "Übermäßig viele Emojis",
+  broken_grammar: "Auffällige Grammatik",
+  stock_phrases: "Standard-Floskeln",
+  watermark_visible: "Wasserzeichen anderer Plattform sichtbar",
+  branding_visible: "Hotel-/Vermietungs-Branding sichtbar",
+  cropped_to_hide_watermark: "Bild verdächtig zugeschnitten",
+  image_blurry: "Bild unscharf/komprimiert",
 };
 
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
@@ -320,57 +335,84 @@ function ResultCard({
   onRetry: () => void;
 }) {
   const v = result.verdict;
+  const flagCount = result.flags.length;
   const colors =
     v === "high"
       ? { bg: "bg-red-50", border: "border-red-300", text: "text-red-900", icon: "🚨" }
       : v === "warn"
       ? { bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-900", icon: "⚠️" }
-      : { bg: "bg-emerald-50", border: "border-emerald-300", text: "text-emerald-900", icon: "✅" };
+      : flagCount === 0
+      ? { bg: "bg-emerald-50", border: "border-emerald-300", text: "text-emerald-900", icon: "✅" }
+      : { bg: "bg-emerald-50/70", border: "border-emerald-200", text: "text-emerald-900", icon: "💡" };
+
   const heading =
     v === "high"
-      ? "Deutliche Warnung"
+      ? "Hoher Scam-Verdacht"
       : v === "warn"
       ? "Verdächtig"
-      : "Keine deutlichen Scam-Signale";
+      : flagCount === 0
+      ? "Alles OK — keine Hinweise"
+      : "Insgesamt unauffällig";
 
-  const lines = result.explanation_md.split("\n").filter((l) => l.trim().length > 0);
+  const subline =
+    v === "high"
+      ? "Mehrere Signale deuten auf Scam hin — Vorsicht."
+      : v === "warn"
+      ? "Sophie würde hier zweimal hinschauen."
+      : flagCount === 0
+      ? "Sophie hat nichts Auffälliges gefunden."
+      : "Kleine Hinweise, aber kein Scam-Verdacht.";
+
+  // Quality-Signals aus extracted für die Detail-Anzeige unter "Verdächtige Formulierungen"
+  const qualitySignals = Array.isArray(
+    (result.extracted as Record<string, unknown>)?.quality_signals,
+  )
+    ? ((result.extracted as { quality_signals: string[] }).quality_signals)
+    : [];
 
   return (
     <div className="space-y-4">
       <Card className={cn(colors.border, "border-2")}>
-        <CardContent className={cn(colors.bg, "rounded-lg p-6 space-y-4")}>
+        <CardContent className={cn(colors.bg, "rounded-lg p-6 space-y-5")}>
           <div className="flex items-start gap-3">
             <span className="text-3xl leading-none">{colors.icon}</span>
             <div className={cn("flex-1", colors.text)}>
               <h2 className="text-xl font-semibold">{heading}</h2>
-              <p className="text-sm opacity-80 mt-1">
-                Score {result.score.toFixed(2)} / 1.00 ·{" "}
-                {result.flags.length === 0
-                  ? "keine Hinweise"
-                  : `${result.flags.length} ${result.flags.length === 1 ? "Hinweis" : "Hinweise"}`}
-              </p>
+              <p className="text-sm opacity-80 mt-1">{subline}</p>
             </div>
           </div>
 
-          {result.flags.length > 0 && (
-            <ul className="space-y-1 pl-2">
+          <ScoreLight verdict={v} score={result.score} />
+
+          {flagCount > 0 && (
+            <ul className="space-y-2">
               {result.flags.map((f) => (
-                <li key={f} className={cn("text-sm flex items-start gap-2", colors.text)}>
-                  <span className="opacity-60">•</span>
-                  <span className="font-medium">{FLAG_LABELS[f] ?? f}</span>
+                <li key={f} className={cn("text-sm", colors.text)}>
+                  <div className="flex items-start gap-2">
+                    <span className="opacity-60 mt-0.5">•</span>
+                    <span className="font-medium">{FLAG_LABELS[f] ?? f}</span>
+                  </div>
+                  {f === "text_scam_markers" && qualitySignals.length > 0 && (
+                    <ul className="mt-1 ml-5 space-y-0.5 text-xs opacity-80">
+                      {qualitySignals.map((s) => (
+                        <li key={s} className="flex items-start gap-1.5">
+                          <span>›</span>
+                          <span>{SIGNAL_LABELS[s] ?? s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>
           )}
 
           <details className="text-sm">
-            <summary className={cn("cursor-pointer font-medium", colors.text)}>
+            <summary className={cn("cursor-pointer font-medium select-none", colors.text)}>
               Sophies Erklärung anzeigen
             </summary>
             <div className={cn("mt-2 space-y-1.5 text-sm", colors.text)}>
-              {lines.map((line, i) => (
-                <p key={i}>{line.replace(/^[-*]\s*/, "• ")}</p>
-              ))}
+              {renderExplanation(result.explanation_md)}
             </div>
           </details>
 
@@ -428,6 +470,108 @@ function ResultCard({
       </div>
     </div>
   );
+}
+
+// ---------- Score-Ampel ------------------------------------------------------
+//
+// Drei-Stufen-Ampel statt numerischem Score: grün / orange / rot.
+// Schwellen aus lib/scam/score.ts SCAM_THRESHOLDS.warnFrom (0.5) +
+// scamFrom (0.7).
+//
+// Wir vermeiden bewusst "sicher Scam"-Wording (Spec §6.4 / §12
+// Ehrlichkeits-Klausel: nie als Urteil, immer als Risiko-Indikator).
+
+type Verdict3 = "clean" | "warn" | "high";
+
+function ScoreLight({ verdict, score }: { verdict: Verdict3; score: number }) {
+  const stages: Array<{
+    key: Verdict3;
+    label: string;
+    sublabel: string;
+    activeColor: string;     // Tailwind bg- für aktiven Zustand
+    activeRing: string;      // Tailwind ring- für aktiven Zustand
+  }> = [
+    {
+      key: "clean",
+      label: "Kein Scam",
+      sublabel: "Sophie hat nichts Auffälliges gefunden",
+      activeColor: "bg-emerald-500",
+      activeRing: "ring-emerald-200",
+    },
+    {
+      key: "warn",
+      label: "Nicht sicher",
+      sublabel: "Auffällig — bitte zweimal hinschauen",
+      activeColor: "bg-orange-500",
+      activeRing: "ring-orange-200",
+    },
+    {
+      key: "high",
+      label: "Hoher Verdacht",
+      sublabel: "Mehrere Scam-Signale — Vorsicht",
+      activeColor: "bg-red-500",
+      activeRing: "ring-red-200",
+    },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-around gap-2">
+        {stages.map((stage) => {
+          const isActive = stage.key === verdict;
+          return (
+            <div key={stage.key} className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
+              <div
+                className={cn(
+                  "w-14 h-14 rounded-full transition-all",
+                  isActive
+                    ? cn(stage.activeColor, "ring-8", stage.activeRing, "shadow-md")
+                    : "bg-black/10",
+                )}
+              />
+              <span
+                className={cn(
+                  "text-xs font-semibold text-center",
+                  isActive ? "opacity-100" : "opacity-40",
+                )}
+              >
+                {stage.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-center text-xs opacity-60">
+        Score: {score.toFixed(2)} / 1.00 — Risiko-Indikator, kein Urteil.
+      </p>
+    </div>
+  );
+}
+
+// ---------- Markdown-Renderer (klein) ---------------------------------------
+//
+// Sophies Erklärung kommt als Markdown-lite vom Server (lib/scam/score.ts).
+// Wir handhaben **bold** und Listen-Bullets korrekt — keine ungelöschten
+// Sterne mehr in der UI.
+
+function renderExplanation(md: string): ReactNode[] {
+  const lines = md.split("\n").filter((l) => l.trim().length > 0);
+  return lines.map((line, i) => {
+    // Listen-Bullet: führendes "- " oder "* " (aber NICHT "**...")
+    let body = line.replace(/^([-*])\s+/, "• ");
+    body = body.trim();
+    // **bold** → mit Markern für die Render-Phase
+    const parts = body.split(/(\*\*[^*]+\*\*)/g);
+    return (
+      <p key={i}>
+        {parts.map((part, j) => {
+          const m = /^\*\*([^*]+)\*\*$/.exec(part);
+          if (m) return <strong key={j}>{m[1]}</strong>;
+          return <span key={j}>{part}</span>;
+        })}
+      </p>
+    );
+  });
 }
 
 // ---------- Error-Card -------------------------------------------------------
