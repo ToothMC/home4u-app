@@ -9,6 +9,7 @@ import { QuickActionsRow } from "@/components/listing-public/QuickActionsRow";
 import { HonestAssessmentBlock } from "@/components/listing-public/HonestAssessmentBlock";
 import { LocationBlock } from "@/components/listing-public/LocationBlock";
 import { MarketPriceBlock } from "@/components/listing-public/MarketPriceBlock";
+import { ScamCheckBlock } from "@/components/scam-shield/ScamCheckBlock";
 import { RequestVisitButton } from "@/components/listing-public/RequestVisitButton";
 import { loadPublicListing } from "@/lib/repo/public-listing";
 
@@ -141,6 +142,11 @@ export default async function PublicListingPage({
                 }}
               />
             )}
+            <ScamCheckBlock
+              scamScore={listing.scam_score}
+              scamFlags={listing.scam_flags}
+              scamCheckedAt={listing.scam_checked_at}
+            />
             <HonestAssessmentBlock assessment={listing.honest_assessment} />
             <LocationBlock
               city={listing.location_city}
@@ -182,6 +188,11 @@ export default async function PublicListingPage({
                 }}
               />
             )}
+            <ScamCheckBlock
+              scamScore={listing.scam_score}
+              scamFlags={listing.scam_flags}
+              scamCheckedAt={listing.scam_checked_at}
+            />
             <HonestAssessmentBlock assessment={listing.honest_assessment} />
             <LocationBlock
               city={listing.location_city}

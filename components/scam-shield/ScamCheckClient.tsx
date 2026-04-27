@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { ScoreLight } from "@/components/scam-shield/ScoreLight";
 
 type Verdict = "clean" | "warn" | "high";
 type Kind = "text" | "url" | "image";
@@ -484,81 +485,8 @@ function ResultCard({
   );
 }
 
-// ---------- Score-Ampel ------------------------------------------------------
-//
-// Drei-Stufen-Ampel statt numerischem Score: grün / orange / rot.
-// Schwellen aus lib/scam/score.ts SCAM_THRESHOLDS.warnFrom (0.5) +
-// scamFrom (0.7).
-//
-// Wir vermeiden bewusst "sicher Scam"-Wording (Spec §6.4 / §12
-// Ehrlichkeits-Klausel: nie als Urteil, immer als Risiko-Indikator).
-
-type Verdict3 = "clean" | "warn" | "high";
-
-function ScoreLight({ verdict, score }: { verdict: Verdict3; score: number }) {
-  const stages: Array<{
-    key: Verdict3;
-    label: string;
-    sublabel: string;
-    activeColor: string;     // Tailwind bg- für aktiven Zustand
-    activeRing: string;      // Tailwind ring- für aktiven Zustand
-  }> = [
-    {
-      key: "clean",
-      label: "Kein Scam",
-      sublabel: "Sophie hat nichts Auffälliges gefunden",
-      activeColor: "bg-emerald-500",
-      activeRing: "ring-emerald-200",
-    },
-    {
-      key: "warn",
-      label: "Nicht sicher",
-      sublabel: "Auffällig — bitte zweimal hinschauen",
-      activeColor: "bg-orange-500",
-      activeRing: "ring-orange-200",
-    },
-    {
-      key: "high",
-      label: "Hoher Verdacht",
-      sublabel: "Mehrere Scam-Signale — Vorsicht",
-      activeColor: "bg-red-500",
-      activeRing: "ring-red-200",
-    },
-  ];
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-around gap-2">
-        {stages.map((stage) => {
-          const isActive = stage.key === verdict;
-          return (
-            <div key={stage.key} className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
-              <div
-                className={cn(
-                  "w-14 h-14 rounded-full transition-all",
-                  isActive
-                    ? cn(stage.activeColor, "ring-8", stage.activeRing, "shadow-md")
-                    : "bg-black/10",
-                )}
-              />
-              <span
-                className={cn(
-                  "text-xs font-semibold text-center",
-                  isActive ? "opacity-100" : "opacity-40",
-                )}
-              >
-                {stage.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <p className="text-center text-xs opacity-60">
-        Score: {score.toFixed(2)} / 1.00 — Risiko-Indikator, kein Urteil.
-      </p>
-    </div>
-  );
-}
+// ScoreLight + Verdict3 wurden nach components/scam-shield/ScoreLight.tsx
+// extrahiert — wird auch in ScamCheckBlock + ScamCheckBadge wiederverwendet.
 
 // ---------- Markdown-Renderer (klein) ---------------------------------------
 //

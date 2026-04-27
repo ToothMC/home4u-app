@@ -135,6 +135,10 @@ export type PublicListingData = {
   market_p25_eur_sqm: number | null;
   market_median_eur_sqm: number | null;
   market_p75_eur_sqm: number | null;
+  // Sophie-Scam-Check (Indexer-Spec §6, Phase A1)
+  scam_score: number | null;
+  scam_flags: string[] | null;
+  scam_checked_at: string | null;
   source: string;
   external_id: string | null;
   ai_analyzed_at: string | null;

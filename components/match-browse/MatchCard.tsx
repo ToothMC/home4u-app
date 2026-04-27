@@ -11,6 +11,8 @@ import {
   ArrowRight,
 } from "lucide-react";
 
+import { ScamCheckBadge } from "@/components/scam-shield/ScamCheckBadge";
+
 // Höhe des "Card-Stack-Peek-Chip" — Vorschau-Streifen der nächsten Karte,
 // der vom unteren Rand in die aktive Karte hineinragt. Wird ÜBER dem
 // Preis-Overlay positioniert, damit beide klar lesbar sind.
@@ -22,6 +24,10 @@ import { cn } from "@/lib/utils";
 export type MatchCardData = {
   id: string;
   type: "rent" | "sale";
+  /** Sophie-Check-Score (Indexer-Spec §6). Optional — wenn unset oder
+   *  score=0 mit leerem flags-Array, wird "noch nicht geprüft" gerendert. */
+  scamScore?: number | null;
+  scamFlags?: string[] | null;
   location_city: string;
   location_district: string | null;
   price: number;
@@ -293,6 +299,19 @@ export function MatchCard({
               {Math.round(data.score * 100)} % Match
             </div>
           )}
+
+          {/* Sophie-Scam-Check-Badge — auf jeder Karte sichtbar.
+              Position unterhalb des Image-Counters (links oben). */}
+          <div className={cn(
+            "absolute left-3 rounded-full bg-white/90 backdrop-blur px-2 py-0.5",
+            total > 1 ? "top-12" : "top-3",
+          )}>
+            <ScamCheckBadge
+              score={data.scamScore}
+              flags={data.scamFlags}
+              variant="compact"
+            />
+          </div>
 
           {/* Tap-Targets für Like/Skip — funktional gleichwertig zum Wischen.
               Größe 12 (48 px) entspricht Apple-HIG-Tap-Mindestgröße.

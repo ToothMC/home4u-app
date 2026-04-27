@@ -26,7 +26,8 @@ export async function loadPublicListing(
        contract_min_months, contract_notes,
        price_per_sqm, market_position, market_compset_size,
        market_p10_eur_sqm, market_p25_eur_sqm, market_median_eur_sqm, market_p75_eur_sqm,
-       source, external_id, ai_analyzed_at, created_at`
+       source, external_id, ai_analyzed_at, created_at,
+       scam_score, scam_flags, scam_checked_at`
     )
     .eq("id", id)
     .maybeSingle();
@@ -112,6 +113,9 @@ export async function loadPublicListing(
       l.market_median_eur_sqm != null ? Number(l.market_median_eur_sqm) : null,
     market_p75_eur_sqm:
       l.market_p75_eur_sqm != null ? Number(l.market_p75_eur_sqm) : null,
+    scam_score: l.scam_score != null ? Number(l.scam_score) : null,
+    scam_flags: Array.isArray(l.scam_flags) ? l.scam_flags : null,
+    scam_checked_at: l.scam_checked_at ?? null,
     source: l.source as string,
     external_id: l.external_id ?? null,
     ai_analyzed_at: l.ai_analyzed_at ?? null,

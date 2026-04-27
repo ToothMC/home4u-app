@@ -124,6 +124,23 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Trust-Strip: Jedes Inserat ist scam-geprüft (Spec-§6.4-Wording) */}
+      <section className="mx-auto max-w-6xl px-6 pt-2 pb-6">
+        <div className="flex items-center justify-center gap-3 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-900">
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" aria-hidden />
+          <span>
+            <strong>Jedes Inserat ist scam-geprüft.</strong> Sophie checkt sechs
+            Risiko-Indikatoren — Preis, Telefon, Bilder, Text — automatisch.
+          </span>
+          <Link
+            href="/scam-check"
+            className="hidden sm:inline-block text-xs underline hover:no-underline"
+          >
+            so geht&apos;s →
+          </Link>
+        </div>
+      </section>
+
       {/* Ausgewählte Immobilien — echte Daten */}
       <Suspense fallback={null}>
         <FeaturedListings />

@@ -58,7 +58,8 @@ export default async function MatchDetailPage({
        search_profiles!inner ( user_id, anonymous_id ),
        listings!inner (
          id, type, location_city, location_district, price, currency,
-         rooms, size_sqm, media, status, contact_channel, owner_user_id
+         rooms, size_sqm, media, status, contact_channel, owner_user_id,
+         scam_score, scam_flags
        )`
     )
     .eq("id", id)
@@ -93,6 +94,8 @@ export default async function MatchDetailPage({
     status: string;
     contact_channel: string | null;
     owner_user_id: string | null;
+    scam_score: number | null;
+    scam_flags: string[] | null;
   };
   const status = deriveStatus(match);
 
@@ -120,6 +123,8 @@ export default async function MatchDetailPage({
     size_sqm: listing.size_sqm,
     media: listing.media,
     score: 1, // im Detail-View nicht relevant
+    scamScore: listing.scam_score,
+    scamFlags: listing.scam_flags,
   };
 
   return (
