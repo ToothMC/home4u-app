@@ -21,7 +21,7 @@ export default function LandingPage() {
             <Link href="/chat?flow=owner" className="hover:text-[var(--brand-gold)] transition-colors">Vermieten</Link>
             <Link href="/chat?flow=owner&intent=sale" className="hover:text-[var(--brand-gold)] transition-colors">Verkaufen</Link>
             <Link href="/chat?flow=agent" className="hover:text-[var(--brand-gold)] transition-colors">Für Makler</Link>
-            <a href="#warum" className="hover:text-[var(--brand-gold)] transition-colors">Über uns</a>
+            <Link href="/scam-check" className="hover:text-[var(--brand-gold)] transition-colors">Scam-Check</Link>
           </nav>
           <div className="flex items-center gap-3">
             <Link
@@ -93,7 +93,7 @@ export default function LandingPage() {
                 </Button>
               </Suspense>
               <Button asChild size="lg" variant="outline" className="bg-white/85 backdrop-blur">
-                <Link href="/matches">Immobilien entdecken</Link>
+                <Link href="/scam-check">Inserat prüfen</Link>
               </Button>
             </div>
           </div>
@@ -121,23 +121,6 @@ export default function LandingPage() {
             title="Zuhause-Gefühl"
             text="Wir verstehen, dass es um mehr geht als Daten. Wir helfen dir, das richtige Zuhause zu finden."
           />
-        </div>
-      </section>
-
-      {/* Trust-Strip: Jedes Inserat ist scam-geprüft (Spec-§6.4-Wording) */}
-      <section className="mx-auto max-w-6xl px-6 pt-2 pb-6">
-        <div className="flex items-center justify-center gap-3 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-900">
-          <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" aria-hidden />
-          <span>
-            <strong>Jedes Inserat ist scam-geprüft.</strong> Sophie checkt sechs
-            Risiko-Indikatoren — Preis, Telefon, Bilder, Text — automatisch.
-          </span>
-          <Link
-            href="/scam-check"
-            className="hidden sm:inline-block text-xs underline hover:no-underline"
-          >
-            so geht&apos;s →
-          </Link>
         </div>
       </section>
 
