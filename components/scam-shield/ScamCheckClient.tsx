@@ -50,6 +50,7 @@ export function ScamCheckClient() {
   const [url, setUrl] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageDragOver, setImageDragOver] = useState(false);
+  const [imageConverting, setImageConverting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScamCheckResponse | null>(null);
   const [error, setError] = useState<ErrorResponse | null>(null);
@@ -87,7 +88,7 @@ export function ScamCheckClient() {
     }
   }
 
-  function handleFileChosen(file: File | null) {
+  async function handleFileChosen(file: File | null) {
     if (!file) {
       setImageFile(null);
       return;
@@ -96,11 +97,52 @@ export function ScamCheckClient() {
       setError({ error: "file_too_large", reason: "Maximal 10 MB pro Bild." });
       return;
     }
-    if (!IMAGE_ALLOWED.includes(file.type)) {
-      setError({ error: "unsupported_mime", reason: "JPEG, PNG oder WebP." });
+    setError(null);
+
+    // iPhone-Fotos kommen als HEIC — Anthropic-Vision unterstützt das nicht.
+    // Konvertieren wir clientseitig zu JPEG mit heic2any (~1MB Lib, lazy load).
+    const isHeic =
+      file.type === "image/heic" ||
+      file.type === "image/heif" ||
+      /\.(heic|heif)$/i.test(file.name);
+    if (isHeic) {
+      setImageConverting(true);
+      try {
+        const { default: heic2any } = await import("heic2any");
+        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.85 });
+        // heic2any returns Blob | Blob[]; bei multi-frame nehmen wir das erste
+        const jpegBlob = Array.isArray(converted) ? converted[0] : converted;
+        const jpegFile = new File(
+          [jpegBlob],
+          file.name.replace(/\.(heic|heif)$/i, ".jpg"),
+          { type: "image/jpeg" },
+        );
+        if (jpegFile.size > IMAGE_MAX_BYTES) {
+          setError({
+            error: "file_too_large",
+            reason: "Konvertiertes JPEG ist über 10 MB. Wähle ein kleineres Bild.",
+          });
+          setImageFile(null);
+        } else {
+          setImageFile(jpegFile);
+        }
+      } catch (err) {
+        console.error("[scam-shield] heic conversion failed", err);
+        setError({
+          error: "heic_conversion_failed",
+          reason: "Konnte das HEIC-Bild nicht konvertieren. Speichere es vorher als JPEG.",
+        });
+        setImageFile(null);
+      } finally {
+        setImageConverting(false);
+      }
       return;
     }
-    setError(null);
+
+    if (!IMAGE_ALLOWED.includes(file.type)) {
+      setError({ error: "unsupported_mime", reason: "JPEG, PNG oder WebP (HEIC wird automatisch konvertiert)." });
+      return;
+    }
     setImageFile(file);
   }
 
@@ -205,7 +247,11 @@ export function ScamCheckClient() {
                       imageFile && "border-emerald-300 bg-emerald-50",
                     )}
                   >
-                    {imageFile ? (
+                    {imageConverting ? (
+                      <p className="text-sm text-[var(--muted-foreground)]">
+                        🔄 HEIC wird zu JPEG konvertiert…
+                      </p>
+                    ) : imageFile ? (
                       <div className="space-y-2">
                         <p className="text-sm font-medium">📎 {imageFile.name}</p>
                         <p className="text-xs text-[var(--muted-foreground)]">
@@ -227,7 +273,7 @@ export function ScamCheckClient() {
                           Datei auswählen
                           <input
                             type="file"
-                            accept="image/jpeg,image/png,image/webp"
+                            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
                             className="hidden"
                             onChange={(e) => handleFileChosen(e.target.files?.[0] ?? null)}
                           />
