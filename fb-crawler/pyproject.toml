@@ -1,0 +1,28 @@
+[project]
+name = "home4u-fb-crawler"
+version = "0.1.0"
+description = "Facebook-Gruppen-Indexer für Home4U (Spur 1.1, CDP-Attach-Modus)"
+requires-python = ">=3.11"
+dependencies = [
+    "playwright>=1.49,<2",
+    "httpx>=0.28,<1",
+    "anthropic>=0.40,<1",
+    "python-dotenv>=1.0,<2",
+    "tenacity>=9.0,<10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9",
+]
+
+[project.scripts]
+fb-crawl = "src.main:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

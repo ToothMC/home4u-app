@@ -1,0 +1,13 @@
+{
+  "_comment": "Pilot-Auswahl FB-Gruppen pro Stadt. Group-IDs sind Platzhalter — vor dem ersten Lauf manuell pflegen (FB-Gruppen-URL https://www.facebook.com/groups/<id-or-slug>/). 'slug' wird gegen den URL-Path gematcht falls die Gruppe noch keine numerische ID exposed.",
+  "groups": [
+    {"id": "REPLACE_ME_LIMASSOL_RENTALS", "slug": "limassol-rentals", "city": "Limassol", "type_hint": "rent", "name": "Limassol Rentals (Pilot)"},
+    {"id": "REPLACE_ME_LIMASSOL_EXPATS", "slug": "limassol-expat-rentals", "city": "Limassol", "type_hint": "rent", "name": "Limassol Expat Rentals (Pilot)"},
+    {"id": "REPLACE_ME_LIMASSOL_RU", "slug": "limassol-russian", "city": "Limassol", "type_hint": null, "name": "Limassol Russian Community (Pilot)"},
+    {"id": "REPLACE_ME_PAPHOS_RENTALS", "slug": "paphos-rentals", "city": "Paphos", "type_hint": "rent", "name": "Paphos Rentals (Pilot)"},
+    {"id": "REPLACE_ME_PAPHOS_SALE", "slug": "paphos-property", "city": "Paphos", "type_hint": null, "name": "Paphos Property (Pilot)"},
+    {"id": "REPLACE_ME_LARNACA_RENTALS", "slug": "larnaca-rentals", "city": "Larnaca", "type_hint": "rent", "name": "Larnaca Rentals (Pilot)"},
+    {"id": "REPLACE_ME_NICOSIA_RENTALS", "slug": "nicosia-rentals", "city": "Nicosia", "type_hint": "rent", "name": "Nicosia Rentals (Pilot)"},
+    {"id": "REPLACE_ME_FAMAGUSTA_RENTALS", "slug": "famagusta-rentals", "city": "Famagusta", "type_hint": "rent", "name": "Famagusta Rentals (Pilot)"}
+  ]
+}
