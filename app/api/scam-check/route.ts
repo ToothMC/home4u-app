@@ -16,6 +16,8 @@ import { getOrCreateAnonymousSession } from "@/lib/session";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { computeScamScore, SCAM_THRESHOLDS, type ScamFlag } from "@/lib/scam/score";
 import { extractTextListing } from "@/lib/scam/extract-text";
+import { extractImageListing } from "@/lib/scam/extract-image";
+import { dhashBuffer } from "@/lib/scam/phash";
 import { checkScamQuota } from "@/lib/scam/quota";
 
 export const runtime = "nodejs";
@@ -175,6 +177,159 @@ async function handleUrlIndexLookup(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Image-Upload (Spec §2.2 / §5)
+// ---------------------------------------------------------------------------
+
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const IMAGE_ALLOWED_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+async function handleImageUpload(
+  req: Request,
+  identity: { userId: string; anonymousId?: null } | { userId?: null; anonymousId: string },
+) {
+  // Quota erst — sonst hochladen wir erst, blocken dann
+  const quota = await checkScamQuota(identity);
+  if (!quota.allowed) {
+    return Response.json(
+      {
+        error: "quota_exhausted",
+        tier: quota.tier,
+        used: quota.used,
+        limit: quota.limit,
+        reset_at: quota.resetAt,
+      },
+      { status: 429 },
+    );
+  }
+
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    return Response.json({ error: "invalid_form" }, { status: 400 });
+  }
+  const file = form.get("file");
+  if (!(file instanceof File)) {
+    return Response.json({ error: "missing_file", reason: "Feld 'file' nicht im Form-Body." }, { status: 400 });
+  }
+  if (file.size > IMAGE_MAX_BYTES) {
+    return Response.json({ error: "file_too_large", limit_bytes: IMAGE_MAX_BYTES }, { status: 413 });
+  }
+  if (!IMAGE_ALLOWED_MIMES.has(file.type)) {
+    return Response.json(
+      { error: "unsupported_mime", reason: `Erlaubt: ${[...IMAGE_ALLOWED_MIMES].join(", ")}` },
+      { status: 415 },
+    );
+  }
+
+  const buf = Buffer.from(await file.arrayBuffer());
+
+  // 1) Vision-Extraktion
+  let extracted;
+  try {
+    extracted = await extractImageListing(buf, file.type);
+  } catch (err) {
+    console.error("[scam-check] image extract failed", err);
+    return Response.json({ error: "extract_failed" }, { status: 502 });
+  }
+
+  if (extracted.confidence < 0.3 && extracted.listing_type === "unknown") {
+    return Response.json(
+      { error: "input_unparseable", reason: "Konnte kein Inserat im Bild erkennen." },
+      { status: 422 },
+    );
+  }
+
+  // 2) dHash für Cross-Match (Spec §6.2 duplicate_images)
+  let imageHash: bigint | null = null;
+  try {
+    imageHash = await dhashBuffer(buf);
+  } catch (err) {
+    console.warn("[scam-check] dhashBuffer failed", err);
+    // weiter ohne Cross-Match — Score-Engine setzt dann nur die anderen Heuristiken
+  }
+
+  // 3) Phone-Hash
+  let phoneHash: string | null = null;
+  if (extracted.contact_phone) {
+    const e164 = normalizeE164(extracted.contact_phone);
+    if (e164) phoneHash = sha256Hex(e164);
+  }
+
+  // 4) Score-Engine
+  const scoreResult = await computeScamScore({
+    type: extracted.listing_type === "unknown" ? "rent" : extracted.listing_type,
+    city: extracted.city ?? null,
+    district: extracted.district ?? null,
+    price: extracted.price ?? null,
+    phoneHash,
+    imageHashes: imageHash != null ? [imageHash] : undefined,
+    textScamScore: extracted.text_scam_score,
+  });
+
+  // 5) Persistieren
+  const sb = createSupabaseServiceClient();
+  let checkId: string | null = null;
+  if (sb) {
+    const { data: inserted, error } = await sb
+      .from("scam_checks")
+      .insert({
+        user_id: identity.userId ?? null,
+        anonymous_id: identity.anonymousId ?? null,
+        input_kind: "image" as const,
+        input_url: null,
+        score: scoreResult.score,
+        flags: scoreResult.flags,
+        similar_listing_ids: scoreResult.similarListingIds,
+        explanation_md: scoreResult.explanation,
+      })
+      .select("id")
+      .single();
+    if (error) {
+      console.error("[scam-check] insert failed", error);
+    } else {
+      checkId = inserted.id as string;
+    }
+    // pHash für künftige Cross-Matches persistieren (Migration 0034).
+    // Bilddaten selbst werden NICHT gespeichert — nur der Hash + ein
+    // anonymer media_url-Marker.
+    if (checkId && imageHash != null) {
+      await sb
+        .from("image_hashes")
+        .insert({
+          phash: imageHash.toString(),
+          scam_check_id: checkId,
+          media_url: `scam_check:${checkId}`,
+        });
+    }
+  }
+
+  return Response.json({
+    id: checkId,
+    score: scoreResult.score,
+    verdict: verdictFor(scoreResult.score),
+    flags: scoreResult.flags as ScamFlag[],
+    explanation_md: scoreResult.explanation,
+    similar_listing_ids: scoreResult.similarListingIds,
+    extracted: {
+      listing_type: extracted.listing_type,
+      price: extracted.price ?? null,
+      currency: extracted.currency ?? null,
+      city: extracted.city ?? null,
+      district: extracted.district ?? null,
+      rooms: extracted.rooms ?? null,
+      size_sqm: extracted.size_sqm ?? null,
+      language: extracted.language ?? null,
+      confidence: extracted.confidence,
+      quality_signals: extracted.quality_signals,
+    },
+    remaining_quota: Number.isFinite(quota.remaining) ? quota.remaining - 1 : null,
+    tier: quota.tier,
+    source: "image",
+  });
+}
+
 function renderUrlExplanation(
   l: { source: string; type: string; price: number | string | null; location_city: string; location_district: string | null },
   flags: string[],
@@ -207,6 +362,12 @@ export async function POST(req: Request) {
   }
 
   // --- 2) Body lesen + Kind-Switch ---------------------------------------
+  // multipart/form-data → image-path; sonst json
+  const ct = req.headers.get("content-type") ?? "";
+  if (ct.startsWith("multipart/form-data")) {
+    return handleImageUpload(req, identity);
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -218,7 +379,10 @@ export async function POST(req: Request) {
     return Response.json({ error: "invalid_kind", expected: ["text", "url", "image"] }, { status: 400 });
   }
   if (kind === "image") {
-    return Response.json({ error: "not_implemented", phase: "B3" }, { status: 501 });
+    return Response.json(
+      { error: "expected_multipart", reason: "Bilder bitte als multipart/form-data hochladen." },
+      { status: 415 },
+    );
   }
 
   // --- URL-Path: Index-Cache-Hit (Spec §6.2 Pfad c) -----------------------

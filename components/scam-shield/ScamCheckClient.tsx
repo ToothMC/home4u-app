@@ -28,13 +28,7 @@ type ErrorResponse = { error: string; reason?: string; reset_at?: string; phase?
 const TABS: { kind: Kind; label: string; icon: string; available: boolean; hint?: string }[] = [
   { kind: "text", label: "Text einfügen", icon: "✍️", available: true },
   { kind: "url", label: "URL einkippen", icon: "🔗", available: true },
-  {
-    kind: "image",
-    label: "Screenshot",
-    icon: "📷",
-    available: false,
-    hint: "Bilder-Upload kommt in der nächsten Iteration.",
-  },
+  { kind: "image", label: "Screenshot", icon: "📷", available: true },
 ];
 
 const FLAG_LABELS: Record<string, string> = {
@@ -47,10 +41,15 @@ const FLAG_LABELS: Record<string, string> = {
   low_evidence: "Wenig Vergleichsdaten",
 };
 
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const IMAGE_ALLOWED = ["image/jpeg", "image/png", "image/webp"];
+
 export function ScamCheckClient() {
   const [kind, setKind] = useState<Kind>("text");
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageDragOver, setImageDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScamCheckResponse | null>(null);
   const [error, setError] = useState<ErrorResponse | null>(null);
@@ -61,18 +60,20 @@ export function ScamCheckClient() {
     setError(null);
     setResult(null);
     try {
-      const body =
-        kind === "text"
-          ? { kind: "text", text }
-          : kind === "url"
-          ? { kind: "url", url }
-          : null;
-      if (!body) return;
-      const resp = await fetch("/api/scam-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      let resp: Response;
+      if (kind === "image") {
+        if (!imageFile) return;
+        const fd = new FormData();
+        fd.append("file", imageFile);
+        resp = await fetch("/api/scam-check", { method: "POST", body: fd });
+      } else {
+        const body = kind === "text" ? { kind: "text", text } : { kind: "url", url };
+        resp = await fetch("/api/scam-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
       const data = await resp.json();
       if (!resp.ok) {
         setError(data as ErrorResponse);
@@ -86,6 +87,23 @@ export function ScamCheckClient() {
     }
   }
 
+  function handleFileChosen(file: File | null) {
+    if (!file) {
+      setImageFile(null);
+      return;
+    }
+    if (file.size > IMAGE_MAX_BYTES) {
+      setError({ error: "file_too_large", reason: "Maximal 10 MB pro Bild." });
+      return;
+    }
+    if (!IMAGE_ALLOWED.includes(file.type)) {
+      setError({ error: "unsupported_mime", reason: "JPEG, PNG oder WebP." });
+      return;
+    }
+    setError(null);
+    setImageFile(file);
+  }
+
   function reset() {
     setResult(null);
     setError(null);
@@ -94,7 +112,8 @@ export function ScamCheckClient() {
   const canSubmit =
     !loading &&
     ((kind === "text" && text.trim().length >= 30) ||
-      (kind === "url" && /^https?:\/\//.test(url.trim())));
+      (kind === "url" && /^https?:\/\//.test(url.trim())) ||
+      (kind === "image" && imageFile !== null));
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-6">
@@ -162,10 +181,66 @@ export function ScamCheckClient() {
               )}
 
               {kind === "image" && (
-                <p className="text-sm text-[var(--muted-foreground)] py-8 text-center">
-                  Bild-Upload kommt in der nächsten Iteration. Nutze solange den Text-Tab und
-                  paste den Inseratstext direkt rein.
-                </p>
+                <>
+                  <label className="text-sm text-[var(--muted-foreground)]">
+                    Screenshot des Inserats hochladen — JPEG, PNG oder WebP, max. 10 MB.
+                  </label>
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setImageDragOver(true);
+                    }}
+                    onDragLeave={() => setImageDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setImageDragOver(false);
+                      const f = e.dataTransfer.files?.[0] ?? null;
+                      handleFileChosen(f);
+                    }}
+                    className={cn(
+                      "border-2 border-dashed rounded-md p-8 text-center transition-colors",
+                      imageDragOver
+                        ? "border-[var(--brand-gold)] bg-[var(--brand-gold-50)]"
+                        : "border-[var(--border)] bg-transparent",
+                      imageFile && "border-emerald-300 bg-emerald-50",
+                    )}
+                  >
+                    {imageFile ? (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">📎 {imageFile.name}</p>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          {(imageFile.size / 1024).toFixed(0)} KB · {imageFile.type}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleFileChosen(null)}
+                          className="text-xs underline text-[var(--muted-foreground)]"
+                        >
+                          Anderes Bild wählen
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm">📷 Bild hier reinziehen</p>
+                        <p className="text-xs text-[var(--muted-foreground)]">oder</p>
+                        <label className="inline-block px-3 py-1.5 text-sm rounded-md border border-[var(--border)] hover:bg-[var(--brand-gold-50)] cursor-pointer">
+                          Datei auswählen
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            onChange={(e) => handleFileChosen(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    Funktioniert auch mit Mobile-Screenshots aus FB-Groups oder Telegram. Nach der
+                    Prüfung wird das Bild verworfen — nur ein Bild-Hash bleibt für künftige
+                    Cross-Matches.
+                  </p>
+                </>
               )}
 
               <div className="flex items-center justify-between pt-2">

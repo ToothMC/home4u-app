@@ -234,9 +234,14 @@ async function findDuplicateImageListings(
   // Postgres-RPC phash_hamming() wäre eleganter, aber wir brauchen die
   // Liste der Listings — für 559 Inserate scannen wir lokal.
   // TODO: bei >50k Hashes einen bk-tree-Index einführen.
+  //
+  // Wichtig: nur Listing-Hashes als Cross-Match-Quelle. User-Submissions
+  // (scam_check_id IS NOT NULL) würden sich sonst gegenseitig flaggen
+  // (Migration 0034). Cross-Match geht IMMER gegen den Index.
   const { data, error } = await sb
     .from("image_hashes")
-    .select("phash, listing_id");
+    .select("phash, listing_id")
+    .not("listing_id", "is", null);
   if (error || !data) {
     console.warn("[scam] image_hashes query failed", error);
     return new Set();
