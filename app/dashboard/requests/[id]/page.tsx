@@ -166,7 +166,11 @@ export default async function OwnerRequestDetailPage({
           </p>
         </div>
 
-        <MatchCard data={cardData} />
+        {/* Fixed-Höhe-Wrapper analog /matches/[id] — MatchCard braucht
+            begrenzten Container (sonst Mobile=0px, Desktop=ungehemmt). */}
+        <div className="aspect-[3/4] max-h-[80dvh] w-full">
+          <MatchCard data={cardData} />
+        </div>
 
         {/* Seeker-Profil */}
         <article className="rounded-xl border bg-[var(--card)] p-4 space-y-3">

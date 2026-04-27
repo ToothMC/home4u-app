@@ -149,7 +149,13 @@ export default async function MatchDetailPage({
           />
         </div>
 
-        <MatchCard data={cardData} />
+        {/* Fixed-Höhe-Wrapper: MatchCard nutzt intern h-full + flex und braucht
+            einen begrenzten Container, sonst kollabiert sie auf Mobile zu 0px
+            (Bild verschwindet) bzw. expandiert ungehemmt auf Desktop. Aspect 3/4
+            gibt eine Foto-typische Höhe; max-h-[80dvh] schützt Desktop. */}
+        <div className="aspect-[3/4] max-h-[80dvh] w-full">
+          <MatchCard data={cardData} />
+        </div>
 
         {status === "connected" && ownerEmail && (
           <Card className="border-emerald-200 bg-emerald-50/50">
