@@ -112,7 +112,7 @@ async function handleUrlIndexLookup(
   const { data: listing, error } = await sb
     .from("listings")
     .select(
-      "id, source, external_id, type, location_city, location_district, price, rooms, scam_score, scam_flags",
+      "id, source, external_id, type, location_city, location_district, price, rooms, scam_score, scam_flags, contact_phone_hash",
     )
     .eq("source", classified.source)
     .eq("external_id", classified.externalId)
@@ -152,6 +152,7 @@ async function handleUrlIndexLookup(
       flags,
       similar_listing_ids: [listing.id],
       explanation_md: explanation,
+      contact_phone_hash: (listing as { contact_phone_hash?: string | null }).contact_phone_hash ?? null,
     })
     .select("id")
     .single();
@@ -283,6 +284,7 @@ async function handleImageUpload(
         flags: scoreResult.flags,
         similar_listing_ids: scoreResult.similarListingIds,
         explanation_md: scoreResult.explanation,
+        contact_phone_hash: phoneHash,
       })
       .select("id")
       .single();

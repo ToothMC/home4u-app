@@ -307,7 +307,13 @@ export function ScamCheckClient() {
               <div className="flex items-center justify-between pt-2">
                 <p className="text-xs text-[var(--muted-foreground)]">
                   Wir verarbeiten dein Inserat nur für die Prüfung. Verschlüsselt 30 Tage
-                  gespeichert, dann automatisch gelöscht.
+                  gespeichert, dann gelöscht. {" "}
+                  <a
+                    href="/datenschutz#scam-shield"
+                    className="underline hover:no-underline"
+                  >
+                    Mehr erfahren
+                  </a>
                 </p>
                 <Button type="submit" disabled={!canSubmit}>
                   {loading ? "Sophie schaut sich das an…" : "Sophie prüfen lassen"}
@@ -433,6 +439,12 @@ function ResultCard({
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {result.id && (v === "warn" || v === "high") && (
+            <div className="pt-2 border-t border-current/10">
+              <ReportButton checkId={result.id} colorText={colors.text} />
             </div>
           )}
         </CardContent>
@@ -572,6 +584,151 @@ function renderExplanation(md: string): ReactNode[] {
       </p>
     );
   });
+}
+
+// ---------- Report-Flow (Spec B §9.3) ---------------------------------------
+
+const REPORT_REASONS: Array<{ id: string; label: string }> = [
+  { id: "fake_address", label: "Adresse stimmt nicht" },
+  { id: "unreliable_provider", label: "Anbieter unzuverlässig / nicht erreichbar" },
+  { id: "stolen_images", label: "Bilder gestohlen / aus anderer Quelle" },
+  { id: "money_before_viewing", label: "Geld verlangt vor Besichtigung" },
+  { id: "fake_id_papers", label: "Verdächtige Dokumente / Identität" },
+  { id: "other", label: "Sonstiges" },
+];
+
+function ReportButton({ checkId, colorText }: { checkId: string; colorText: string }) {
+  const [open, setOpen] = useState(false);
+  const [reported, setReported] = useState(false);
+
+  if (reported) {
+    return (
+      <p className={cn("text-sm font-medium", colorText)}>
+        ✓ Danke, dein Hinweis hilft anderen Nutzern.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className={cn(
+          "text-sm underline font-medium hover:no-underline",
+          colorText,
+        )}
+      >
+        ⚠ Inserat als Scam melden
+      </button>
+      {open && (
+        <ReportModal
+          checkId={checkId}
+          onClose={() => setOpen(false)}
+          onReported={() => {
+            setReported(true);
+            setOpen(false);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function ReportModal({
+  checkId,
+  onClose,
+  onReported,
+}: {
+  checkId: string;
+  onClose: () => void;
+  onReported: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  function toggle(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function submit() {
+    if (selected.size === 0) {
+      setErr("Bitte mindestens einen Grund auswählen.");
+      return;
+    }
+    setSubmitting(true);
+    setErr(null);
+    try {
+      const resp = await fetch(`/api/scam-check/${checkId}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reasons: Array.from(selected) }),
+      });
+      if (resp.ok) {
+        onReported();
+      } else {
+        const data = await resp.json().catch(() => null);
+        setErr(data?.reason ?? data?.error ?? "Konnte nicht melden.");
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[var(--card)] rounded-lg shadow-lg max-w-md w-full p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h3 className="text-lg font-semibold">Was war auffällig?</h3>
+          <p className="text-sm text-[var(--muted-foreground)] mt-1">
+            Mehrere Antworten möglich. Dein Hinweis hilft, dasselbe Inserat oder dieselbe
+            Telefonnummer in Zukunft schneller zu erkennen.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          {REPORT_REASONS.map((r) => (
+            <label
+              key={r.id}
+              className="flex items-start gap-2 cursor-pointer p-2 rounded hover:bg-[var(--brand-gold-50)]"
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(r.id)}
+                onChange={() => toggle(r.id)}
+                className="mt-0.5"
+              />
+              <span className="text-sm">{r.label}</span>
+            </label>
+          ))}
+        </div>
+
+        {err && <p className="text-sm text-red-700">{err}</p>}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="ghost" onClick={onClose} disabled={submitting}>
+            Abbrechen
+          </Button>
+          <Button onClick={submit} disabled={submitting || selected.size === 0}>
+            {submitting ? "Wird gemeldet…" : "Als Scam melden"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ---------- Error-Card -------------------------------------------------------
