@@ -461,7 +461,7 @@ function ResultCard({
       <div className="flex items-center justify-between text-xs text-[var(--muted-foreground)] px-2">
         <span>
           {result.remaining_quota != null
-            ? `Du hast diesen Monat noch ${result.remaining_quota} kostenlose Checks.`
+            ? `Du hast diesen Monat noch ${result.remaining_quota} ${result.remaining_quota === 1 ? "kostenlosen Check" : "kostenlose Checks"}.`
             : "Premium · unbegrenzt"}
         </span>
         <button onClick={onRetry} className="underline hover:no-underline">
