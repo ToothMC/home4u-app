@@ -43,6 +43,158 @@ function normalizeE164(raw: string): string | null {
   return trimmed;
 }
 
+// ---------------------------------------------------------------------------
+// URL-Source-Whitelist + ID-Extraktion (Spec §6.1 / §6.2)
+// ---------------------------------------------------------------------------
+
+const URL_SOURCES: Array<{
+  source: "bazaraki" | "fb";
+  pattern: RegExp;
+  /** Liefert source-eigene ID aus URL-Match. */
+  extractId(match: RegExpExecArray): string;
+}> = [
+  {
+    source: "bazaraki",
+    pattern: /bazaraki\.com\/adv\/(\d+)/i,
+    extractId: (m) => m[1],
+  },
+  {
+    source: "fb",
+    // /groups/<gid>/posts/<pid>/ oder /groups/<gid>/permalink/<pid>/
+    pattern: /facebook\.com\/groups\/[^/]+\/(?:posts|permalink)\/(\d+)/i,
+    extractId: (m) => m[1],
+  },
+];
+
+function classifyUrl(url: string): { source: "bazaraki" | "fb"; externalId: string } | null {
+  for (const { source, pattern, extractId } of URL_SOURCES) {
+    const m = pattern.exec(url);
+    if (m) return { source, externalId: extractId(m) };
+  }
+  return null;
+}
+
+async function handleUrlIndexLookup(
+  url: string,
+  identity: { userId: string; anonymousId?: null } | { userId?: null; anonymousId: string },
+) {
+  const classified = classifyUrl(url);
+  if (!classified) {
+    return Response.json(
+      { error: "url_not_whitelisted", reason: "Aktuell nur Bazaraki + Facebook-Permalinks." },
+      { status: 422 },
+    );
+  }
+
+  const sb = createSupabaseServiceClient();
+  if (!sb) {
+    return Response.json({ error: "service_unavailable" }, { status: 503 });
+  }
+
+  // Quota-Check für URL-Path identisch
+  const quota = await checkScamQuota(identity);
+  if (!quota.allowed) {
+    return Response.json(
+      {
+        error: "quota_exhausted",
+        tier: quota.tier,
+        used: quota.used,
+        limit: quota.limit,
+        reset_at: quota.resetAt,
+      },
+      { status: 429 },
+    );
+  }
+
+  // Index-Cache-Hit: Listing nach (source, external_id) suchen.
+  const { data: listing, error } = await sb
+    .from("listings")
+    .select(
+      "id, source, external_id, type, location_city, location_district, price, rooms, scam_score, scam_flags",
+    )
+    .eq("source", classified.source)
+    .eq("external_id", classified.externalId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[scam-check] url lookup failed", error);
+    return Response.json({ error: "lookup_failed" }, { status: 500 });
+  }
+
+  if (!listing) {
+    return Response.json(
+      {
+        error: "url_not_in_index",
+        reason: "Inserat noch nicht im Home4U-Index. Lade einen Screenshot hoch oder paste den Text rein.",
+      },
+      { status: 422 },
+    );
+  }
+
+  // Score liegt schon vor → Result-Shape direkt rendern.
+  const flags = (listing.scam_flags as string[] | null) ?? [];
+  const score = Number(listing.scam_score ?? 0);
+  const explanation = renderUrlExplanation(listing, flags, score);
+
+  // In scam_checks für Quota + History persistieren.
+  let checkId: string | null = null;
+  const { data: inserted } = await sb
+    .from("scam_checks")
+    .insert({
+      user_id: identity.userId ?? null,
+      anonymous_id: identity.anonymousId ?? null,
+      input_kind: "url",
+      input_url: url.slice(0, 500),
+      score,
+      flags,
+      similar_listing_ids: [listing.id],
+      explanation_md: explanation,
+    })
+    .select("id")
+    .single();
+  if (inserted) checkId = inserted.id as string;
+
+  return Response.json({
+    id: checkId,
+    score,
+    verdict: verdictFor(score),
+    flags,
+    explanation_md: explanation,
+    similar_listing_ids: [listing.id],
+    extracted: {
+      listing_type: listing.type,
+      price: listing.price != null ? Number(listing.price) : null,
+      city: listing.location_city,
+      district: listing.location_district,
+      rooms: listing.rooms,
+    },
+    remaining_quota: Number.isFinite(quota.remaining) ? quota.remaining - 1 : null,
+    tier: quota.tier,
+    source: "index_cache_hit",
+  });
+}
+
+function renderUrlExplanation(
+  l: { source: string; type: string; price: number | string | null; location_city: string; location_district: string | null },
+  flags: string[],
+  score: number,
+): string {
+  const verdict = score >= 0.7 ? "**Deutliche Warnung**" : score >= 0.5 ? "**Verdächtig**" : "Keine deutlichen Scam-Signale";
+  const lines = [
+    `${verdict} (Score: ${score.toFixed(2)}) — ${l.source}-Inserat im Index gefunden.`,
+    "",
+    `${l.type === "rent" ? "Miete" : "Kauf"} in ${l.location_city}${l.location_district ? "/" + l.location_district : ""} · ${l.price ?? "?"} EUR`,
+    "",
+  ];
+  if (flags.length === 0) {
+    lines.push("Alle geprüften Felder unauffällig.");
+  } else {
+    lines.push("**Gefundene Signale:** " + flags.join(", "));
+  }
+  return lines.join("\n");
+}
+
 export async function POST(req: Request) {
   // --- 1) Identity auflösen ----------------------------------------------
   const authUser = await getAuthUser();
@@ -65,12 +217,19 @@ export async function POST(req: Request) {
   if (kind !== "text" && kind !== "url" && kind !== "image") {
     return Response.json({ error: "invalid_kind", expected: ["text", "url", "image"] }, { status: 400 });
   }
-  if (kind === "url") {
-    return Response.json({ error: "not_implemented", phase: "B2" }, { status: 501 });
-  }
   if (kind === "image") {
     return Response.json({ error: "not_implemented", phase: "B3" }, { status: 501 });
   }
+
+  // --- URL-Path: Index-Cache-Hit (Spec §6.2 Pfad c) -----------------------
+  if (kind === "url") {
+    const url = (body as { url?: string })?.url;
+    if (typeof url !== "string" || !/^https?:\/\//.test(url)) {
+      return Response.json({ error: "input_too_short", reason: "Gültige URL nötig." }, { status: 422 });
+    }
+    return handleUrlIndexLookup(url, identity);
+  }
+
   const text = (body as { text?: string })?.text;
   if (typeof text !== "string" || text.trim().length < 30) {
     return Response.json(
