@@ -90,6 +90,14 @@ export type Listing = {
   contact_channel: string | null;
 };
 
+export type MarketPosition =
+  | "very_good"
+  | "good"
+  | "fair"
+  | "above"
+  | "expensive"
+  | "unknown";
+
 export type ListingMatch = Listing & {
   score: number;
   external_id: string | null;
@@ -99,6 +107,9 @@ export type ListingMatch = Listing & {
    *  Transient-Items: 0 (noch nicht gescort). */
   scamScore?: number;
   scamFlags?: string[];
+  /** Preis-Einschätzung pro Listing (RPC liefert das mit) — UI zeigt
+   *  einen kleinen Bars-Indikator neben dem Preis. */
+  marketPosition?: MarketPosition;
   /** Indexer-Spec v2.0 §5: true → live von Quelle, nicht im Index. UI muss
    *  das markieren ("live von Bazaraki, noch nicht im Index"). */
   isTransient?: boolean;
@@ -150,6 +161,10 @@ export async function findMatchesForSession(
     score: Number(row.score ?? 0),
     scamScore: row.scam_score != null ? Number(row.scam_score) : undefined,
     scamFlags: Array.isArray(row.scam_flags) ? (row.scam_flags as string[]) : undefined,
+    marketPosition:
+      typeof row.market_position === "string"
+        ? (row.market_position as MarketPosition)
+        : undefined,
   }));
 
   // Indexer-Spec v2.0 §5: bei zu wenig Index-Treffern Transient-Mix.

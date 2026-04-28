@@ -11,14 +11,13 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-import { ScamCheckBadge } from "@/components/scam-shield/ScamCheckBadge";
+import { verdictFromScore } from "@/components/scam-shield/ScoreLight";
 import { cn } from "@/lib/utils";
+import type { MarketPosition } from "@/lib/repo/listings";
 
-// Dot-Pagination am unteren Bildrand (Instagram-Stil). Bei vielen Bildern
-// (>MAX_DOTS) wird ein Sliding-Window um den aktiven Index gerendert,
-// damit die Punktreihe nicht über die Kartenbreite hinausläuft. Edge-Dots
-// werden kleiner gerendert, um "es gibt noch mehr"-Hinweis zu geben.
-const MAX_DOTS = 9;
+// Vertikaler Scroll-Indicator rechts vom Bild — die Bilder werden vertikal
+// gewischt (snap-y), darum vertikale Pagination, nicht horizontal.
+const MAX_DOTS = 7;
 
 type DotInfo = { active: boolean; size: "lg" | "md" | "sm" };
 
@@ -29,7 +28,6 @@ function dotWindow(active: number, total: number, max: number): DotInfo[] {
       size: "lg" as const,
     }));
   }
-  // Window um active zentrieren, an den Enden klemmen
   const half = Math.floor(max / 2);
   let start = Math.max(0, active - half);
   let end = start + max;
@@ -48,6 +46,24 @@ function dotWindow(active: number, total: number, max: number): DotInfo[] {
   return out;
 }
 
+const SCAM_PILL = {
+  clean: { dot: "bg-emerald-500", border: "border-emerald-300", text: "text-emerald-700", label: "OK" },
+  warn: { dot: "bg-orange-500", border: "border-orange-300", text: "text-orange-700", label: "Prüfen" },
+  high: { dot: "bg-red-500", border: "border-red-300", text: "text-red-700", label: "Verdacht" },
+  none: { dot: "bg-black/30", border: "border-black/15", text: "text-[var(--muted-foreground)]", label: "—" },
+} as const;
+
+const MARKET_PILL: Record<
+  Exclude<MarketPosition, "unknown">,
+  { bars: number; label: string; tone: "green" | "orange" }
+> = {
+  very_good: { bars: 5, label: "Top-Preis", tone: "green" },
+  good: { bars: 4, label: "Gut", tone: "green" },
+  fair: { bars: 3, label: "Fair", tone: "green" },
+  above: { bars: 2, label: "Erhöht", tone: "orange" },
+  expensive: { bars: 1, label: "Hoch", tone: "orange" },
+};
+
 export type MatchCardData = {
   id: string;
   type: "rent" | "sale";
@@ -55,6 +71,7 @@ export type MatchCardData = {
    *  score=0 mit leerem flags-Array, wird "noch nicht geprüft" gerendert. */
   scamScore?: number | null;
   scamFlags?: string[] | null;
+  marketPosition?: MarketPosition | null;
   location_city: string;
   location_district: string | null;
   price: number;
@@ -410,22 +427,18 @@ export function MatchCard({
                     : data.location_city}
                 </div>
               </div>
-              <div className="shrink-0 rounded-full bg-white/90 backdrop-blur px-2 py-0.5">
-                <ScamCheckBadge
-                  score={data.scamScore}
-                  flags={data.scamFlags}
-                  variant="compact"
-                />
+              <div className="shrink-0 flex flex-col items-end gap-1">
+                <MarketPill position={data.marketPosition ?? null} />
+                <ScamPill score={data.scamScore} flags={data.scamFlags} />
               </div>
             </div>
           </div>
 
-          {/* Dot-Pagination am unteren Bildrand — über dem Preis-Overlay, im
-              hellen Bereich des Gradients gut lesbar. Bei vielen Bildern
-              wird ein Sliding-Window mit kleineren Edge-Dots gezeigt. */}
+          {/* Vertikaler Scroll-Indicator rechts — passt zur Vertikal-Wisch-
+              Geste (snap-y). Sliding-Window für viele Bilder. */}
           {total > 1 && (
-            <div className="absolute bottom-[88px] inset-x-0 flex justify-center pointer-events-none">
-              <div className="flex items-center gap-1.5 rounded-full bg-black/30 backdrop-blur px-2 py-1">
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+              <div className="flex flex-col items-center gap-1.5 rounded-full bg-black/30 backdrop-blur px-1 py-1.5">
                 {dotWindow(imgIdx, total, MAX_DOTS).map((d, i) => (
                   <span
                     key={`dot-${i}`}
@@ -521,5 +534,71 @@ export function MatchCard({
         </div>
       </div>
     </article>
+  );
+}
+
+/** Kompakte Pille für den Sophie-Scam-Check, weiß mit dünnem Verdict-Rahmen. */
+function ScamPill({
+  score,
+  flags,
+}: {
+  score?: number | null;
+  flags?: string[] | null;
+}) {
+  const checked =
+    score != null && (score > 0 || (Array.isArray(flags) && flags.length > 0));
+  const verdict: keyof typeof SCAM_PILL = !checked
+    ? "none"
+    : verdictFromScore(score ?? 0);
+  const c = SCAM_PILL[verdict];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full bg-white border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+        c.border,
+        c.text,
+      )}
+    >
+      <span className={cn("inline-block size-1.5 rounded-full", c.dot)} aria-hidden />
+      {c.label}
+    </span>
+  );
+}
+
+/** Kompakte Pille für die Preis-Einschätzung — bars + Kurz-Label. */
+function MarketPill({ position }: { position: MarketPosition | null }) {
+  if (!position || position === "unknown") return null;
+  const cfg = MARKET_PILL[position];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full bg-white border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+        cfg.tone === "green"
+          ? "border-emerald-300 text-emerald-700"
+          : "border-amber-300 text-amber-700",
+      )}
+      aria-label={cfg.label}
+    >
+      <span
+        className="inline-flex items-end gap-[1px]"
+        aria-hidden
+      >
+        {[1, 2, 3, 4, 5].map((i) => (
+          <span
+            key={i}
+            className={cn(
+              "w-[2px] rounded-sm",
+              i <= cfg.bars
+                ? cfg.tone === "green"
+                  ? "bg-emerald-500"
+                  : "bg-amber-500"
+                : "bg-black/15",
+            )}
+            style={{ height: `${4 + i * 1.5}px` }}
+          />
+        ))}
+      </span>
+      {cfg.label}
+    </span>
   );
 }
