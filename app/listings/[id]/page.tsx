@@ -18,15 +18,26 @@ export const dynamic = "force-dynamic";
 
 export default async function PublicListingPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const { from } = await searchParams;
   const listing = await loadPublicListing(id);
 
   if (!listing || listing.status !== "active") {
     notFound();
   }
+
+  // Kontext-abhängiger Back-Link: aus Editor zurück zur Bearbeitung,
+  // sonst Default „zur Suche". Andere Quellen können denselben Mechanismus
+  // nutzen (?from=matches, ?from=dashboard etc.).
+  const back =
+    from === "edit"
+      ? { href: `/dashboard/listings/${id}`, label: "Zurück zur Bearbeitung" }
+      : { href: "/matches", label: "Zurück zur Suche" };
 
   const heroImages = listing.photos.map((p) => p.url);
   const formattedPrice = formatPrice(
@@ -55,10 +66,10 @@ export default async function PublicListingPage({
       {/* Top bar */}
       <header className="mx-auto max-w-7xl w-full px-4 pt-4 pb-2 flex items-center justify-between">
         <Link
-          href="/matches"
+          href={back.href}
           className="text-sm text-[var(--muted-foreground)] hover:underline flex items-center gap-1"
         >
-          <ArrowLeft className="size-4" /> Zurück zur Suche
+          <ArrowLeft className="size-4" /> {back.label}
         </Link>
         <div className="flex items-center gap-3">
           <button
