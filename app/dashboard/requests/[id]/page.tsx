@@ -155,7 +155,7 @@ export default async function OwnerRequestDetailPage({
         <AuthMenu />
       </header>
 
-      <section className="mx-auto max-w-md w-full px-4 pt-4 pb-10 space-y-4">
+      <section className="mx-auto max-w-md md:max-w-2xl lg:max-w-3xl w-full px-4 pt-4 pb-10 space-y-4">
         <div>
           <h1 className="text-xl font-semibold">Anfrage für dein Inserat</h1>
           <p className="text-xs text-[var(--muted-foreground)] mt-1">
