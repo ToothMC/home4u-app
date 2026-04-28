@@ -12,13 +12,6 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-const ROLE_LABEL: Record<string, string> = {
-  seeker: "Suchender",
-  owner: "Privater Anbieter",
-  agent: "Makler",
-  admin: "Admin",
-};
-
 export default async function ProfilePage() {
   const user = await getAuthUser();
   if (!user) {
@@ -37,15 +30,12 @@ export default async function ProfilePage() {
     .maybeSingle();
 
   const initial: ProfileForm = {
-    role: (data?.role ?? null) as ProfileForm["role"],
     display_name: data?.display_name ?? null,
     phone: data?.phone ?? null,
     preferred_language: (data?.preferred_language ?? null) as ProfileForm["preferred_language"],
     contact_channel: (data?.contact_channel ?? null) as ProfileForm["contact_channel"],
     notification_email: data?.notification_email ?? null,
   };
-
-  const role = data?.role ?? null;
 
   return (
     <main className="min-h-screen bg-[var(--background)]">
@@ -72,14 +62,6 @@ export default async function ProfilePage() {
             </h1>
             <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
               {user.email}
-              {role && (
-                <>
-                  {" · "}
-                  <span className="rounded-full bg-[var(--accent)] px-2 py-0.5 text-[10px] font-medium">
-                    {ROLE_LABEL[role] ?? role}
-                  </span>
-                </>
-              )}
             </p>
           </div>
         </div>

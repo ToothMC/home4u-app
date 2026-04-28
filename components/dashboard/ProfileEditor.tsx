@@ -5,34 +5,13 @@ import { Loader2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export type ProfileRole = "seeker" | "owner" | "agent";
-
 export type ProfileForm = {
-  role: ProfileRole | null;
   display_name: string | null;
   phone: string | null;
   preferred_language: "de" | "en" | "ru" | "el" | null;
   contact_channel: "email" | "whatsapp" | "telegram" | "phone" | "chat" | null;
   notification_email: string | null;
 };
-
-const ROLE_OPTIONS: { value: ProfileRole; label: string; sub: string }[] = [
-  {
-    value: "seeker",
-    label: "Suchender",
-    sub: "Ich suche eine Wohnung oder ein Haus",
-  },
-  {
-    value: "owner",
-    label: "Privater Anbieter",
-    sub: "Ich vermiete oder verkaufe eigene Immobilie(n)",
-  },
-  {
-    value: "agent",
-    label: "Makler",
-    sub: "Ich vermittle als Makler / Agentur",
-  },
-];
 
 const LANGS: { value: ProfileForm["preferred_language"]; label: string }[] = [
   { value: "de", label: "Deutsch" },
@@ -99,41 +78,12 @@ export function ProfileEditor({
       }}
       className="space-y-5"
     >
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Was beschreibt dich?</legend>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Steuert nur den Dashboard-Fokus — du kannst jederzeit wechseln.
-          Auch als „Suchender" darfst du Inserate anlegen.
-        </p>
-        <div className="space-y-2">
-          {ROLE_OPTIONS.map((opt) => (
-            <label
-              key={opt.value}
-              className={
-                "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors " +
-                (form.role === opt.value
-                  ? "border-emerald-500 bg-emerald-50/40"
-                  : "border-[var(--border)] hover:bg-[var(--accent)]")
-              }
-            >
-              <input
-                type="radio"
-                name="role"
-                value={opt.value}
-                checked={form.role === opt.value}
-                onChange={() => update("role", opt.value)}
-                className="mt-0.5"
-              />
-              <div className="min-w-0">
-                <div className="text-sm font-medium">{opt.label}</div>
-                <div className="text-xs text-[var(--muted-foreground)]">
-                  {opt.sub}
-                </div>
-              </div>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <div className="rounded-lg bg-[var(--accent)]/40 border border-[var(--border)] p-3 text-xs text-[var(--muted-foreground)] leading-relaxed">
+        Du kannst auf Home4U gleichzeitig <strong>suchen</strong>,{" "}
+        <strong>vermieten / verkaufen</strong> und als{" "}
+        <strong>Makler</strong> arbeiten — kein Lock-in. Im Dashboard kannst
+        du oben zwischen den Ansichten wechseln.
+      </div>
 
       <Field label="Anzeigename">
         <Input

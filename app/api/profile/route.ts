@@ -37,7 +37,11 @@ const patchSchema = z
       .nullable()
       .optional()
       .or(z.literal("").transform(() => null)),
-    role: z.enum(["seeker", "owner", "agent"]).optional(),
+    // Hinweis: role ist absichtlich NICHT vom User editierbar.
+    // Begründung: ein Nutzer ist auf Home4U gleichzeitig potentiell
+    // Suchender + Anbieter + Makler. Das DB-Feld bleibt nur als
+    // Dashboard-Default-Fokus, gesetzt durch Sophie wenn sie die
+    // Hauptabsicht erkennt — kein UI-Lock.
   })
   .strict();
 
