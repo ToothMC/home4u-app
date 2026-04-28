@@ -79,6 +79,23 @@ const handlers: Record<string, Handler> = {
     const location = String(input.location ?? "").trim();
     if (!location) return { ok: false, error: "location_required" };
 
+    // type ist via Tool-Schema required — defensive trotzdem prüfen.
+    // DB-Default ist 'rent' → ohne explizites type würde Sophie's "Kauf"-
+    // Intent verloren gehen und der Match-Hard-Filter (l.type=v_profile.type)
+    // gibt nur Miet-Listings zurück.
+    const rawType = String(input.type ?? "").trim().toLowerCase();
+    if (rawType !== "rent" && rawType !== "sale") {
+      return {
+        ok: false,
+        error: "type_required",
+        data: {
+          message:
+            "Bevor ich die Suche anlege: möchtest du mieten oder kaufen?",
+        },
+      };
+    }
+    const type: "rent" | "sale" = rawType;
+
     const ownerKey = ctx.userId
       ? { userId: ctx.userId }
       : { anonymousId: ctx.anonymousId as string };
@@ -86,6 +103,7 @@ const handlers: Record<string, Handler> = {
     const result = await upsertSearchProfile({
       ...ownerKey,
       conversationId: ctx.conversationId ?? null,
+      type,
       location,
       budget_min: asNumber(input.budget_min),
       budget_max: asNumber(input.budget_max) ?? 0,
@@ -122,6 +140,7 @@ const handlers: Record<string, Handler> = {
     }
     // Embedding fire-and-forget — Profil ist persistiert, Soft-Match ist Best-Effort
     void embedAndStoreSearchProfile(result.id, {
+      type,
       location,
       budget_min: asNumber(input.budget_min),
       budget_max: asNumber(input.budget_max),

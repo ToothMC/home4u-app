@@ -8,6 +8,10 @@ type OwnerKey =
 
 type SearchProfileInsert = OwnerKey & {
   conversationId?: string | null;
+  /** rent (Mietsuche) | sale (Kaufsuche). DB-Default ist 'rent' — wenn
+   *  Sophie type='sale' meldet, muss dieser Wert hier ankommen, sonst
+   *  matched die RPC nur Miet-Listings (Hard-Filter). */
+  type?: "rent" | "sale";
   location: string;
   budget_min?: number;
   budget_max?: number;
@@ -51,7 +55,10 @@ export async function upsertSearchProfile(
     existingId = existing?.id ?? null;
   }
 
-  const payload = {
+  // type: nur ins Payload, wenn explizit gesetzt. Bei UPDATE bewahrt das den
+  // bestehenden Wert; bei INSERT greift der DB-Default 'rent' falls fehlt.
+  // Sophie ist via Tool-Schema verpflichtet, type zu liefern — aber Robustheit.
+  const payload: Record<string, unknown> = {
     user_id: input.userId ?? null,
     anonymous_id: input.userId ? null : (input.anonymousId ?? null),
     conversation_id: input.conversationId ?? null,
@@ -65,6 +72,9 @@ export async function upsertSearchProfile(
     pets: input.pets ?? null,
     free_text: input.free_text ?? null,
   };
+  if (input.type === "rent" || input.type === "sale") {
+    payload.type = input.type;
+  }
 
   if (existingId) {
     const { data, error } = await supabase
@@ -156,6 +166,7 @@ export async function updateSearchProfileField(
   value: unknown
 ): Promise<boolean> {
   const ALLOWED = new Set([
+    "type",
     "location",
     "budget_min",
     "budget_max",
@@ -167,6 +178,7 @@ export async function updateSearchProfileField(
     "free_text",
   ]);
   if (!ALLOWED.has(field)) return false;
+  if (field === "type" && value !== "rent" && value !== "sale") return false;
 
   const supabase = createSupabaseServiceClient();
   if (!supabase) return false;

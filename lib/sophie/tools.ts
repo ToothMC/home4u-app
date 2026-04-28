@@ -25,10 +25,16 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
   {
     name: "create_search_profile",
     description:
-      "Legt ein neues Suchprofil für einen Wohnungssuchenden an, sobald Lage und Budget feststehen. Andere Felder dürfen leer bleiben und später per update_search_profile ergänzt werden.",
+      "Legt ein neues Suchprofil für einen Wohnungssuchenden an, sobald Lage und Budget feststehen. Andere Felder dürfen leer bleiben und später per update_search_profile ergänzt werden. WICHTIG: type muss aus dem Nutzer-Intent abgeleitet werden — wenn unklar, vor dem Tool-Call nachfragen.",
     input_schema: {
       type: "object",
       properties: {
+        type: {
+          type: "string",
+          enum: ["rent", "sale"],
+          description:
+            "Mietsuche oder Kaufsuche. 'rent' bei Miete/Wohnung mieten/Apartment, 'sale' bei Kaufen/Erwerben/Investition. Pflichtfeld — bei Unklarheit nachfragen statt raten.",
+        },
         location: {
           type: "string",
           description:
@@ -66,7 +72,7 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
           description: "Haustiere im Haushalt — true/false",
         },
       },
-      required: ["location", "budget_max"],
+      required: ["type", "location", "budget_max"],
       additionalProperties: false,
     },
   },
@@ -80,6 +86,7 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
         field: {
           type: "string",
           enum: [
+            "type",
             "location",
             "budget_min",
             "budget_max",
