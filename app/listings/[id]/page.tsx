@@ -15,6 +15,8 @@ import { MarketPriceBadge } from "@/components/listing-public/MarketPriceBadge";
 import type { MarketData } from "@/components/listing-public/MarketPriceBlock";
 import { ScamCheckBlock } from "@/components/scam-shield/ScamCheckBlock";
 import { RequestVisitButton } from "@/components/listing-public/RequestVisitButton";
+import { SourceBadge, SourceCTA } from "@/components/listing-public/SourceBadge";
+import { isBridgeSource } from "@/lib/listings/source";
 import { loadPublicListing } from "@/lib/repo/public-listing";
 
 export const dynamic = "force-dynamic";
@@ -103,6 +105,9 @@ export default async function PublicListingPage({
         {/* Main column */}
         <div className="space-y-6 min-w-0">
           <div>
+            <div className="mb-2">
+              <SourceBadge source={listing.source} />
+            </div>
             <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
               {listing.title ??
                 fallbackTitle(
@@ -162,6 +167,8 @@ export default async function PublicListingPage({
               priceTitle={priceTitle}
               listingId={listing.id}
               marketData={marketData}
+              source={listing.source}
+              externalId={listing.external_id}
             />
             <ScamCheckBlock
               scamScore={listing.scam_score}
@@ -194,6 +201,8 @@ export default async function PublicListingPage({
               priceTitle={priceTitle}
               listingId={listing.id}
               marketData={marketData}
+              source={listing.source}
+              externalId={listing.external_id}
             />
             <ScamCheckBlock
               scamScore={listing.scam_score}
@@ -222,13 +231,18 @@ function PriceBox({
   priceTitle,
   listingId,
   marketData,
+  source,
+  externalId,
 }: {
   formattedPrice: string;
   priceLabel: string;
   priceTitle: string;
   listingId: string;
   marketData: MarketData | null;
+  source: string | null;
+  externalId: string | null;
 }) {
+  const bridge = isBridgeSource(source);
   return (
     <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
@@ -247,7 +261,17 @@ function PriceBox({
           <MarketPriceBadge data={marketData} />
         )}
       </div>
-      <RequestVisitButton listingId={listingId} full />
+      {bridge ? (
+        <>
+          <SourceCTA source={source} externalId={externalId} full />
+          <p className="text-[11px] text-[var(--muted-foreground)] leading-relaxed">
+            Dieses Inserat ist bei Home4U indexiert — der Anbieter ist nicht direkt
+            auf der Plattform. Klick führt zur Original-Quelle.
+          </p>
+        </>
+      ) : (
+        <RequestVisitButton listingId={listingId} full />
+      )}
     </section>
   );
 }

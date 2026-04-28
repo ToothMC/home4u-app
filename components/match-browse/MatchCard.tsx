@@ -15,6 +15,11 @@ import { verdictFromScore } from "@/components/scam-shield/ScoreLight";
 import { cn } from "@/lib/utils";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import type { MarketPosition } from "@/lib/repo/listings";
+import {
+  isPlatformSource,
+  isBridgeSource,
+  sourceLabel,
+} from "@/lib/listings/source";
 
 // Vertikaler Scroll-Indicator rechts vom Bild — die Bilder werden vertikal
 // gewischt (snap-y), darum vertikale Pagination, nicht horizontal.
@@ -81,6 +86,10 @@ export type MatchCardData = {
   size_sqm: number | null;
   media: string[] | null;
   score: number;
+  /** Quelle des Inserats — bestimmt die Kontakt-CTAs auf der Detail-
+   *  Seite (Bridge → externer Link, Platform → Direkt-Kontakt) und
+   *  taucht als Trust-Indikator auf der Karte auf. */
+  source?: string | null;
   /** Migration 0038: Anzahl Listings mit identischem Cover in derselben
    *  City/Type/Property-Type-Gruppe. Wenn ≥2 → Karte zeigt einen Hinweis
    *  „+N weitere ähnliche". Vermutete Re-Listings vom selben Broker. */
@@ -440,6 +449,22 @@ export function MatchCard({
                     ? `${data.location_district}, ${data.location_city}`
                     : data.location_city}
                 </div>
+                {data.source && (
+                  <div
+                    className={cn(
+                      "mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none",
+                      isPlatformSource(data.source)
+                        ? "bg-emerald-500/90 text-white"
+                        : isBridgeSource(data.source)
+                          ? "bg-white/85 text-amber-900"
+                          : "bg-white/70 text-black/70"
+                    )}
+                  >
+                    {isPlatformSource(data.source)
+                      ? "Direkt auf Home4U"
+                      : `Quelle: ${sourceLabel(data.source)}`}
+                  </div>
+                )}
               </div>
               <div className="shrink-0 flex flex-col items-end gap-1">
                 <MarketPill position={data.marketPosition ?? null} />

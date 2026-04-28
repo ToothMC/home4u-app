@@ -59,7 +59,7 @@ export default async function OwnerRequestDetailPage({
        listings!inner (
          id, type, location_city, location_district, price, currency,
          rooms, size_sqm, media, contact_channel, owner_user_id,
-         scam_score, scam_flags, market_position
+         scam_score, scam_flags, market_position, source
        )`
     )
     .eq("id", id)
@@ -84,6 +84,7 @@ export default async function OwnerRequestDetailPage({
     scam_score: number | null;
     scam_flags: string[] | null;
     market_position: string | null;
+    source: string | null;
   };
 
   // Auth: nur der Listing-Owner darf die Detail-Page sehen
@@ -133,6 +134,7 @@ export default async function OwnerRequestDetailPage({
     scamFlags: listing.scam_flags,
     marketPosition:
       (listing.market_position as MatchCardData["marketPosition"]) ?? null,
+    source: listing.source,
   };
 
   const budgetLabel = formatBudget(profile.budget_min, profile.budget_max);

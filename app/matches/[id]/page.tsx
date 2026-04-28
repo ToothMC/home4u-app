@@ -59,7 +59,7 @@ export default async function MatchDetailPage({
        listings!inner (
          id, type, location_city, location_district, price, currency,
          rooms, size_sqm, media, status, contact_channel, owner_user_id,
-         scam_score, scam_flags, market_position
+         scam_score, scam_flags, market_position, source
        )`
     )
     .eq("id", id)
@@ -97,6 +97,7 @@ export default async function MatchDetailPage({
     scam_score: number | null;
     scam_flags: string[] | null;
     market_position: string | null;
+    source: string | null;
   };
   const status = deriveStatus(match);
 
@@ -128,6 +129,7 @@ export default async function MatchDetailPage({
     scamFlags: listing.scam_flags,
     marketPosition:
       (listing.market_position as MatchCardData["marketPosition"]) ?? null,
+    source: listing.source,
   };
 
   return (
