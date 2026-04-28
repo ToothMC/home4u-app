@@ -47,6 +47,11 @@ const BodySchema = z.object({
 
 const MAX_TOOL_ROUNDS = 4;
 
+/** Anon-User dürfen 5 User-Turns mit Sophie reden (ohne Tool-Use), danach
+ *  Soft-Wall: Login nötig. Schützt KI-Kosten + macht den Account-Mehrwert
+ *  sichtbar (Profile speichern, Notifications, Sophie-Outreach). */
+const ANON_MAX_USER_TURNS = 5;
+
 type AnthropicMessage = Anthropic.Messages.MessageParam;
 
 export async function POST(req: NextRequest) {
@@ -73,6 +78,9 @@ export async function POST(req: NextRequest) {
 
   const session = await getOrCreateAnonymousSession();
   const authUser = await getAuthUser();
+  const isAnon = !authUser;
+  const userTurnCount = body.messages.filter((m) => m.role === "user").length;
+  const anonOverLimit = isAnon && userTurnCount > ANON_MAX_USER_TURNS;
 
   // Conversation: weiterführen oder neu anlegen
   let conversationId = body.conversationId;
@@ -114,6 +122,20 @@ export async function POST(req: NextRequest) {
         send({ type: "conversation", id: conversationId });
       }
 
+      // Soft-Wall: anon ist über das Turn-Limit → Login einfordern
+      if (anonOverLimit) {
+        const wallText =
+          "Damit ich dir wirklich helfen kann — Suchprofil speichern, Matches finden und dich bei neuen Treffern benachrichtigen — log dich kurz ein. Geht in 30 Sekunden per Magic-Link.";
+        send({ type: "text", delta: wallText });
+        send({
+          type: "auth_wall",
+          reason: "anon_turn_limit",
+          message: wallText,
+        });
+        controller.close();
+        return;
+      }
+
       const conversation: AnthropicMessage[] = body.messages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -142,6 +164,16 @@ export async function POST(req: NextRequest) {
         text: `<user_role>${roleTag}</user_role>\nLeite davon ab, welche Tools du nutzen darfst. Bei 'unknown' oder '*_intent_anonymous' setze die Rolle via set_user_role (nur für eingeloggte Nutzer persistent).`,
       });
 
+      if (isAnon) {
+        // Anon hat NULL Tools (s.u. tools: []). Sophie muss wissen, dass
+        // sie nichts speichern kann, sondern nur beraten. Spätestens nach
+        // dem 5. User-Turn greift die Soft-Wall.
+        systemBlocks.push({
+          type: "text",
+          text: `<anon_mode>true</anon_mode>\nDer Nutzer ist NICHT eingeloggt. Du hast keine Tools — du kannst weder Suchprofile noch Inserate anlegen, keine Matches abrufen, keine Rolle setzen. Dein Job ist:\n1. Beraten und Fragen stellen wie sonst.\n2. Wenn du normalerweise ein Tool nutzen würdest, sag stattdessen kurz: "Wenn du dich anmeldest (geht per Magic-Link in 30 Sekunden), speichere ich das für dich und melde dich, sobald ein passender Treffer reinkommt." \n3. Halte die Antworten knapper als sonst — der User soll früh den Login-Mehrwert sehen, nicht endlos anonym chatten.\nNach 5 User-Turns wird der Login automatisch eingefordert (Server-Soft-Wall).`,
+        });
+      }
+
       if (body.region) {
         systemBlocks.push({
           type: "text",
@@ -164,11 +196,14 @@ export async function POST(req: NextRequest) {
       try {
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           const startedAt = Date.now();
+          // Anon-Mode: kein Tool-Use erlaubt — Sophie kann chatten, aber
+          // nichts Persistentes anlegen (Profile, Listings, Matches). Login
+          // bringt den vollen Funktionsumfang.
           const response = anthropic.messages.stream({
             model: MODEL_SONNET,
             max_tokens: 1024,
             system: systemBlocks,
-            tools: SOPHIE_TOOLS,
+            tools: isAnon ? [] : SOPHIE_TOOLS,
             messages: conversation,
             metadata: { user_id: `prompt_version=${SOPHIE_PROMPT_VERSION}` },
           });

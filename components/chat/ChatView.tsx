@@ -16,6 +16,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AuthMenu } from "@/components/auth/AuthMenu";
+import { SignInDialog } from "@/components/auth/SignInDialog";
 import { MediaUploader, type AttachedMedia } from "@/components/chat/MediaUploader";
 import type { Region } from "@/lib/regions";
 
@@ -65,6 +66,10 @@ export function ChatView({
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [attached, setAttached] = useState<AttachedMedia[]>([]);
+  // Server-Soft-Wall: nach 5 anonymen User-Turns sendet die API ein
+  // auth_wall-Event und schliesst den Stream. Wir öffnen dann den
+  // SignInDialog.
+  const [signInOpen, setSignInOpen] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   // Letzte Conversation des Users/der Session beim Mount laden.
@@ -201,6 +206,11 @@ export function ChatView({
                 error: typeof evt.error === "string" ? evt.error : undefined,
               };
             }
+          } else if (evt.type === "auth_wall") {
+            // Server hat den Anon-Turn-Limit überschritten. Wir lassen
+            // den vorhin gestreamten wallText als reguläre Sophie-
+            // Antwort stehen und öffnen zusätzlich den SignInDialog.
+            setSignInOpen(true);
           } else if (evt.type === "error") {
             throw new Error(String(evt.message ?? "stream_error"));
           }
@@ -328,6 +338,12 @@ export function ChatView({
           </div>
         </div>
       </form>
+
+      <SignInDialog
+        open={signInOpen}
+        onOpenChange={setSignInOpen}
+        onSignedIn={() => setSignInOpen(false)}
+      />
     </div>
   );
 }
