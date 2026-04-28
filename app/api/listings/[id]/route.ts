@@ -119,12 +119,38 @@ export async function PATCH(
     return Response.json({ error: owner.error }, { status: owner.status });
   }
 
-  const { data, error } = await owner.supabase
-    .from("listings")
-    .update({ ...parsed.data, updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .select("id, location_address, location_district, location_city, lat, lng")
-    .single();
+  // Media als Sonderfall: über RPC, damit listing_photos synchron bleibt
+  // (Migration 0040). Sonst sieht der Public-View neue Uploads/Reorder nicht.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { media: mediaPatch, ...nonMediaPatch } = parsed.data;
+  if (mediaPatch !== undefined) {
+    const { error: mediaErr } = await owner.supabase.rpc("set_listing_media", {
+      p_listing_id: id,
+      p_media: mediaPatch,
+    });
+    if (mediaErr) {
+      console.error("[listings/PATCH] media rpc failed", mediaErr);
+      return Response.json(
+        { error: "update_failed", detail: mediaErr.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  // Restliche Felder via klassischem update — leerer Patch wird übersprungen.
+  const hasNonMedia = Object.keys(nonMediaPatch).length > 0;
+  const { data, error } = hasNonMedia
+    ? await owner.supabase
+        .from("listings")
+        .update({ ...nonMediaPatch, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select("id, location_address, location_district, location_city, lat, lng")
+        .single()
+    : await owner.supabase
+        .from("listings")
+        .select("id, location_address, location_district, location_city, lat, lng")
+        .eq("id", id)
+        .single();
 
   if (error || !data) {
     console.error("[listings/PATCH] update failed", error);

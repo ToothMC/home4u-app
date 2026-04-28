@@ -166,6 +166,10 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
   const persistTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistMediaRef = React.useRef<string[] | null>(null);
 
+  // Persistierung via atomarem RPC set_listing_media (Migration 0040).
+  // Synchronisiert listings.media[] UND listing_photos (Position + Existenz) in
+  // einem Roundtrip — sonst war Editor-Reorder/Delete im Public-View unsichtbar,
+  // weil public-listing.ts bevorzugt aus listing_photos liest.
   function schedulePersistMedia(next: string[]) {
     persistMediaRef.current = next;
     if (persistTimer.current) clearTimeout(persistTimer.current);
@@ -174,11 +178,12 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
       if (!toSave) return;
       persistMediaRef.current = null;
       const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase
-        .from("listings")
-        .update({ media: toSave })
-        .eq("id", initial.id);
+      const { error } = await supabase.rpc("set_listing_media", {
+        p_listing_id: initial.id,
+        p_media: toSave,
+      });
       if (error) setError(error.message);
+      else router.refresh(); // Public-Vorschau nachzieht (Server-Comp re-rendert)
     }, 400);
   }
 
@@ -216,12 +221,15 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
       next = prev.filter((m) => m !== url);
       return next;
     });
-    const { error } = await supabase
-      .from("listings")
-      .update({ media: next })
-      .eq("id", initial.id);
+    // RPC statt direktem update — räumt auch listing_photos auf, sonst
+    // bleibt das gelöschte Bild im Public-View sichtbar.
+    const { error } = await supabase.rpc("set_listing_media", {
+      p_listing_id: initial.id,
+      p_media: next,
+    });
     setBusy(null);
     if (error) setError(error.message);
+    else router.refresh();
   }
 
   async function save() {

@@ -42,10 +42,13 @@ export function ListingCard({
     setBusy("append");
     const next = Array.from(new Set([...media, m.url]));
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase
-      .from("listings")
-      .update({ media: next })
-      .eq("id", listing.id);
+    // RPC statt direktem update — synchronisiert listing_photos atomar mit
+    // (Migration 0040). Sonst sieht der Public-View die neuen Uploads nicht,
+    // weil er bevorzugt aus listing_photos liest.
+    const { error } = await supabase.rpc("set_listing_media", {
+      p_listing_id: listing.id,
+      p_media: next,
+    });
     setBusy(null);
     if (error) {
       setError(error.message);
@@ -59,10 +62,10 @@ export function ListingCard({
     setBusy(url);
     const next = media.filter((m) => m !== url);
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase
-      .from("listings")
-      .update({ media: next })
-      .eq("id", listing.id);
+    const { error } = await supabase.rpc("set_listing_media", {
+      p_listing_id: listing.id,
+      p_media: next,
+    });
     setBusy(null);
     if (error) {
       setError(error.message);
