@@ -48,13 +48,14 @@ export function SwipeToDeleteRow({ endpoint, what, children }: Props) {
   }, [open, close]);
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    // Nur Touch zieht — Maus-Drag würde sonst Text-Selektion stören.
+    // Nur Touch zieht. KEIN setPointerCapture — capture leitet pointerup
+    // auf das Drag-Element um und schluckt damit Click-Events auf inneren
+    // Buttons (Trash-Icons).
     if (e.pointerType !== "touch") return;
     startXRef.current = e.clientX;
     startOffsetRef.current = offset;
     draggingRef.current = false;
     setTransition(false);
-    e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
@@ -70,14 +71,11 @@ export function SwipeToDeleteRow({ endpoint, what, children }: Props) {
     setOffset(next);
   }
 
-  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+  function onPointerUp() {
     if (startXRef.current == null) return;
     const dragged = draggingRef.current;
     startXRef.current = null;
     setTransition(true);
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
     if (!dragged) return;
     const shouldOpen = offset <= -OPEN_THRESHOLD;
     setOffset(shouldOpen ? -OPEN_OFFSET : 0);
