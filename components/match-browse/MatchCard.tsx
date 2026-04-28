@@ -12,14 +12,41 @@ import {
 } from "lucide-react";
 
 import { ScamCheckBadge } from "@/components/scam-shield/ScamCheckBadge";
-
-// Höhe des "Card-Stack-Peek-Chip" — Vorschau-Streifen der nächsten Karte,
-// der vom unteren Rand in die aktive Karte hineinragt. Wird ÜBER dem
-// Preis-Overlay positioniert, damit beide klar lesbar sind.
-const PEEK_CHIP_HEIGHT = 32; // px
-const PEEK_CHIP_INSET = 12; // Abstand links/rechts vom Rand
-const PEEK_CHIP_BOTTOM = 96; // Abstand vom Image-Area-Boden (über Preis-Overlay)
 import { cn } from "@/lib/utils";
+
+// Dot-Pagination am unteren Bildrand (Instagram-Stil). Bei vielen Bildern
+// (>MAX_DOTS) wird ein Sliding-Window um den aktiven Index gerendert,
+// damit die Punktreihe nicht über die Kartenbreite hinausläuft. Edge-Dots
+// werden kleiner gerendert, um "es gibt noch mehr"-Hinweis zu geben.
+const MAX_DOTS = 9;
+
+type DotInfo = { active: boolean; size: "lg" | "md" | "sm" };
+
+function dotWindow(active: number, total: number, max: number): DotInfo[] {
+  if (total <= max) {
+    return Array.from({ length: total }, (_, i) => ({
+      active: i === active,
+      size: "lg" as const,
+    }));
+  }
+  // Window um active zentrieren, an den Enden klemmen
+  const half = Math.floor(max / 2);
+  let start = Math.max(0, active - half);
+  let end = start + max;
+  if (end > total) {
+    end = total;
+    start = end - max;
+  }
+  const out: DotInfo[] = [];
+  for (let i = start; i < end; i++) {
+    const distFromEdge = Math.min(i - start, end - 1 - i);
+    let size: DotInfo["size"] = "lg";
+    if (distFromEdge === 0 && (i !== 0 && i !== total - 1)) size = "sm";
+    else if (distFromEdge === 1 && (i !== 1 && i !== total - 2)) size = "md";
+    out.push({ active: i === active, size });
+  }
+  return out;
+}
 
 export type MatchCardData = {
   id: string;
@@ -393,31 +420,23 @@ export function MatchCard({
             </div>
           </div>
 
-          {/* Card-Stack-Peek-Chip: nächstes Bild ragt mit gerundeter Oberkante +
-              3D-Schlagschatten von unten in die aktive Karte hinein. Nur unten
-              — oberer Chip war zu unruhig (Counter + Score-Badge konkurrieren). */}
-          {total > 1 && imgIdx < total - 1 && !brokenIdx.has(imgIdx + 1) && (
-            <div
-              aria-hidden
-              className="absolute z-10 pointer-events-none rounded-t-2xl overflow-hidden ring-1 ring-white/20"
-              style={{
-                bottom: PEEK_CHIP_BOTTOM,
-                left: PEEK_CHIP_INSET,
-                right: PEEK_CHIP_INSET,
-                height: PEEK_CHIP_HEIGHT,
-                boxShadow:
-                  "0 -8px 18px -4px rgba(0,0,0,0.45), 0 -2px 6px rgba(0,0,0,0.25)",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={images[imgIdx + 1]}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                draggable={false}
-              />
-              {/* Verlauf aufwärts: simuliert "von unten hereinragende" Karte */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/10 to-transparent" />
+          {/* Dot-Pagination am unteren Bildrand — über dem Preis-Overlay, im
+              hellen Bereich des Gradients gut lesbar. Bei vielen Bildern
+              wird ein Sliding-Window mit kleineren Edge-Dots gezeigt. */}
+          {total > 1 && (
+            <div className="absolute bottom-[88px] inset-x-0 flex justify-center pointer-events-none">
+              <div className="flex items-center gap-1.5 rounded-full bg-black/30 backdrop-blur px-2 py-1">
+                {dotWindow(imgIdx, total, MAX_DOTS).map((d, i) => (
+                  <span
+                    key={`dot-${i}`}
+                    className={cn(
+                      "rounded-full transition-all",
+                      d.size === "lg" ? "size-1.5" : d.size === "md" ? "size-[5px]" : "size-[3px]",
+                      d.active ? "bg-white" : "bg-white/55",
+                    )}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>
