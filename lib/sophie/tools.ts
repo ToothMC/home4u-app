@@ -178,7 +178,7 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
       properties: {
         limit: {
           type: "integer",
-          description: "Maximale Anzahl an Vorschlägen (Default 3, max 10)",
+          description: "Maximale Anzahl an Vorschlägen (Default 50, max 50). Normalerweise weglassen — die /matches-Page zeigt sowieso bis zu 50, und Sophie sollte nur die Gesamtzahl nennen statt Listings aufzuzählen.",
         },
       },
       additionalProperties: false,

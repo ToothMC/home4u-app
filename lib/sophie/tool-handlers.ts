@@ -293,7 +293,10 @@ const handlers: Record<string, Handler> = {
     if (!ctx.anonymousId && !ctx.userId) {
       return { ok: false, error: "missing_session" };
     }
-    const limit = Math.min(10, Math.max(1, Number(input.limit) || 3));
+    // Default + Cap: aligned mit /matches-Page (50 max). Sophie nennt
+    // typischerweise nur die Trefferzahl + Hinweis auf /matches, also reicht
+    // ein höherer Default — sonst sagt sie "3 Treffer" während die Page 50 zeigt.
+    const limit = Math.min(50, Math.max(1, Number(input.limit) || 50));
     const matches = await findMatchesForSession(
       { anonymousId: ctx.anonymousId, userId: ctx.userId },
       limit
