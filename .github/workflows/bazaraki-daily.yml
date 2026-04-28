@@ -17,7 +17,7 @@ on:
       max_pages:
         description: "Max Pages pro City+Type"
         required: false
-        default: "10"
+        default: "30"
       dry_run:
         description: "Nur loggen, kein DB-Write"
         type: boolean
@@ -65,7 +65,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           CITIES: ${{ inputs.cities }}
           TYPES: ${{ inputs.types }}
-          MAX_PAGES_PER_CITY: ${{ inputs.max_pages || '10' }}
+          MAX_PAGES_PER_CITY: ${{ inputs.max_pages || '30' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           SKIP_DETAILS: ${{ inputs.skip_details && '1' || '' }}
         run: python -m src.main

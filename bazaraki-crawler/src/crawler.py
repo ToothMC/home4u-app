@@ -20,6 +20,7 @@ from .config import (
     USER_AGENT,
     CityConfig,
     build_listing_url,
+    home4u_property_type,
 )
 
 log = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ class RawListing:
     image_url: str | None   # Cover-Bild (Listenseite)
     title: str | None       # für Debug-Logs
     detail_url: str         # für Detail-Drilling
+    property_type: str | None  # Home4U-Taxonomie: apartment|house|room|plot
 
     # Detail-Felder (None solange noch nicht gedrillt)
     district: str | None = None
@@ -262,8 +264,9 @@ def _navigate_detail(page: Page, url: str) -> None:
     )
 
 
-def _extract_list_page(page: Page, city: str, listing_type: str) -> list[RawListing]:
+def _extract_list_page(page: Page, city: str, listing_type: str, subtype: str) -> list[RawListing]:
     raw = page.evaluate(LIST_EXTRACT_JS)
+    property_type = home4u_property_type(subtype)
     out: list[RawListing] = []
     for entry in raw:
         if not entry["price"] or not entry["advId"]:
@@ -278,6 +281,7 @@ def _extract_list_page(page: Page, city: str, listing_type: str) -> list[RawList
                 image_url=entry["img"] if entry["img"] and "bazaraki" in entry["img"] else None,
                 title=entry["name"],
                 detail_url=entry["url"],
+                property_type=property_type,
             )
         )
     return out
@@ -376,7 +380,7 @@ def crawl_city(
         page = browser.new_page(user_agent=USER_AGENT)
         try:
             _navigate_list(page, url)
-            items = _extract_list_page(page, city.display, listing_type)
+            items = _extract_list_page(page, city.display, listing_type, subtype)
         except Exception as e:
             log.warning("Page %s/%s/%s p%d failed: %s", city.display, listing_type, subtype, page_num, e)
             page.close()

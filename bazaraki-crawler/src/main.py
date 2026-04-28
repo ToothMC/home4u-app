@@ -9,7 +9,7 @@ from collections import defaultdict
 
 from dotenv import load_dotenv
 
-from .config import PROPERTY_SUBTYPES, RATE_LIMIT_SECONDS, selected_cities, selected_types
+from .config import PROPERTY_SUBTYPES_BY_TYPE, RATE_LIMIT_SECONDS, selected_cities, selected_types
 from .crawler import RawListing, crawl_city, crawl_detail, fetch_disallowed_paths, with_browser
 from .supabase_writer import mark_stale_old_listings, upsert_listings
 
@@ -35,7 +35,12 @@ def main() -> int:
 
     cities = selected_cities()
     types = selected_types()
-    log.info("Crawl-Plan: cities=%s, types=%s, subtypes=%s", [c.display for c in cities], types, PROPERTY_SUBTYPES)
+    log.info(
+        "Crawl-Plan: cities=%s, types=%s, subtypes=%s",
+        [c.display for c in cities],
+        types,
+        {t: PROPERTY_SUBTYPES_BY_TYPE[t] for t in types},
+    )
 
     log.info("Lade robots.txt …")
     disallowed = fetch_disallowed_paths()
@@ -52,7 +57,7 @@ def main() -> int:
         try:
             for city in cities:
                 for listing_type in types:
-                    for subtype in PROPERTY_SUBTYPES:
+                    for subtype in PROPERTY_SUBTYPES_BY_TYPE[listing_type]:
                         items = list(crawl_city(browser, city, listing_type, subtype, disallowed))
                         per_city_counts[(city.display, listing_type)] += len(items)
                         all_items.extend(items)

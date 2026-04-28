@@ -54,6 +54,7 @@ def _to_row(item: RawListing) -> dict:
         "energy_class": item.energy_class,
         "furnishing": item.furnishing,
         "pets_allowed": item.pets_allowed,
+        "property_type": item.property_type,
         # Spec §2.2: confidence + extracted_data
         "confidence": item.confidence,
         "extracted_data": item.extracted_data,
