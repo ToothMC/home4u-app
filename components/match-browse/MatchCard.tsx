@@ -80,6 +80,10 @@ export type MatchCardData = {
   size_sqm: number | null;
   media: string[] | null;
   score: number;
+  /** Migration 0038: Anzahl Listings mit identischem Cover in derselben
+   *  City/Type/Property-Type-Gruppe. Wenn ≥2 → Karte zeigt einen Hinweis
+   *  „+N weitere ähnliche". Vermutete Re-Listings vom selben Broker. */
+  clusterSize?: number;
 };
 
 export type SwipeDirection = "like" | "skip";
@@ -341,6 +345,14 @@ export function MatchCard({
           {data.score >= 0.6 && (
             <div className="absolute top-3 right-12 rounded-full bg-white/90 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-emerald-700">
               {Math.round(data.score * 100)} % Match
+            </div>
+          )}
+
+          {/* Cluster-Hinweis: identisches Cover-Bild kommt mehrfach vor —
+              Re-Listing oder Broker-Branded-Default. UI macht's transparent. */}
+          {data.clusterSize && data.clusterSize > 1 && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-amber-500/90 backdrop-blur px-2.5 py-0.5 text-[10px] font-medium text-white shadow">
+              +{data.clusterSize - 1} ähnliche
             </div>
           )}
 

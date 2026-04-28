@@ -118,6 +118,11 @@ export type ListingMatch = Listing & {
   detailUrl?: string;
   /** Nur für Transient: Title aus der Listing-Karte. */
   title?: string | null;
+  /** Indexer-Spec v3 / Migration 0038: Anzahl Listings im Cover-Cluster.
+   *  1 = unique, ≥2 = visuelle Duplikate vorhanden (Re-Listings durch
+   *  denselben Broker oder Branded-Default-Cover). UI rendert „+N weitere"
+   *  Hinweis. Identifikation per (media[1], city, type, property_type). */
+  clusterSize?: number;
 };
 
 /**
@@ -164,6 +169,10 @@ export async function findMatchesForSession(
     marketPosition:
       typeof row.market_position === "string"
         ? (row.market_position as MarketPosition)
+        : undefined,
+    clusterSize:
+      typeof row.cluster_size === "number" && row.cluster_size > 1
+        ? row.cluster_size
         : undefined,
   }));
 
