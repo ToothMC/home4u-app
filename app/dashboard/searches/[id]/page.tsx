@@ -6,6 +6,7 @@ import {
   SearchEditor,
   type EditableSearchProfile,
 } from "@/components/dashboard/SearchEditor";
+import { NotifyToggle } from "@/components/dashboard/NotifyToggle";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { getOrCreateAnonymousSession } from "@/lib/session";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
@@ -28,7 +29,8 @@ export default async function SearchDetailPage({
     .from("search_profiles")
     .select(
       `id, location, type, budget_min, budget_max, rooms, move_in_date,
-       household, lifestyle_tags, pets, free_text, active, user_id, anonymous_id`
+       household, lifestyle_tags, pets, free_text, active, user_id, anonymous_id,
+       notify_new_matches`
     )
     .eq("id", id)
     .maybeSingle();
@@ -82,6 +84,15 @@ export default async function SearchDetailPage({
         </div>
 
         <SearchEditor initial={profile} />
+
+        {ownedByUser && (
+          <div className="mt-6">
+            <NotifyToggle
+              searchId={profile.id}
+              initial={data.notify_new_matches ?? true}
+            />
+          </div>
+        )}
       </section>
     </main>
   );
