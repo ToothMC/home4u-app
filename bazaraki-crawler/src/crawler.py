@@ -117,25 +117,73 @@ def parse_rooms_from_slug(url: str) -> int | None:
 
 
 # ---------- Playwright-Crawl: Listenseite ----------
-
+#
+# Bazaraki rendert je nach Page unterschiedliche Layouts:
+#   - p1 (organisch + promoted gemischt): hat sowohl `li[itemtype*="Product"]`
+#     als auch `.advert.js-item-listing`. Promoted-only Cards sind nur als
+#     `.advert` markiert — der frühere Selektor verlor sie (15 von 60).
+#   - p2+: hat NUR `.advert.js-item-listing`, kein schema.org-Markup.
+# Lösung: einheitlich auf `.advert.js-item-listing` selecten, beide Layouts
+# decken price/name aus den selben Selektoren ab (mit schema.org-Fallback).
 LIST_EXTRACT_JS = r"""
 () => {
-  const cards = Array.from(document.querySelectorAll('li[itemtype*="Product"]'));
+  const cards = Array.from(document.querySelectorAll('.advert.js-item-listing'));
   return cards.map(card => {
+    // External-ID: data-id ist sauber; Fallback URL-Regex.
     const link = card.querySelector('a[href*="/adv/"]');
     if (!link) return null;
-    const url = link.href;
-    const advId = (url.match(/\/adv\/(\d+)/) || [])[1];
+    let advId = card.dataset?.id || null;
+    if (!advId) {
+      const m = (link.pathname || '').match(/\/adv\/(\d+)/);
+      advId = m ? m[1] : null;
+    }
     if (!advId) return null;
-    const priceEl = card.querySelector('[itemprop="price"]');
-    const priceContent = priceEl?.getAttribute('content');
-    const price = priceContent ? parseFloat(priceContent) : null;
-    const nameEl = card.querySelector('[itemprop="name"]');
-    const name = nameEl?.getAttribute('content') || nameEl?.textContent?.trim();
-    const imgEl = card.querySelector('img[src*="bazaraki"], img[data-src*="bazaraki"]');
-    const img = imgEl?.src || imgEl?.getAttribute('data-src') || null;
+
+    // Sauberer URL ohne ?p=N Pagination-Suffix
+    const url = new URL(link.pathname, location.origin).href;
+
+    // Preis: schema.org [itemprop=price][content] (p1-Layout) → numerisch.
+    // Fallback Text aus .advert__content-price (p2+-Layout, "€4.800" / "€680").
+    let price = null;
+    const ipEl = card.querySelector('[itemprop="price"][content]');
+    if (ipEl) {
+      const v = parseFloat(ipEl.getAttribute('content'));
+      if (!Number.isNaN(v)) price = v;
+    }
+    if (price == null) {
+      const txt = card.querySelector('.advert__content-price')?.innerText?.trim();
+      if (txt) {
+        // Erste Ziffern-Sequenz extrahieren — schützt vor Range "€1000 - €2000".
+        const m = txt.match(/(\d[\d.,]*)/);
+        if (m) {
+          // Bazaraki nutzt deutsches Format: . = Tausender, , = Dezimal.
+          const numeric = m[1].replace(/\./g, '').replace(',', '.');
+          const v = parseFloat(numeric);
+          if (!Number.isNaN(v)) price = v;
+        }
+      }
+    }
+
+    // Name: schema.org first, sonst .advert__content-title.
+    const name = card.querySelector('[itemprop="name"]')?.getAttribute('content')
+              || card.querySelector('[itemprop="name"]')?.textContent?.trim()
+              || card.querySelector('.advert__content-title')?.innerText?.trim()
+              || null;
+
+    // Cover-Bild (best-effort): swiper-slide[data-background] hat das echte
+    // hi-res Bild; <img> ist oft nur Placeholder. Detail-Drill liefert die
+    // volle Galerie, hier reicht ein Fallback.
+    let img = null;
+    const slideBg = card.querySelector('.swiper-slide[data-background*="bazaraki"]');
+    if (slideBg) {
+      img = slideBg.getAttribute('data-background');
+    } else {
+      const imgEl = card.querySelector('img[src*="bazaraki"], img[data-src*="bazaraki"]');
+      img = imgEl?.getAttribute('data-src') || imgEl?.src || null;
+    }
+
     return { url, advId, price, name, img };
-  }).filter(Boolean);
+  }).filter(c => c && c.price != null);
 }
 """
 
@@ -248,10 +296,44 @@ def parse_address(address: str | None) -> tuple[str | None, str | None]:
 # ---------- Navigation ----------
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
-def _navigate_list(page: Page, url: str) -> None:
+def _goto_list(page: Page, url: str) -> None:
+    """Navigation only — Retry für transiente Netzwerkfehler.
+
+    Aufgesplittet von der frühren `_navigate_list`-Funktion: das Warten auf
+    Cards ist kein transienter Fehler (sondern Pagination-Ende oder Empty),
+    also gehört es nicht in die Retry-Schleife.
+    """
     log.info("→ list %s", url)
     page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-    page.wait_for_selector('li[itemtype*="Product"]', timeout=15_000)
+
+
+def _wait_for_cards(page: Page, timeout_ms: int = 8_000) -> bool:
+    """Wartet auf Listen-Cards. False = keine Cards (Pagination-Ende oder Empty)."""
+    try:
+        page.wait_for_selector(".advert.js-item-listing", timeout=timeout_ms)
+        return True
+    except Exception:
+        return False
+
+
+def _redirected_away_from_page(page_url: str, expected_page: int) -> bool:
+    """Bazaraki redirected ?page=N hinter dem echten Ende auf die letzte Page.
+
+    Beispiel: ?page=999 → URL endet final auf ?page=49 (siehe empirische Tests
+    2026-04-28). Erkennen wir das, brechen wir die Pagination sauber ab statt
+    weitere ?page=50…N abzufragen.
+    """
+    if expected_page <= 1:
+        return False
+    qs = urllib.parse.urlparse(page_url).query
+    final_pages = urllib.parse.parse_qs(qs).get("page", [])
+    if not final_pages:
+        # Bazaraki kann auch zur ersten Page ohne ?page= zurückwerfen
+        return True
+    try:
+        return int(final_pages[0]) != expected_page
+    except ValueError:
+        return False
 
 
 @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=2, max=10))
@@ -379,13 +461,26 @@ def crawl_city(
 
         page = browser.new_page(user_agent=USER_AGENT)
         try:
-            _navigate_list(page, url)
+            try:
+                _goto_list(page, url)
+            except Exception as e:
+                log.warning("Page %s/%s/%s p%d navigate failed: %s",
+                            city.display, listing_type, subtype, page_num, e)
+                time.sleep(RATE_LIMIT_SECONDS)
+                continue
+
+            # Pagination-Ende-Detection vor dem Card-Wait — spart 8s Timeout.
+            if _redirected_away_from_page(page.url, page_num):
+                log.info("  list %s %s %s p%d: Bazaraki redirected → end of pagination",
+                         city.display, listing_type, subtype, page_num)
+                return
+
+            if not _wait_for_cards(page):
+                log.info("  list %s %s %s p%d: keine Cards gerendert → end",
+                         city.display, listing_type, subtype, page_num)
+                return
+
             items = _extract_list_page(page, city.display, listing_type, subtype)
-        except Exception as e:
-            log.warning("Page %s/%s/%s p%d failed: %s", city.display, listing_type, subtype, page_num, e)
-            page.close()
-            time.sleep(RATE_LIMIT_SECONDS)
-            continue
         finally:
             page.close()
 
