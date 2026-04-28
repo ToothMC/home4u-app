@@ -13,6 +13,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { MatchCard, type MatchCardData, type SwipeDirection } from "./MatchCard";
 
 type Status = "browsing" | "submitting" | "done";
@@ -296,6 +297,7 @@ function Toast({
   onUndo: () => void;
   onDismiss: () => void;
 }) {
+  const isDesktop = useIsDesktop();
   return (
     <div className="fixed top-4 right-4 z-50 max-w-xs rounded-xl shadow-lg bg-emerald-700 text-white p-3 flex items-start gap-2 animate-in fade-in slide-in-from-top-4">
       <Check className="size-4 mt-0.5 shrink-0" />
@@ -304,8 +306,7 @@ function Toast({
         <div className="text-xs opacity-90 flex items-center gap-2 mt-0.5">
           <Link
             href={`/listings/${listingId}`}
-            target="_blank"
-            rel="noopener noreferrer"
+            {...(isDesktop ? { target: "_blank", rel: "noopener noreferrer" } : {})}
             className="underline hover:no-underline"
           >
             Inserat ansehen

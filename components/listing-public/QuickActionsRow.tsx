@@ -10,6 +10,7 @@ import {
   SquareDashed,
 } from "lucide-react";
 import type { PublicListingData } from "./types";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 
 type Action = {
   key: string;
@@ -22,6 +23,7 @@ type Action = {
 };
 
 export function QuickActionsRow({ listing }: { listing: PublicListingData }) {
+  const isDesktop = useIsDesktop();
   const actions: Action[] = [
     {
       key: "floorplan",
@@ -101,8 +103,7 @@ export function QuickActionsRow({ listing }: { listing: PublicListingData }) {
               <a
                 key={a.key}
                 href={a.href}
-                target="_blank"
-                rel="noopener noreferrer"
+                {...(isDesktop ? { target: "_blank", rel: "noopener noreferrer" } : {})}
               >
                 {inner}
               </a>

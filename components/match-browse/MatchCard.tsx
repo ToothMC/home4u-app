@@ -13,6 +13,7 @@ import {
 
 import { verdictFromScore } from "@/components/scam-shield/ScoreLight";
 import { cn } from "@/lib/utils";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import type { MarketPosition } from "@/lib/repo/listings";
 
 // Vertikaler Scroll-Indicator rechts vom Bild — die Bilder werden vertikal
@@ -99,6 +100,7 @@ export function MatchCard({
   /** Nur die oberste Karte ist swipe-bar. */
   isTop?: boolean;
 }) {
+  const isDesktop = useIsDesktop();
   const images = data.media && data.media.length > 0 ? data.media : [];
   const total = images.length;
   const [imgIdx, setImgIdx] = React.useState(0);
@@ -515,8 +517,7 @@ export function MatchCard({
       {/* Inserat-ansehen-Link (deutlich sichtbar zwischen Bild und Facts) */}
       <Link
         href={`/listings/${data.id}`}
-        target="_blank"
-        rel="noopener noreferrer"
+        {...(isDesktop ? { target: "_blank", rel: "noopener noreferrer" } : {})}
         className="shrink-0 flex items-center justify-center gap-2 border-t bg-slate-900 hover:bg-slate-800 text-white text-base font-semibold py-3 transition-colors"
       >
         <ExternalLink className="size-5" />

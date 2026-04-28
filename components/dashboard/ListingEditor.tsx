@@ -25,6 +25,7 @@ import { PhotoDropZone } from "@/components/dashboard/PhotoDropZone";
 import { MarketHint } from "@/components/dashboard/MarketHint";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 
 export type UtilityArrangement =
   | "included"
@@ -140,6 +141,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [savedAt, setSavedAt] = React.useState<number | null>(null);
+  const isDesktop = useIsDesktop();
 
   // Hilfs-Setter: nur Diff zum Original speichern, NULL erlaubt
   const set = <K extends keyof EditableListing>(
@@ -264,8 +266,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
       {/* Vorschau-Link → so sieht es für Suchende aus */}
       <Link
         href={`/listings/${initial.id}`}
-        target="_blank"
-        rel="noopener noreferrer"
+        {...(isDesktop ? { target: "_blank", rel: "noopener noreferrer" } : {})}
         className="flex items-center justify-between rounded-xl border bg-emerald-50/60 hover:bg-emerald-50 transition-colors px-4 py-3"
       >
         <div className="flex items-center gap-2 text-sm">
