@@ -96,6 +96,14 @@ const handlers: Record<string, Handler> = {
     }
     const type: "rent" | "sale" = rawType;
 
+    // property_type optional — wenn gesetzt, harter Filter auf Listing-Type.
+    // 'plot' z.B. filtert Apartments/Häuser raus, 'apartment' filtert Plots raus.
+    const rawPT = String(input.property_type ?? "").trim().toLowerCase();
+    const property_type =
+      rawPT === "apartment" || rawPT === "house" || rawPT === "room" || rawPT === "plot"
+        ? (rawPT as "apartment" | "house" | "room" | "plot")
+        : undefined;
+
     const ownerKey = ctx.userId
       ? { userId: ctx.userId }
       : { anonymousId: ctx.anonymousId as string };
@@ -104,6 +112,7 @@ const handlers: Record<string, Handler> = {
       ...ownerKey,
       conversationId: ctx.conversationId ?? null,
       type,
+      property_type,
       location,
       budget_min: asNumber(input.budget_min),
       budget_max: asNumber(input.budget_max) ?? 0,
@@ -141,6 +150,7 @@ const handlers: Record<string, Handler> = {
     // Embedding fire-and-forget — Profil ist persistiert, Soft-Match ist Best-Effort
     void embedAndStoreSearchProfile(result.id, {
       type,
+      property_type,
       location,
       budget_min: asNumber(input.budget_min),
       budget_max: asNumber(input.budget_max),
@@ -384,7 +394,7 @@ async function refreshProfileEmbedding(ctx: ToolContext): Promise<void> {
   const { data } = await supabase
     .from("search_profiles")
     .select(
-      "id, location, budget_min, budget_max, rooms, type, household, lifestyle_tags, free_text"
+      "id, location, budget_min, budget_max, rooms, type, property_type, household, lifestyle_tags, free_text"
     )
     .eq(keyColumn, keyValue)
     .eq("active", true)
@@ -398,6 +408,7 @@ async function refreshProfileEmbedding(ctx: ToolContext): Promise<void> {
     budget_max: data.budget_max,
     rooms: data.rooms,
     type: data.type,
+    property_type: data.property_type,
     household: data.household,
     lifestyle_tags: data.lifestyle_tags,
     free_text: data.free_text,

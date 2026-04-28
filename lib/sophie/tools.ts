@@ -35,6 +35,12 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
           description:
             "Mietsuche oder Kaufsuche. 'rent' bei Miete/Wohnung mieten/Apartment, 'sale' bei Kaufen/Erwerben/Investition. Pflichtfeld — bei Unklarheit nachfragen statt raten.",
         },
+        property_type: {
+          type: "string",
+          enum: ["apartment", "house", "room", "plot"],
+          description:
+            "Art der Immobilie. apartment = Wohnung/Apartment/Studio/Penthouse, house = Haus/Villa/Townhouse/Maisonette, room = Zimmer/WG, plot = Grundstück/Bauland/Acker/Plot/Land. Weglassen wenn der User keine Präferenz angibt — dann matched alles. Setze 'plot' wenn der User Grundstück/Bauland/Land sagt — dann werden Wohnungen NICHT mehr in den Treffern gemischt.",
+        },
         location: {
           type: "string",
           description:
@@ -87,6 +93,7 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
           type: "string",
           enum: [
             "type",
+            "property_type",
             "location",
             "budget_min",
             "budget_max",

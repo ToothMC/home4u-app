@@ -6,12 +6,17 @@ type OwnerKey =
   | { userId: string; anonymousId?: string | null }
   | { userId?: null; anonymousId: string };
 
+export type PropertyType = "apartment" | "house" | "room" | "plot";
+
 type SearchProfileInsert = OwnerKey & {
   conversationId?: string | null;
   /** rent (Mietsuche) | sale (Kaufsuche). DB-Default ist 'rent' — wenn
    *  Sophie type='sale' meldet, muss dieser Wert hier ankommen, sonst
    *  matched die RPC nur Miet-Listings (Hard-Filter). */
   type?: "rent" | "sale";
+  /** Migration 0039: NULL = matched alle Property-Types (apartment+house+
+   *  plot+room). Sonst harter Filter — z.B. „nur Grundstücke" mit 'plot'. */
+  property_type?: PropertyType;
   location: string;
   budget_min?: number;
   budget_max?: number;
@@ -74,6 +79,14 @@ export async function upsertSearchProfile(
   };
   if (input.type === "rent" || input.type === "sale") {
     payload.type = input.type;
+  }
+  // property_type: NULL erlaubt (= kein Filter, alle Property-Types)
+  const VALID_PROPERTY_TYPES = ["apartment", "house", "room", "plot"] as const;
+  if (
+    input.property_type &&
+    (VALID_PROPERTY_TYPES as readonly string[]).includes(input.property_type)
+  ) {
+    payload.property_type = input.property_type;
   }
 
   if (existingId) {
@@ -167,6 +180,7 @@ export async function updateSearchProfileField(
 ): Promise<boolean> {
   const ALLOWED = new Set([
     "type",
+    "property_type",
     "location",
     "budget_min",
     "budget_max",
@@ -179,6 +193,16 @@ export async function updateSearchProfileField(
   ]);
   if (!ALLOWED.has(field)) return false;
   if (field === "type" && value !== "rent" && value !== "sale") return false;
+  if (
+    field === "property_type" &&
+    value !== null &&
+    value !== "apartment" &&
+    value !== "house" &&
+    value !== "room" &&
+    value !== "plot"
+  ) {
+    return false;
+  }
 
   const supabase = createSupabaseServiceClient();
   if (!supabase) return false;

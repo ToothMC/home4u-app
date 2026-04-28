@@ -19,6 +19,9 @@ export type SearchProfileEmbedInput = {
   budget_max?: number | null;
   rooms?: number | null;
   type?: "rent" | "sale" | null;
+  /** Migration 0039 — engt das Embedding semantisch ein, damit
+   *  „Plot in Paphos" cosine-näher bei Plot-Listings als bei Apartments liegt. */
+  property_type?: "apartment" | "house" | "room" | "plot" | null;
   household?: string | null;
   lifestyle_tags?: string[] | null;
   free_text?: string | null;
@@ -53,6 +56,12 @@ export function profileToEmbedText(p: SearchProfileEmbedInput): string {
     `Search: ${p.type === "sale" ? "Sale" : "Rental"}`,
     `Location: ${p.location}`,
   ];
+  if (p.property_type) {
+    // Capitalize: 'apartment' → 'Apartment'. Konsistent mit Listing-Format.
+    parts.push(
+      `Type: ${p.property_type[0].toUpperCase()}${p.property_type.slice(1)}`,
+    );
+  }
   if (p.rooms != null) parts.push(`Rooms: ${p.rooms}`);
   if (p.budget_max != null) {
     const min = p.budget_min ?? 0;
