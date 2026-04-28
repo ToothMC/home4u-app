@@ -5,6 +5,7 @@ import { AuthMenu } from "@/components/auth/AuthMenu";
 import { Button } from "@/components/ui/button";
 import { MatchBrowser } from "@/components/match-browse/MatchBrowser";
 import { findMatchesForSession } from "@/lib/repo/listings";
+import { loadActiveSearchProfile } from "@/lib/repo/search-profiles";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { getOrCreateAnonymousSession } from "@/lib/session";
 
@@ -14,15 +15,18 @@ export default async function MatchesPage() {
   const user = await getAuthUser();
   const session = user ? null : await getOrCreateAnonymousSession();
 
-  // Mehr Matches laden als die Karte zeigt — User soll längere Sessions
-  // browsen können ohne Re-Fetch
-  const matches = await findMatchesForSession(
-    {
-      userId: user?.id ?? null,
-      anonymousId: session?.anonymousId ?? null,
-    },
-    50
-  );
+  const ownerKey = {
+    userId: user?.id ?? null,
+    anonymousId: session?.anonymousId ?? null,
+  };
+
+  // Aktives Profil parallel laden — die ID braucht MatchBrowser, um die
+  // Skip-Liste pro Suche zu scopen (sonst persistieren Skips über neue
+  // Suchen hinweg und der User sieht "alle gesehen" sofort nach Anlage).
+  const [matches, activeProfile] = await Promise.all([
+    findMatchesForSession(ownerKey, 50),
+    loadActiveSearchProfile(ownerKey),
+  ]);
 
   // Wenn kein Suchprofil existiert → zurück in den Chat zum Anlegen
   if (matches.length === 0 && !user) {
@@ -60,7 +64,10 @@ export default async function MatchesPage() {
         {matches.length === 0 ? (
           <EmptyState />
         ) : (
-          <MatchBrowser matches={matches} />
+          <MatchBrowser
+            matches={matches}
+            searchProfileId={activeProfile?.id ?? null}
+          />
         )}
       </section>
     </main>

@@ -22,13 +22,22 @@ type ToastState = {
   expiresAt: number;
 } | null;
 
-const SKIP_KEY = "home4u_skipped_listings";
+// Skip-Liste pro Suchprofil scopen — sonst persistieren Skips über neue
+// Suchen hinweg und der User sieht "alle gesehen" sofort nach Anlage einer
+// neuen Suche. Fallback "global" für Legacy-Sessions ohne profile_id (sollte
+// in Production nicht vorkommen, aber robust).
+const SKIP_KEY_PREFIX = "home4u_skipped_listings:";
+const SKIP_KEY_LEGACY = "home4u_skipped_listings"; // pre-2026-04-28
 const HINT_SEEN_KEY = "home4u_swipe_hint_seen";
 
-function loadSkipped(): Set<string> {
+function skipKey(profileId: string | null | undefined): string {
+  return profileId ? `${SKIP_KEY_PREFIX}${profileId}` : SKIP_KEY_LEGACY;
+}
+
+function loadSkipped(profileId: string | null | undefined): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = window.localStorage.getItem(SKIP_KEY);
+    const raw = window.localStorage.getItem(skipKey(profileId));
     if (!raw) return new Set();
     const arr = JSON.parse(raw);
     return new Set(Array.isArray(arr) ? arr : []);
@@ -37,14 +46,23 @@ function loadSkipped(): Set<string> {
   }
 }
 
-function persistSkipped(s: Set<string>) {
+function persistSkipped(profileId: string | null | undefined, s: Set<string>) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(SKIP_KEY, JSON.stringify(Array.from(s)));
+    window.localStorage.setItem(skipKey(profileId), JSON.stringify(Array.from(s)));
   } catch {}
 }
 
-export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
+export function MatchBrowser({
+  matches,
+  searchProfileId,
+}: {
+  matches: MatchCardData[];
+  /** UUID des aktiven Suchprofils. Skip-Liste wird damit gescoped — eine
+   *  neue Suche bedeutet automatisch frische Skip-Liste. null bei Legacy/
+   *  Fallback (kein aktives Profil gefunden), nutzt dann globalen Key. */
+  searchProfileId?: string | null;
+}) {
   const [skipped, setSkipped] = React.useState<Set<string>>(() => new Set());
   const [skipReady, setSkipReady] = React.useState(false);
   const [idx, setIdx] = React.useState(0);
@@ -53,15 +71,17 @@ export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
   const [toast, setToast] = React.useState<ToastState>(null);
   const [hintVisible, setHintVisible] = React.useState(false);
 
-  // Skipped + hint-state aus localStorage
+  // Skipped + hint-state aus localStorage. Reagiert auf Profile-ID-Wechsel:
+  // neue Suche → frische Skip-Liste, ohne dass alte Suchen ihre Skips verlieren.
   React.useEffect(() => {
-    setSkipped(loadSkipped());
+    setSkipped(loadSkipped(searchProfileId));
     setSkipReady(true);
+    setIdx(0); // Reset auch den Karten-Cursor bei Profil-Wechsel
     if (typeof window !== "undefined") {
       const seen = window.localStorage.getItem(HINT_SEEN_KEY);
       if (!seen) setHintVisible(true);
     }
-  }, []);
+  }, [searchProfileId]);
 
   // Toast auto-dismiss nach 5 Sek
   React.useEffect(() => {
@@ -112,7 +132,7 @@ export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
     const next = new Set(skipped);
     next.add(current.id);
     setSkipped(next);
-    persistSkipped(next);
+    persistSkipped(searchProfileId, next);
     setIdx(0);
     setError(null);
   }
@@ -138,7 +158,7 @@ export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
       const next = new Set(skipped);
       next.add(current.id);
       setSkipped(next);
-      persistSkipped(next);
+      persistSkipped(searchProfileId, next);
       setStatus("browsing");
       setIdx(0);
       if (json.match_id) {
@@ -172,7 +192,7 @@ export function MatchBrowser({ matches }: { matches: MatchCardData[] }) {
     setSkipped((prev) => {
       const next = new Set(prev);
       next.delete(listingId);
-      persistSkipped(next);
+      persistSkipped(searchProfileId, next);
       return next;
     });
   }
