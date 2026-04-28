@@ -81,7 +81,9 @@ export function AuthMenu({
           <Button asChild size="sm" variant="outline">
             <Link href="/dashboard" aria-label="Dashboard">
               <LayoutDashboard className="size-3" />
-              {compact ? null : <span>Dashboard</span>}
+              {!compact && (
+                <span className="hidden sm:inline">Dashboard</span>
+              )}
             </Link>
           </Button>
         )}
