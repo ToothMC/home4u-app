@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MapPin, Heart, Share2 } from "lucide-react";
+import { ArrowLeft, MapPin } from "lucide-react";
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { HeroGallery } from "@/components/listing-public/HeroGallery";
+import { ListingHeaderActions } from "@/components/listing-public/ListingHeaderActions";
+import { isListingBookmarked } from "@/lib/repo/bookmarks";
+import { getAuthUser } from "@/lib/supabase/auth";
+import { getOrCreateAnonymousSession } from "@/lib/session";
 import { RoomGalleryGrid } from "@/components/listing-public/RoomGalleryGrid";
 import { QuickFactsBar } from "@/components/listing-public/QuickFactsBar";
 import { QuickActionsRow } from "@/components/listing-public/QuickActionsRow";
@@ -30,6 +34,15 @@ export default async function PublicListingPage({
   if (!listing || listing.status !== "active") {
     notFound();
   }
+
+  // Bookmark-Status parallel zur Listing-Auflösung wäre netter, aber load
+  // ist schon über. Schnell genug — ein simpler indexierter Lookup.
+  const user = await getAuthUser();
+  const session = user ? null : await getOrCreateAnonymousSession();
+  const initialSaved = await isListingBookmarked(id, {
+    userId: user?.id ?? null,
+    anonymousId: session?.anonymousId ?? null,
+  });
 
   // Kontext-abhängiger Back-Link: aus Editor zurück zur Bearbeitung,
   // sonst Default „zur Suche". Andere Quellen können denselben Mechanismus
@@ -72,20 +85,16 @@ export default async function PublicListingPage({
           <ArrowLeft className="size-4" /> {back.label}
         </Link>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="hidden sm:inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-            aria-label="Speichern"
-          >
-            <Heart className="size-4" /> Speichern
-          </button>
-          <button
-            type="button"
-            className="hidden sm:inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-            aria-label="Teilen"
-          >
-            <Share2 className="size-4" /> Teilen
-          </button>
+          <ListingHeaderActions
+            listingId={id}
+            initialSaved={initialSaved}
+            shareTitle={listing.title ?? "Inserat auf Home4U"}
+            shareText={
+              listing.title
+                ? `${listing.title} — auf Home4U`
+                : `Inserat in ${listing.location_city} auf Home4U`
+            }
+          />
           <AuthMenu />
         </div>
       </header>
