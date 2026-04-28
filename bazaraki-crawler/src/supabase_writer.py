@@ -114,6 +114,60 @@ def upsert_listings(items: Iterable[RawListing]) -> dict[str, int]:
     }
 
 
+def fetch_already_drilled_external_ids() -> set[str]:
+    """Listings, die bereits Detail-Drilling durchlaufen haben — erkennbar
+    daran dass district ODER size_sqm gesetzt wurde.
+
+    Wird genutzt um beim Daily-Crawl nur NEUE Listings zu drillen.
+    Detail-Daten (district, m², Galerie) ändern sich auf Bazaraki praktisch
+    nie nachträglich — Re-Drill bringt im Schnitt 0 neue Information bei
+    100% Kosten. Re-Drills passieren über separates Weekly-Workflow oder
+    FORCE_FULL_DRILL=1.
+    """
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+    }
+    drilled: set[str] = set()
+    # Pagination via Range-Header — PostgREST returned max 1000 pro Call
+    # ohne explizites Range-Limit (oder 100 default je nach Setup).
+    offset = 0
+    page_size = 1000
+    while True:
+        url = (
+            f"{url_base}/rest/v1/listings"
+            f"?source=eq.bazaraki"
+            f"&or=(location_district.not.is.null,size_sqm.not.is.null)"
+            f"&select=external_id"
+        )
+        try:
+            resp = httpx.get(
+                url,
+                headers={
+                    **headers,
+                    "Range-Unit": "items",
+                    "Range": f"{offset}-{offset + page_size - 1}",
+                    "Prefer": "count=exact",
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            log.warning("fetch_already_drilled failed: %s — assume nothing drilled", e)
+            return set()
+        rows = resp.json() or []
+        for row in rows:
+            ext = row.get("external_id")
+            if ext:
+                drilled.add(str(ext))
+        if len(rows) < page_size:
+            break
+        offset += page_size
+    return drilled
+
+
 def mark_stale_old_listings(stale_days: int = 7) -> int:
     """Listings, die seit N Tagen nicht mehr gesehen wurden → status='stale'.
 

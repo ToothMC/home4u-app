@@ -28,6 +28,11 @@ on:
         type: boolean
         required: false
         default: false
+      force_full_drill:
+        description: "Auch bereits gedrillte Listings nochmal drillen (Reparatur-Lauf)"
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: bazaraki-crawl
@@ -36,13 +41,14 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    # MAX_PAGES_PER_CITY ist seit 5c5086d auf 60 (vorher 30). 5 Städte × 2
-    # Types × 60 Pages × ~50 Listings/Page mit Detail-Drilling und 3s-Rate-
-    # Limit → 4h reichen nicht mehr. GitHub Actions hat 6h Job-Timeout-
-    # Maximum, daher 350 Minuten als Puffer. Wenn das wieder zu eng wird,
-    # muss skip_details für Scheduled-Runs Default werden und das tiefe
-    # Detail-Drilling auf einen separaten Weekly-Job wandern.
-    timeout-minutes: 350
+    # Inkrementelles Drill-Verhalten (siehe main.py): bereits in der DB
+    # enriched-te Listings werden nicht nochmal gedrillt. Daily-Lauf =
+    # List-Scrape (~30 min) + nur NEUE Listings drillen (~10 min für ~200
+    # neue/Tag). Cap deutlich kleiner als 4h. 90 Minuten reichen mit Puffer.
+    # FORCE_FULL_DRILL=1 für gelegentliche Reparatur-Läufe braucht 4h+ —
+    # dafür diesen Job manuell mit höherem Timeout starten oder separates
+    # weekly-full-drill.yml-Workflow.
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: ./bazaraki-crawler
@@ -71,4 +77,5 @@ jobs:
           MAX_PAGES_PER_CITY: ${{ inputs.max_pages || '60' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           SKIP_DETAILS: ${{ inputs.skip_details && '1' || '' }}
+          FORCE_FULL_DRILL: ${{ inputs.force_full_drill && '1' || '' }}
         run: python -m src.main
