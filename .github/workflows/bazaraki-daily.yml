@@ -36,10 +36,13 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    # Detail-Drilling über ~550 Listings dauert mit 3s-Rate-Limit ~75 Min,
-    # vorher gecappt auf 60 → Job wurde täglich gekillt. Public-Repo hat
-    # unlimited Actions-Minuten, also komfortable 4h.
-    timeout-minutes: 240
+    # MAX_PAGES_PER_CITY ist seit 5c5086d auf 60 (vorher 30). 5 Städte × 2
+    # Types × 60 Pages × ~50 Listings/Page mit Detail-Drilling und 3s-Rate-
+    # Limit → 4h reichen nicht mehr. GitHub Actions hat 6h Job-Timeout-
+    # Maximum, daher 350 Minuten als Puffer. Wenn das wieder zu eng wird,
+    # muss skip_details für Scheduled-Runs Default werden und das tiefe
+    # Detail-Drilling auf einen separaten Weekly-Job wandern.
+    timeout-minutes: 350
     defaults:
       run:
         working-directory: ./bazaraki-crawler
