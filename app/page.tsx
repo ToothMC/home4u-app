@@ -8,8 +8,11 @@ import { FeaturedListings } from "@/components/landing/FeaturedListings";
 import { StatsStrip } from "@/components/landing/StatsStrip";
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { BrandLockup } from "@/components/brand/Logo";
+import { LanguageFlagPicker } from "@/components/lang/LanguageFlagPicker";
+import { getPreferredLanguage } from "@/lib/lang/preferred-language";
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const lang = await getPreferredLanguage();
   return (
     <main className="flex-1">
       {/* Header — minimal, viel Luft, mobile = nur Logo+Auth */}
@@ -24,6 +27,7 @@ export default function LandingPage() {
             <Link href="/scam-check" className="hover:text-[var(--brand-gold)] transition-colors">Scam-Check</Link>
           </nav>
           <div className="flex items-center gap-3">
+            <LanguageFlagPicker initial={lang} />
             <Link
               href="/dashboard/bookmarks"
               aria-label="Meine Favoriten"

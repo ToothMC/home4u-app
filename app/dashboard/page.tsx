@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/card";
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { BrandLockup } from "@/components/brand/Logo";
+import { LanguageFlagPicker } from "@/components/lang/LanguageFlagPicker";
+import { getPreferredLanguage } from "@/lib/lang/preferred-language";
 import { ListingRow } from "@/components/dashboard/ListingRow";
 import { SearchRow } from "@/components/dashboard/SearchRow";
 import { SwipeToDeleteRow } from "@/components/dashboard/SwipeToDeleteRow";
@@ -33,6 +35,7 @@ export default async function DashboardPage({
   if (!user) {
     redirect("/?auth=required");
   }
+  const lang = await getPreferredLanguage();
 
   const supabase = createSupabaseServiceClient();
 
@@ -117,9 +120,12 @@ export default async function DashboardPage({
   return (
     <main className="flex-1">
       <header className="sticky top-0 z-30 backdrop-blur bg-[var(--warm-cream)]/85 border-b border-[var(--border)]">
-        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
+        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-3">
           <BrandLockup />
-          <AuthMenu />
+          <div className="flex items-center gap-3">
+            <LanguageFlagPicker initial={lang} />
+            <AuthMenu />
+          </div>
         </div>
       </header>
 
