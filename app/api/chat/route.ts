@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
   if (!conversationId) {
     const created = await createConversation({
       anonymousId: session.anonymousId,
+      userId: authUser?.id ?? null,
       flow: body.flow,
       regionSlug: body.region?.slug,
       regionLabel: body.region?.label,

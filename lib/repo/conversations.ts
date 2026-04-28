@@ -9,6 +9,10 @@ export type HistoryMessage = {
 
 export type ConversationInput = {
   anonymousId: string;
+  /** Wenn gesetzt: Conversation wird dem User zugeordnet. Logout darf
+   *  diese History dann nicht mehr in einer anonymen Session zeigen
+   *  (siehe loadLastConversation-Filter). */
+  userId?: string | null;
   flow?: string;
   regionSlug?: string;
   regionLabel?: string;
@@ -37,6 +41,7 @@ export async function createConversation(
     .from("conversations")
     .insert({
       anonymous_id: input.anonymousId,
+      user_id: input.userId ?? null,
       flow: input.flow ?? "default",
       channel: "web",
       prompt_version: SOPHIE_PROMPT_VERSION,
@@ -96,13 +101,16 @@ export async function loadLastConversation(params: {
     .limit(1);
 
   if (params.userId && params.anonymousId) {
+    // Eingeloggt: eigene user_id ODER der Anon-Cookie aus der Pre-Login-Phase.
     query = query.or(
       `user_id.eq.${params.userId},anonymous_id.eq.${params.anonymousId}`
     );
   } else if (params.userId) {
     query = query.eq("user_id", params.userId);
   } else if (params.anonymousId) {
-    query = query.eq("anonymous_id", params.anonymousId);
+    // Anonym: NUR Conversations zeigen, die nicht zu einem eingeloggten User
+    // gehören. Sonst sieht ein ausgeloggter Besucher den eigenen Login-Chat.
+    query = query.eq("anonymous_id", params.anonymousId).is("user_id", null);
   }
 
   const { data: conv, error: convErr } = await query.maybeSingle();
