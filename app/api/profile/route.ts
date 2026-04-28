@@ -37,6 +37,7 @@ const patchSchema = z
       .nullable()
       .optional()
       .or(z.literal("").transform(() => null)),
+    role: z.enum(["seeker", "owner", "agent"]).optional(),
   })
   .strict();
 

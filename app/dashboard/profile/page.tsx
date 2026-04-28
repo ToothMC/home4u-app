@@ -37,6 +37,7 @@ export default async function ProfilePage() {
     .maybeSingle();
 
   const initial: ProfileForm = {
+    role: (data?.role ?? null) as ProfileForm["role"],
     display_name: data?.display_name ?? null,
     phone: data?.phone ?? null,
     preferred_language: (data?.preferred_language ?? null) as ProfileForm["preferred_language"],
