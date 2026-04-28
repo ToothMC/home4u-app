@@ -44,7 +44,7 @@ export default async function MatchesPage() {
         <AuthMenu hideDashboard />
       </header>
 
-      <section className="mx-auto max-w-md w-full px-4 pb-3 flex-1 flex flex-col min-h-0">
+      <section className="mx-auto max-w-md md:max-w-2xl lg:max-w-3xl w-full px-4 pb-3 flex-1 flex flex-col min-h-0">
         <div className="shrink-0 mb-2">
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <Search className="size-5" />

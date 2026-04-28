@@ -59,7 +59,7 @@ export default async function OwnerRequestDetailPage({
        listings!inner (
          id, type, location_city, location_district, price, currency,
          rooms, size_sqm, media, contact_channel, owner_user_id,
-         scam_score, scam_flags
+         scam_score, scam_flags, market_position
        )`
     )
     .eq("id", id)
@@ -83,6 +83,7 @@ export default async function OwnerRequestDetailPage({
     owner_user_id: string | null;
     scam_score: number | null;
     scam_flags: string[] | null;
+    market_position: string | null;
   };
 
   // Auth: nur der Listing-Owner darf die Detail-Page sehen
@@ -130,6 +131,8 @@ export default async function OwnerRequestDetailPage({
     score: 1,
     scamScore: listing.scam_score,
     scamFlags: listing.scam_flags,
+    marketPosition:
+      (listing.market_position as MatchCardData["marketPosition"]) ?? null,
   };
 
   const budgetLabel = formatBudget(profile.budget_min, profile.budget_max);
@@ -152,7 +155,7 @@ export default async function OwnerRequestDetailPage({
         <AuthMenu />
       </header>
 
-      <section className="mx-auto max-w-md w-full px-4 pt-4 pb-10 space-y-4">
+      <section className="mx-auto max-w-md md:max-w-2xl lg:max-w-3xl w-full px-4 pt-4 pb-10 space-y-4">
         <div>
           <h1 className="text-xl font-semibold">Anfrage für dein Inserat</h1>
           <p className="text-xs text-[var(--muted-foreground)] mt-1">

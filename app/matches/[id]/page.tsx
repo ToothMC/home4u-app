@@ -59,7 +59,7 @@ export default async function MatchDetailPage({
        listings!inner (
          id, type, location_city, location_district, price, currency,
          rooms, size_sqm, media, status, contact_channel, owner_user_id,
-         scam_score, scam_flags
+         scam_score, scam_flags, market_position
        )`
     )
     .eq("id", id)
@@ -96,6 +96,7 @@ export default async function MatchDetailPage({
     owner_user_id: string | null;
     scam_score: number | null;
     scam_flags: string[] | null;
+    market_position: string | null;
   };
   const status = deriveStatus(match);
 
@@ -125,6 +126,8 @@ export default async function MatchDetailPage({
     score: 1, // im Detail-View nicht relevant
     scamScore: listing.scam_score,
     scamFlags: listing.scam_flags,
+    marketPosition:
+      (listing.market_position as MatchCardData["marketPosition"]) ?? null,
   };
 
   return (
@@ -139,7 +142,7 @@ export default async function MatchDetailPage({
         <AuthMenu />
       </header>
 
-      <section className="mx-auto max-w-md w-full px-4 pt-4 pb-10 space-y-4">
+      <section className="mx-auto max-w-md md:max-w-2xl lg:max-w-3xl w-full px-4 pt-4 pb-10 space-y-4">
         <div>
           <h1 className="text-xl font-semibold">Deine Anfrage</h1>
           <StatusLine

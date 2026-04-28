@@ -13,10 +13,12 @@ import { AuthMenu } from "@/components/auth/AuthMenu";
 import { BrandLockup } from "@/components/brand/Logo";
 import { ListingRow } from "@/components/dashboard/ListingRow";
 import { SearchRow } from "@/components/dashboard/SearchRow";
+import { SwipeToDeleteRow } from "@/components/dashboard/SwipeToDeleteRow";
 import { MatchSections } from "@/components/dashboard/MatchSections";
 import { DashboardViewTabs } from "@/components/dashboard/DashboardViewTabs";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { MAX_SEARCH_PROFILES } from "@/lib/repo/search-profiles";
 
 export const dynamic = "force-dynamic";
 
@@ -184,16 +186,23 @@ function SeekerView({
   profiles: SearchProfile[];
   matchCounts: Record<string, number>;
 }) {
+  const limitReached = profiles.length >= MAX_SEARCH_PROFILES;
   return (
     <section className="mt-6">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <SearchIcon className="size-4" />
-          Meine Suchen ({profiles.length})
+          Meine Suchen ({profiles.length}/{MAX_SEARCH_PROFILES})
         </h2>
-        <Button asChild size="sm" variant="outline">
-          <Link href="/chat?flow=seeker">+ Suche</Link>
-        </Button>
+        {limitReached ? (
+          <Button size="sm" variant="outline" disabled title={`Limit ${MAX_SEARCH_PROFILES} erreicht — bitte erst eine Suche löschen`}>
+            + Suche
+          </Button>
+        ) : (
+          <Button asChild size="sm" variant="outline">
+            <Link href="/chat?flow=seeker">+ Suche</Link>
+          </Button>
+        )}
       </div>
       {profiles.length === 0 ? (
         <Card>
@@ -205,13 +214,20 @@ function SeekerView({
       ) : (
         <div className="space-y-2">
           {profiles.map((p) => (
-            <SearchRow
+            <SwipeToDeleteRow
               key={p.id}
-              profile={p}
-              matchCount={matchCounts[p.id] ?? 0}
-            />
+              endpoint={`/api/searches/${p.id}`}
+              what="Diese Suche"
+            >
+              <SearchRow profile={p} matchCount={matchCounts[p.id] ?? 0} />
+            </SwipeToDeleteRow>
           ))}
         </div>
+      )}
+      {limitReached && (
+        <p className="mt-2 text-xs text-[var(--muted-foreground)]">
+          Limit von {MAX_SEARCH_PROFILES} aktiven Suchen erreicht. Lösche eine Suche, um eine neue anzulegen.
+        </p>
       )}
     </section>
   );

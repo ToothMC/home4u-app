@@ -11,15 +11,58 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-import { ScamCheckBadge } from "@/components/scam-shield/ScamCheckBadge";
-
-// Höhe des "Card-Stack-Peek-Chip" — Vorschau-Streifen der nächsten Karte,
-// der vom unteren Rand in die aktive Karte hineinragt. Wird ÜBER dem
-// Preis-Overlay positioniert, damit beide klar lesbar sind.
-const PEEK_CHIP_HEIGHT = 32; // px
-const PEEK_CHIP_INSET = 12; // Abstand links/rechts vom Rand
-const PEEK_CHIP_BOTTOM = 96; // Abstand vom Image-Area-Boden (über Preis-Overlay)
+import { verdictFromScore } from "@/components/scam-shield/ScoreLight";
 import { cn } from "@/lib/utils";
+import type { MarketPosition } from "@/lib/repo/listings";
+
+// Vertikaler Scroll-Indicator rechts vom Bild — die Bilder werden vertikal
+// gewischt (snap-y), darum vertikale Pagination, nicht horizontal.
+const MAX_DOTS = 7;
+
+type DotInfo = { active: boolean; size: "lg" | "md" | "sm" };
+
+function dotWindow(active: number, total: number, max: number): DotInfo[] {
+  if (total <= max) {
+    return Array.from({ length: total }, (_, i) => ({
+      active: i === active,
+      size: "lg" as const,
+    }));
+  }
+  const half = Math.floor(max / 2);
+  let start = Math.max(0, active - half);
+  let end = start + max;
+  if (end > total) {
+    end = total;
+    start = end - max;
+  }
+  const out: DotInfo[] = [];
+  for (let i = start; i < end; i++) {
+    const distFromEdge = Math.min(i - start, end - 1 - i);
+    let size: DotInfo["size"] = "lg";
+    if (distFromEdge === 0 && (i !== 0 && i !== total - 1)) size = "sm";
+    else if (distFromEdge === 1 && (i !== 1 && i !== total - 2)) size = "md";
+    out.push({ active: i === active, size });
+  }
+  return out;
+}
+
+const SCAM_PILL = {
+  clean: { dot: "bg-emerald-500", border: "border-emerald-300", text: "text-emerald-700", label: "Kein Scam" },
+  warn: { dot: "bg-orange-500", border: "border-orange-300", text: "text-orange-700", label: "Verdächtig" },
+  high: { dot: "bg-red-500", border: "border-red-300", text: "text-red-700", label: "Scam-Verdacht" },
+  none: { dot: "bg-black/30", border: "border-black/15", text: "text-[var(--muted-foreground)]", label: "Nicht geprüft" },
+} as const;
+
+const MARKET_PILL: Record<
+  Exclude<MarketPosition, "unknown">,
+  { bars: number; label: string; tone: "green" | "orange" }
+> = {
+  very_good: { bars: 5, label: "Sehr guter Preis", tone: "green" },
+  good: { bars: 4, label: "Guter Preis", tone: "green" },
+  fair: { bars: 3, label: "Fairer Preis", tone: "green" },
+  above: { bars: 2, label: "Erhöhter Preis", tone: "orange" },
+  expensive: { bars: 1, label: "Hoher Preis", tone: "orange" },
+};
 
 export type MatchCardData = {
   id: string;
@@ -28,6 +71,7 @@ export type MatchCardData = {
    *  score=0 mit leerem flags-Array, wird "noch nicht geprüft" gerendert. */
   scamScore?: number | null;
   scamFlags?: string[] | null;
+  marketPosition?: MarketPosition | null;
   location_city: string;
   location_district: string | null;
   price: number;
@@ -300,19 +344,6 @@ export function MatchCard({
             </div>
           )}
 
-          {/* Sophie-Scam-Check-Badge — auf jeder Karte sichtbar.
-              Position unterhalb des Image-Counters (links oben). */}
-          <div className={cn(
-            "absolute left-3 rounded-full bg-white/90 backdrop-blur px-2 py-0.5",
-            total > 1 ? "top-12" : "top-3",
-          )}>
-            <ScamCheckBadge
-              score={data.scamScore}
-              flags={data.scamFlags}
-              variant="compact"
-            />
-          </div>
-
           {/* Tap-Targets für Like/Skip — funktional gleichwertig zum Wischen.
               Größe 12 (48 px) entspricht Apple-HIG-Tap-Mindestgröße.
               Visuell semi-transparent, scaliert mit aktivem Drag. */}
@@ -374,47 +405,52 @@ export function MatchCard({
             </div>
           )}
 
-          {/* Info gradient overlay (Preis + Lage) */}
+          {/* Info gradient overlay (Preis + Lage links, Badges rechts).
+              Layout:
+                Preis €                 [Preisbewertung]
+                Ort                     [Sophie-Check Ampel]
+              Preisbewertung wird ergänzt, sobald market_position in
+              MatchCardData geplumbt ist. Bis dahin nur Scam-Check. */}
           <div className="absolute bottom-0 inset-x-0 p-4 pb-3 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-white">
-            <div className="text-2xl font-semibold leading-none">
-              {formatPrice(data.price)}
-              {data.type === "rent" && (
-                <span className="text-sm font-normal opacity-80"> / Monat</span>
-              )}
-            </div>
-            <div className="mt-1 flex items-center gap-1 text-sm opacity-95">
-              <MapPin className="size-3" />
-              {data.location_district
-                ? `${data.location_district}, ${data.location_city}`
-                : data.location_city}
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-2xl font-semibold leading-none">
+                  {formatPrice(data.price)}
+                  {data.type === "rent" && (
+                    <span className="text-sm font-normal opacity-80"> / Monat</span>
+                  )}
+                </div>
+                <div className="mt-1 flex items-center gap-1 text-sm opacity-95">
+                  <MapPin className="size-3" />
+                  {data.location_district
+                    ? `${data.location_district}, ${data.location_city}`
+                    : data.location_city}
+                </div>
+              </div>
+              <div className="shrink-0 flex flex-col items-end gap-1">
+                <MarketPill position={data.marketPosition ?? null} />
+                <ScamPill score={data.scamScore} flags={data.scamFlags} />
+              </div>
             </div>
           </div>
 
-          {/* Card-Stack-Peek-Chip: nächstes Bild ragt mit gerundeter Oberkante +
-              3D-Schlagschatten von unten in die aktive Karte hinein. Nur unten
-              — oberer Chip war zu unruhig (Counter + Score-Badge konkurrieren). */}
-          {total > 1 && imgIdx < total - 1 && !brokenIdx.has(imgIdx + 1) && (
-            <div
-              aria-hidden
-              className="absolute z-10 pointer-events-none rounded-t-2xl overflow-hidden ring-1 ring-white/20"
-              style={{
-                bottom: PEEK_CHIP_BOTTOM,
-                left: PEEK_CHIP_INSET,
-                right: PEEK_CHIP_INSET,
-                height: PEEK_CHIP_HEIGHT,
-                boxShadow:
-                  "0 -8px 18px -4px rgba(0,0,0,0.45), 0 -2px 6px rgba(0,0,0,0.25)",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={images[imgIdx + 1]}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                draggable={false}
-              />
-              {/* Verlauf aufwärts: simuliert "von unten hereinragende" Karte */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/10 to-transparent" />
+          {/* Vertikaler Scroll-Indicator rechts oben — bewusst NICHT mittig,
+              damit er nicht mit dem rechten Like-Pfeil (top-1/2) kollidiert.
+              Sliding-Window für viele Bilder. */}
+          {total > 1 && (
+            <div className="absolute right-2 top-12 pointer-events-none">
+              <div className="flex flex-col items-center gap-1.5 rounded-full bg-black/30 backdrop-blur px-1 py-1.5">
+                {dotWindow(imgIdx, total, MAX_DOTS).map((d, i) => (
+                  <span
+                    key={`dot-${i}`}
+                    className={cn(
+                      "rounded-full transition-all",
+                      d.size === "lg" ? "size-1.5" : d.size === "md" ? "size-[5px]" : "size-[3px]",
+                      d.active ? "bg-white" : "bg-white/55",
+                    )}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -499,5 +535,71 @@ export function MatchCard({
         </div>
       </div>
     </article>
+  );
+}
+
+/** Kompakte Pille für den Sophie-Scam-Check, weiß mit dünnem Verdict-Rahmen. */
+function ScamPill({
+  score,
+  flags,
+}: {
+  score?: number | null;
+  flags?: string[] | null;
+}) {
+  const checked =
+    score != null && (score > 0 || (Array.isArray(flags) && flags.length > 0));
+  const verdict: keyof typeof SCAM_PILL = !checked
+    ? "none"
+    : verdictFromScore(score ?? 0);
+  const c = SCAM_PILL[verdict];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full bg-white border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+        c.border,
+        c.text,
+      )}
+    >
+      <span className={cn("inline-block size-1.5 rounded-full", c.dot)} aria-hidden />
+      {c.label}
+    </span>
+  );
+}
+
+/** Kompakte Pille für die Preis-Einschätzung — bars + Kurz-Label. */
+function MarketPill({ position }: { position: MarketPosition | null }) {
+  if (!position || position === "unknown") return null;
+  const cfg = MARKET_PILL[position];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full bg-white border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+        cfg.tone === "green"
+          ? "border-emerald-300 text-emerald-700"
+          : "border-amber-300 text-amber-700",
+      )}
+      aria-label={cfg.label}
+    >
+      <span
+        className="inline-flex items-end gap-[1px]"
+        aria-hidden
+      >
+        {[1, 2, 3, 4, 5].map((i) => (
+          <span
+            key={i}
+            className={cn(
+              "w-[2px] rounded-sm",
+              i <= cfg.bars
+                ? cfg.tone === "green"
+                  ? "bg-emerald-500"
+                  : "bg-amber-500"
+                : "bg-black/15",
+            )}
+            style={{ height: `${4 + i * 1.5}px` }}
+          />
+        ))}
+      </span>
+      {cfg.label}
+    </span>
   );
 }

@@ -1,10 +1,13 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
+export const MAX_SEARCH_PROFILES = 3;
+
 type OwnerKey =
   | { userId: string; anonymousId?: string | null }
   | { userId?: null; anonymousId: string };
 
 type SearchProfileInsert = OwnerKey & {
+  conversationId?: string | null;
   location: string;
   budget_min?: number;
   budget_max?: number;
@@ -16,6 +19,11 @@ type SearchProfileInsert = OwnerKey & {
   free_text?: string;
 };
 
+export type UpsertSearchProfileResult =
+  | { id: string }
+  | { error: "limit_reached" }
+  | null;
+
 /**
  * Upsertet ein aktives Suchprofil für den eindeutigen Owner:
  * bei eingeloggtem User → user_id als Schlüssel (anonymous_id wird auf null gesetzt)
@@ -23,25 +31,30 @@ type SearchProfileInsert = OwnerKey & {
  */
 export async function upsertSearchProfile(
   input: SearchProfileInsert
-): Promise<{ id: string } | null> {
+): Promise<UpsertSearchProfileResult> {
   const supabase = createSupabaseServiceClient();
   if (!supabase) return null;
 
   const keyColumn = input.userId ? "user_id" : "anonymous_id";
   const keyValue = input.userId ?? input.anonymousId!;
 
-  const { data: existing } = await supabase
-    .from("search_profiles")
-    .select("id")
-    .eq(keyColumn, keyValue)
-    .eq("active", true)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Innerhalb derselben Conversation upserten — sonst INSERT (neue Suche).
+  let existingId: string | null = null;
+  if (input.conversationId) {
+    const { data: existing } = await supabase
+      .from("search_profiles")
+      .select("id")
+      .eq(keyColumn, keyValue)
+      .eq("conversation_id", input.conversationId)
+      .limit(1)
+      .maybeSingle();
+    existingId = existing?.id ?? null;
+  }
 
   const payload = {
     user_id: input.userId ?? null,
     anonymous_id: input.userId ? null : (input.anonymousId ?? null),
+    conversation_id: input.conversationId ?? null,
     location: input.location,
     budget_min: input.budget_min ?? null,
     budget_max: input.budget_max ?? 0,
@@ -53,11 +66,11 @@ export async function upsertSearchProfile(
     free_text: input.free_text ?? null,
   };
 
-  if (existing) {
+  if (existingId) {
     const { data, error } = await supabase
       .from("search_profiles")
       .update(payload)
-      .eq("id", existing.id)
+      .eq("id", existingId)
       .select("id")
       .single();
     if (error || !data) {
@@ -65,6 +78,20 @@ export async function upsertSearchProfile(
       return null;
     }
     return { id: data.id };
+  }
+
+  // Limit prüfen, bevor neu angelegt wird.
+  const { count, error: countError } = await supabase
+    .from("search_profiles")
+    .select("id", { count: "exact", head: true })
+    .eq(keyColumn, keyValue)
+    .eq("active", true);
+  if (countError) {
+    console.error("[search_profiles] count failed", countError);
+    return null;
+  }
+  if ((count ?? 0) >= MAX_SEARCH_PROFILES) {
+    return { error: "limit_reached" };
   }
 
   const { data, error } = await supabase
