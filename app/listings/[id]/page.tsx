@@ -6,7 +6,6 @@ import { HeroGallery } from "@/components/listing-public/HeroGallery";
 import { ListingHeaderActions } from "@/components/listing-public/ListingHeaderActions";
 import { isListingBookmarked } from "@/lib/repo/bookmarks";
 import { getAuthUser } from "@/lib/supabase/auth";
-import { getOrCreateAnonymousSession } from "@/lib/session";
 import { RoomGalleryGrid } from "@/components/listing-public/RoomGalleryGrid";
 import { QuickFactsBar } from "@/components/listing-public/QuickFactsBar";
 import { QuickActionsRow } from "@/components/listing-public/QuickActionsRow";
@@ -37,12 +36,12 @@ export default async function PublicListingPage({
 
   // Bookmark-Status parallel zur Listing-Auflösung wäre netter, aber load
   // ist schon über. Schnell genug — ein simpler indexierter Lookup.
+  // Favoriten sind auth-only: Anon-User sehen den Save-Button immer "leer"
+  // und werden beim Klick in den Login-Dialog geschickt.
   const user = await getAuthUser();
-  const session = user ? null : await getOrCreateAnonymousSession();
-  const initialSaved = await isListingBookmarked(id, {
-    userId: user?.id ?? null,
-    anonymousId: session?.anonymousId ?? null,
-  });
+  const initialSaved = user
+    ? await isListingBookmarked(id, { userId: user.id })
+    : false;
 
   // Kontext-abhängiger Back-Link: aus Editor zurück zur Bearbeitung,
   // sonst Default „zur Suche". Andere Quellen können denselben Mechanismus
@@ -88,6 +87,7 @@ export default async function PublicListingPage({
           <ListingHeaderActions
             listingId={id}
             initialSaved={initialSaved}
+            isAuthenticated={!!user}
             shareTitle={listing.title ?? "Inserat auf Home4U"}
             shareText={
               listing.title

@@ -25,7 +25,7 @@ export default function LandingPage() {
           </nav>
           <div className="flex items-center gap-3">
             <Link
-              href="/matches"
+              href="/dashboard/bookmarks"
               aria-label="Meine Favoriten"
               className="hidden sm:inline-flex size-9 items-center justify-center rounded-full text-[var(--brand-navy)] hover:bg-[var(--brand-gold-50)] hover:text-[var(--brand-gold)] transition-colors"
             >

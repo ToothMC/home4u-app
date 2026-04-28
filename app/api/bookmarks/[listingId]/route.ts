@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
-import { createSupabaseServiceClient, createSupabaseServerClient } from "@/lib/supabase/server";
-import { getOrCreateAnonymousSession } from "@/lib/session";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,11 +8,10 @@ export const dynamic = "force-dynamic";
  * Toggle-Endpoint für Listing-Bookmarks. Ruft die Postgres-RPC
  * toggle_listing_bookmark auf — idempotent, liefert {saved: bool}.
  *
- * - Authenticated: nutzt auth.uid() im RPC, anonymous_id wird ignoriert
- * - Anonymous: anonymous_id Cookie wird durchgereicht
- *
- * Auf Migration via verify-otp ziehen Anon-Bookmarks zum eingeloggten
- * Account (siehe migrate_anonymous_to_user RPC, Migration 0041).
+ * Favoriten sind auth-only: Ohne eingeloggten User → 401. Anonyme
+ * Bookmarks werden nicht (mehr) unterstützt; der RPC akzeptiert
+ * weiterhin anonymous_id-Pfad, aber wir geben hier nichts ohne
+ * auth.uid() weiter.
  */
 export async function POST(
   req: NextRequest,
@@ -27,29 +25,21 @@ export async function POST(
   const body = await req.json().catch(() => ({}));
   const source = typeof body?.source === "string" ? body.source.slice(0, 50) : null;
 
-  // Wenn eingeloggt: server-client mit user-session, RPC sieht auth.uid()
-  // Wenn anonym: service-role + anonymous_id, weil RLS nur für authed greift
   let supabase;
-  let anonymousId: string | null = null;
   try {
     supabase = await createSupabaseServerClient();
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) {
-      // Anon-Pfad → service-role-Client
-      const sess = await getOrCreateAnonymousSession();
-      anonymousId = sess.anonymousId;
-      supabase = createSupabaseServiceClient();
-      if (!supabase) {
-        return Response.json({ error: "supabase_not_configured" }, { status: 500 });
-      }
-    }
   } catch {
     return Response.json({ error: "supabase_not_configured" }, { status: 500 });
   }
 
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData?.user) {
+    return Response.json({ error: "auth_required" }, { status: 401 });
+  }
+
   const { data, error } = await supabase.rpc("toggle_listing_bookmark", {
     p_listing_id: listingId,
-    p_anonymous_id: anonymousId,
+    p_anonymous_id: null,
     p_source: source,
   });
   if (error) {

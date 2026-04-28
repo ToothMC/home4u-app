@@ -2,12 +2,17 @@
 
 import * as React from "react";
 import { Heart, Share2, Check, Link as LinkIcon } from "lucide-react";
+import { SignInDialog } from "@/components/auth/SignInDialog";
 
 type Props = {
   listingId: string;
   /** Initial-Status vom Server: true wenn der User dieses Listing schon
    *  gespeichert hat (aus listing_bookmarks). */
   initialSaved: boolean;
+  /** Server-seitig ermittelt: true wenn ein eingeloggter User vorliegt.
+   *  Anonyme Besucher sehen den Save-Button, ein Klick öffnet aber den
+   *  Login-Dialog statt zu speichern — Favoriten gibt es nur mit Account. */
+  isAuthenticated: boolean;
   /** Title fürs Share-Sheet (Web Share API), idealerweise kurz. */
   shareTitle: string;
   /** Optional: knapper Text fürs Teilen (~1 Zeile). */
@@ -19,12 +24,19 @@ type Toast = { kind: "ok" | "err"; msg: string; t: number } | null;
 export function ListingHeaderActions({
   listingId,
   initialSaved,
+  isAuthenticated,
   shareTitle,
   shareText,
 }: Props) {
   const [saved, setSaved] = React.useState(initialSaved);
+  const [authed, setAuthed] = React.useState(isAuthenticated);
   const [busy, setBusy] = React.useState<"save" | "share" | null>(null);
   const [toast, setToast] = React.useState<Toast>(null);
+  const [signInOpen, setSignInOpen] = React.useState(false);
+  // Wenn der User über den Dialog einloggt: nach Erfolg automatisch
+  // einmal den Save-Toggle ausführen, damit der ursprüngliche Klick
+  // nicht "verschluckt" wird.
+  const pendingSaveRef = React.useRef(false);
 
   // Toast auto-dismiss nach 2.5s
   React.useEffect(() => {
@@ -34,6 +46,13 @@ export function ListingHeaderActions({
   }, [toast]);
 
   async function handleSave() {
+    // Anon-Klick → Login-Dialog öffnen, nicht speichern. Favoriten
+    // sind explizit auth-only.
+    if (!authed) {
+      pendingSaveRef.current = true;
+      setSignInOpen(true);
+      return;
+    }
     setBusy("save");
     // Optimistic UI-Update — bei Fehler revertieren
     const prev = saved;
@@ -129,6 +148,25 @@ export function ListingHeaderActions({
           <span className="hidden sm:inline">Teilen</span>
         </button>
       </div>
+
+      <SignInDialog
+        open={signInOpen}
+        onOpenChange={(o) => {
+          setSignInOpen(o);
+          if (!o) pendingSaveRef.current = false;
+        }}
+        onSignedIn={() => {
+          setAuthed(true);
+          setSignInOpen(false);
+          if (pendingSaveRef.current) {
+            pendingSaveRef.current = false;
+            // Nach erfolgreichem Login einmal direkt das Save toggeln —
+            // sieht für den User aus, als wäre der ursprüngliche Klick
+            // einfach durchgegangen.
+            void handleSave();
+          }
+        }}
+      />
 
       {toast && (
         <div
