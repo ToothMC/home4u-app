@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.home4u.fb-refresh</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/osascript</string>
+    <string>__REPO_PATH__/fb-crawler/scripts/refresh-fb-tabs.applescript</string>
+  </array>
+
+  <!-- Alle 15 Min reloaden. Erste Ausführung: 15 Min nach Load. -->
+  <key>StartInterval</key>
+  <integer>900</integer>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/home4u/fb-refresh.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/home4u/fb-refresh.err.log</string>
+</dict>
+</plist>
