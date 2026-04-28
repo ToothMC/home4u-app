@@ -237,7 +237,6 @@ export default function LandingPage() {
           <div className="flex items-center gap-5 text-white/50">
             <Link href="/matches" className="hover:text-white">Entdecken</Link>
             <a href="#pfade" className="hover:text-white">Drei Wege</a>
-            <a href="#warum" className="hover:text-white">Über uns</a>
           </div>
         </div>
       </footer>
