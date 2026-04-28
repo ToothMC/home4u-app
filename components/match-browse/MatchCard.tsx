@@ -47,21 +47,21 @@ function dotWindow(active: number, total: number, max: number): DotInfo[] {
 }
 
 const SCAM_PILL = {
-  clean: { dot: "bg-emerald-500", border: "border-emerald-300", text: "text-emerald-700", label: "OK" },
-  warn: { dot: "bg-orange-500", border: "border-orange-300", text: "text-orange-700", label: "Prüfen" },
-  high: { dot: "bg-red-500", border: "border-red-300", text: "text-red-700", label: "Verdacht" },
-  none: { dot: "bg-black/30", border: "border-black/15", text: "text-[var(--muted-foreground)]", label: "—" },
+  clean: { dot: "bg-emerald-500", border: "border-emerald-300", text: "text-emerald-700", label: "Kein Scam" },
+  warn: { dot: "bg-orange-500", border: "border-orange-300", text: "text-orange-700", label: "Verdächtig" },
+  high: { dot: "bg-red-500", border: "border-red-300", text: "text-red-700", label: "Scam-Verdacht" },
+  none: { dot: "bg-black/30", border: "border-black/15", text: "text-[var(--muted-foreground)]", label: "Nicht geprüft" },
 } as const;
 
 const MARKET_PILL: Record<
   Exclude<MarketPosition, "unknown">,
   { bars: number; label: string; tone: "green" | "orange" }
 > = {
-  very_good: { bars: 5, label: "Top-Preis", tone: "green" },
-  good: { bars: 4, label: "Gut", tone: "green" },
-  fair: { bars: 3, label: "Fair", tone: "green" },
-  above: { bars: 2, label: "Erhöht", tone: "orange" },
-  expensive: { bars: 1, label: "Hoch", tone: "orange" },
+  very_good: { bars: 5, label: "Sehr guter Preis", tone: "green" },
+  good: { bars: 4, label: "Guter Preis", tone: "green" },
+  fair: { bars: 3, label: "Fairer Preis", tone: "green" },
+  above: { bars: 2, label: "Erhöhter Preis", tone: "orange" },
+  expensive: { bars: 1, label: "Hoher Preis", tone: "orange" },
 };
 
 export type MatchCardData = {
@@ -434,10 +434,11 @@ export function MatchCard({
             </div>
           </div>
 
-          {/* Vertikaler Scroll-Indicator rechts — passt zur Vertikal-Wisch-
-              Geste (snap-y). Sliding-Window für viele Bilder. */}
+          {/* Vertikaler Scroll-Indicator rechts oben — bewusst NICHT mittig,
+              damit er nicht mit dem rechten Like-Pfeil (top-1/2) kollidiert.
+              Sliding-Window für viele Bilder. */}
           {total > 1 && (
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+            <div className="absolute right-2 top-12 pointer-events-none">
               <div className="flex flex-col items-center gap-1.5 rounded-full bg-black/30 backdrop-blur px-1 py-1.5">
                 {dotWindow(imgIdx, total, MAX_DOTS).map((d, i) => (
                   <span
