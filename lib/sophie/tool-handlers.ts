@@ -117,6 +117,7 @@ const handlers: Record<string, Handler> = {
       budget_min: asNumber(input.budget_min),
       budget_max: asNumber(input.budget_max) ?? 0,
       rooms: asNumber(input.rooms),
+      rooms_strict: asBoolean(input.rooms_strict) ?? false,
       move_in_date: asString(input.move_in_date),
       household: asString(input.household),
       lifestyle_tags: asStringArray(input.lifestyle_tags),

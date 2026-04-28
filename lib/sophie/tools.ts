@@ -56,7 +56,11 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
         },
         rooms: {
           type: "integer",
-          description: "Anzahl Zimmer (z. B. 2 für eine 2-Zimmer-Wohnung)",
+          description: "Anzahl Zimmer (z. B. 2 für eine 2-Zimmer-Wohnung). Bei Grundstücken/plot weglassen.",
+        },
+        rooms_strict: {
+          type: "boolean",
+          description: "Wenn true, matched die Suche NUR exakt rooms (kein ±1). Default false (toleriert ±1 Zimmer). Auf true setzen wenn der User explizit 'genau N', 'nur N', 'exakt N', 'ausschließlich N' Zimmer sagt.",
         },
         move_in_date: {
           type: "string",
@@ -98,6 +102,7 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
             "budget_min",
             "budget_max",
             "rooms",
+            "rooms_strict",
             "move_in_date",
             "household",
             "lifestyle_tags",

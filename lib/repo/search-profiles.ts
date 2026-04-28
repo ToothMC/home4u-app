@@ -21,6 +21,9 @@ type SearchProfileInsert = OwnerKey & {
   budget_min?: number;
   budget_max?: number;
   rooms?: number;
+  /** Migration 0042: wenn true, matched RPC nur exakt rooms (kein ±1).
+   *  Sophie setzt es bei "genau N", "nur N", "exakt N", "ausschließlich N". */
+  rooms_strict?: boolean;
   move_in_date?: string;
   household?: string;
   lifestyle_tags?: string[];
@@ -71,6 +74,7 @@ export async function upsertSearchProfile(
     budget_min: input.budget_min ?? null,
     budget_max: input.budget_max ?? 0,
     rooms: input.rooms ?? null,
+    rooms_strict: input.rooms_strict ?? false,
     move_in_date: input.move_in_date ?? null,
     household: input.household ?? null,
     lifestyle_tags: input.lifestyle_tags ?? [],
@@ -185,6 +189,7 @@ export async function updateSearchProfileField(
     "budget_min",
     "budget_max",
     "rooms",
+    "rooms_strict",
     "move_in_date",
     "household",
     "lifestyle_tags",
@@ -193,6 +198,7 @@ export async function updateSearchProfileField(
   ]);
   if (!ALLOWED.has(field)) return false;
   if (field === "type" && value !== "rent" && value !== "sale") return false;
+  if (field === "rooms_strict" && typeof value !== "boolean") return false;
   if (
     field === "property_type" &&
     value !== null &&
