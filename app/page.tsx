@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
-import { ArrowRight, Heart, Target, Users, Home as HomeIcon } from "lucide-react";
+import { ArrowRight, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatLink, PathCards } from "@/components/landing/PathCards";
 import { FeaturedListings } from "@/components/landing/FeaturedListings";
@@ -107,19 +107,44 @@ export default function LandingPage() {
         </h2>
         <div className="grid sm:grid-cols-3 gap-10 sm:gap-12">
           <Pillar
-            icon={<Target className="size-5" />}
-            title="Passende Angebote statt endlos suchen"
-            text="Unsere Technologie und unser Netzwerk zeigen dir nur Immobilien, die wirklich zu dir passen."
+            badge={
+              <span className="inline-flex rounded-full bg-white border border-emerald-300 px-2 py-0.5 text-[11px] font-semibold leading-none text-emerald-700">
+                92 % Match
+              </span>
+            }
+            title="Kein endloses Suchen"
+            text="Kein stundenlanges Scrollen durch Social-Media-Gruppen und Inserate-Portale. Unsere KI-Technologie und unser Netzwerk zeigen dir nur Immobilien, die wirklich zu dir passen."
           />
           <Pillar
-            icon={<Users className="size-5" />}
-            title="Direkt & persönlich"
-            text="Kontaktiere Eigentümer und geprüfte Makler direkt — ohne Umwege und mit voller Transparenz."
+            badge={
+              <span className="inline-flex items-center gap-1 rounded-full bg-white border border-emerald-300 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-emerald-700">
+                <span className="inline-block size-1.5 rounded-full bg-emerald-500" aria-hidden />
+                Kein Scam
+              </span>
+            }
+            title="Keine Scam-Anzeige"
+            text="Kennst du das? „Dieses schöne Haus ist leider weg, aber ich habe noch andere Objekte.“ Bei uns findest du nur echte, geprüfte Inserate."
           />
           <Pillar
-            icon={<HomeIcon className="size-5" />}
-            title="Zuhause-Gefühl"
-            text="Wir verstehen, dass es um mehr geht als Daten. Wir helfen dir, das richtige Zuhause zu finden."
+            badge={
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-white border border-emerald-300 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-emerald-700"
+                aria-label="Sehr guter Preis"
+              >
+                <span className="inline-flex items-end gap-[1px]" aria-hidden>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <span
+                      key={i}
+                      className="w-[2px] rounded-sm bg-emerald-500"
+                      style={{ height: `${4 + i * 1.5}px` }}
+                    />
+                  ))}
+                </span>
+                Sehr guter Preis
+              </span>
+            }
+            title="Aktuelle Marktpreis-Bewertung"
+            text="Von „sehr guter Preis“ bis „sehr hoher Preis“ – ist die Miete wirklich angemessen? Wir zeigen dir, wie sich der Preis im Vergleich zu ähnlichen Objekten in der Gegend schlägt."
           />
         </div>
       </section>
@@ -219,19 +244,17 @@ export default function LandingPage() {
 }
 
 function Pillar({
-  icon,
+  badge,
   title,
   text,
 }: {
-  icon: React.ReactNode;
+  badge: React.ReactNode;
   title: string;
   text: string;
 }) {
   return (
     <div>
-      <div className="size-12 rounded-full bg-[var(--muted)] text-[var(--brand-gold-700)] flex items-center justify-center mb-5">
-        {icon}
-      </div>
+      <div className="mb-5 flex h-12 items-center">{badge}</div>
       <h3 className="text-lg font-semibold text-[var(--brand-navy)] mb-2 leading-snug">
         {title}
       </h3>
