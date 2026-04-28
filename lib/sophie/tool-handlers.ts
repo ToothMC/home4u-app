@@ -85,6 +85,7 @@ const handlers: Record<string, Handler> = {
 
     const result = await upsertSearchProfile({
       ...ownerKey,
+      conversationId: ctx.conversationId ?? null,
       location,
       budget_min: asNumber(input.budget_min),
       budget_max: asNumber(input.budget_max) ?? 0,
@@ -105,6 +106,19 @@ const handlers: Record<string, Handler> = {
           snapshot: input,
         },
       };
+    }
+    if ("error" in result) {
+      if (result.error === "limit_reached") {
+        return {
+          ok: false,
+          error: "limit_reached",
+          data: {
+            message:
+              "Du hast bereits 3 aktive Suchen. Bitte lösche zuerst eine im Dashboard, dann lege ich eine neue an.",
+          },
+        };
+      }
+      return { ok: false, error: result.error };
     }
     // Embedding fire-and-forget — Profil ist persistiert, Soft-Match ist Best-Effort
     void embedAndStoreSearchProfile(result.id, {
