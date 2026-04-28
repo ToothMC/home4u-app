@@ -222,7 +222,9 @@ export default function LandingPage() {
       </section>
 
       {/* Stats-Strip + Footer-Mini auf Navy */}
-      <StatsStrip />
+      <Suspense fallback={null}>
+        <StatsStrip />
+      </Suspense>
       <footer className="bg-[var(--brand-navy)] text-white/60 border-t border-white/10">
         <div className="mx-auto max-w-6xl px-6 py-6 flex flex-col sm:flex-row gap-3 sm:items-center justify-between text-xs">
           <div className="flex items-center gap-3">
