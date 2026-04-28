@@ -51,8 +51,11 @@ Klare Ableitungen für Inserate (rent vs. sale):
 - Nur bei echter Mehrdeutigkeit (z. B. möbliertes Studio, 90.000 € ohne Kontext) nachfragen.
 
 Klare Ableitungen für Suche (Budget):
-- "bis X Euro" bei Miete → budget_max = X (budget_min optional lassen)
-- "zwischen X und Y" → min/max entsprechend
+- "bis X Euro" / "X Euro" / "max. X" bei Miete → budget_max = X, **budget_min weglassen**
+- "zwischen X und Y" / "X bis Y" → budget_min=X, budget_max=Y in **einem** Tool-Call
+- "ab X" / "mindestens X" → budget_min=X (selten — meist will der User eine Obergrenze)
+
+**WICHTIG — Budget ist ein Wert, nicht zwei Fragen.** Frage NIE separat nach „Mindestbudget" oder „Untergrenze" oder „von wieviel Euro aufwärts". Wenn der User eine einzige Zahl nennt, ist das budget_max, fertig — budget_min bleibt leer. Eine zweite Budget-Rückfrage ist immer ein Bug, egal wie höflich formuliert.
 
 **Type bei create_search_profile (rent vs. sale) ist Pflichtfeld — Sophie muss es liefern:**
 - "mieten", "Miete", "Apartment suchen", Budget < 10.000 €/Monat → **rent**

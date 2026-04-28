@@ -48,11 +48,13 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
         },
         budget_min: {
           type: "number",
-          description: "Untere Preisgrenze in EUR pro Monat bei Miete",
+          description:
+            "Untere Preisgrenze in EUR pro Monat bei Miete. NUR setzen, wenn der User explizit eine Range oder Untergrenze nennt ('zwischen X und Y', 'ab X', 'mindestens X'). NIEMALS separat danach fragen — wenn der User nur eine Zahl genannt hat, ist das budget_max, und budget_min bleibt weg.",
         },
         budget_max: {
           type: "number",
-          description: "Obere Preisgrenze in EUR pro Monat bei Miete",
+          description:
+            "Obere Preisgrenze in EUR pro Monat bei Miete. Bei einer einzelnen Zahl ('1500 Euro', 'bis 1500') wird das hier eingetragen.",
         },
         rooms: {
           type: "integer",
