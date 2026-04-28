@@ -85,16 +85,17 @@ export function AuthMenu({
             </Link>
           </Button>
         )}
-        <span
+        <Link
+          href="/dashboard/profile"
           className={
-            "flex items-center gap-1 text-xs text-[var(--muted-foreground)] max-w-[160px] truncate" +
+            "flex items-center gap-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] max-w-[160px] truncate" +
             (compact ? "" : " sm:max-w-none")
           }
-          title={state.email ?? "Account"}
+          title={state.email ?? "Profil"}
         >
           <UserIcon className="size-3" />
           {label}
-        </span>
+        </Link>
         <Button
           size="sm"
           variant="ghost"
