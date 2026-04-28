@@ -12,6 +12,9 @@ import {
   Check,
   X,
   Eye,
+  ArrowLeft,
+  ArrowRight,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,6 +191,22 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
     });
   }
 
+  // Bild-Reihenfolge ändern. media[0] ist Cover — moveMedia(idx, 0) macht das
+  // gewählte Bild zum Cover. Drag-and-Drop (Desktop) und Buttons (alle Devices).
+  function moveMedia(fromIdx: number, toIdx: number) {
+    if (fromIdx === toIdx || toIdx < 0) return;
+    setMedia((prev) => {
+      if (fromIdx >= prev.length || toIdx >= prev.length) return prev;
+      const next = [...prev];
+      const [item] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, item);
+      schedulePersistMedia(next);
+      return next;
+    });
+  }
+
+  const [dragIdx, setDragIdx] = React.useState<number | null>(null);
+
   async function removeMedia(url: string) {
     setError(null);
     setBusy(`media-remove-${url}`);
@@ -262,7 +281,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Bilder & Videos ({media.length})</h2>
           <span className="text-[10px] text-[var(--muted-foreground)]">
-            Erstes Bild = Cover
+            Ziehen oder Pfeile zum Sortieren · ⭐ = Cover
           </span>
         </div>
 
@@ -270,27 +289,101 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {media.map((url, idx) => {
               const isVideo = /\.(mp4|mov|webm)$/i.test(url);
+              const isCover = idx === 0;
+              const isFirst = idx === 0;
+              const isLast = idx === media.length - 1;
               return (
                 <div
                   key={url}
-                  className="group relative aspect-square overflow-hidden rounded-md border bg-[var(--muted)]"
+                  draggable
+                  onDragStart={(e) => {
+                    setDragIdx(idx);
+                    e.dataTransfer.effectAllowed = "move";
+                    // Hint-Text als drag-image (Browser zeigt das Element selbst)
+                    e.dataTransfer.setData("text/plain", String(idx));
+                  }}
+                  onDragOver={(e) => {
+                    if (dragIdx === null || dragIdx === idx) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragIdx === null || dragIdx === idx) return;
+                    moveMedia(dragIdx, idx);
+                    setDragIdx(null);
+                  }}
+                  onDragEnd={() => setDragIdx(null)}
+                  className={cn(
+                    "group relative aspect-square overflow-hidden rounded-md border bg-[var(--muted)] transition-all",
+                    "cursor-move",
+                    dragIdx === idx && "opacity-40 scale-95",
+                    dragIdx !== null && dragIdx !== idx && "ring-2 ring-transparent hover:ring-emerald-500",
+                  )}
                 >
-                  {idx === 0 && (
-                    <span className="absolute top-1 left-1 z-10 rounded bg-black/60 backdrop-blur px-1.5 py-0.5 text-[9px] font-medium text-white">
-                      Cover
+                  {isCover && (
+                    <span className="absolute top-1 left-1 z-10 rounded bg-emerald-600/90 backdrop-blur px-1.5 py-0.5 text-[9px] font-semibold text-white flex items-center gap-0.5">
+                      <Star className="size-2.5 fill-current" /> Cover
                     </span>
                   )}
                   {isVideo ? (
                     /* eslint-disable-next-line jsx-a11y/media-has-caption */
-                    <video src={url} className="h-full w-full object-cover" muted playsInline />
+                    <video src={url} className="h-full w-full object-cover pointer-events-none" muted playsInline />
                   ) : (
                     /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    <img src={url} alt="" className="h-full w-full object-cover pointer-events-none" loading="lazy" />
                   )}
+
+                  {/* Reorder-Buttons unten — immer leicht sichtbar, voll auf Hover */}
+                  <div className="absolute bottom-1 left-1 right-1 flex justify-between gap-1 opacity-70 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveMedia(idx, idx - 1);
+                      }}
+                      disabled={isFirst}
+                      className="size-6 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black disabled:opacity-30 disabled:cursor-not-allowed pointer-events-auto"
+                      aria-label="Nach links verschieben"
+                    >
+                      <ArrowLeft className="size-3" />
+                    </button>
+                    {!isCover && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          moveMedia(idx, 0);
+                        }}
+                        className="size-6 rounded-full bg-emerald-600/90 text-white flex items-center justify-center hover:bg-emerald-700 pointer-events-auto"
+                        aria-label="Als Cover setzen"
+                        title="Als Cover setzen"
+                      >
+                        <Star className="size-3" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveMedia(idx, idx + 1);
+                      }}
+                      disabled={isLast}
+                      className="size-6 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black disabled:opacity-30 disabled:cursor-not-allowed pointer-events-auto"
+                      aria-label="Nach rechts verschieben"
+                    >
+                      <ArrowRight className="size-3" />
+                    </button>
+                  </div>
+
                   <button
-                    onClick={() => removeMedia(url)}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeMedia(url);
+                    }}
                     disabled={busy === `media-remove-${url}`}
-                    className="absolute top-1 right-1 size-6 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                    className="absolute top-1 right-1 size-6 rounded-full bg-black/70 text-white flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                     aria-label="Bild entfernen"
                   >
                     {busy === `media-remove-${url}` ? (
