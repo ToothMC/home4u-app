@@ -300,19 +300,6 @@ export function MatchCard({
             </div>
           )}
 
-          {/* Sophie-Scam-Check-Badge — auf jeder Karte sichtbar.
-              Position unterhalb des Image-Counters (links oben). */}
-          <div className={cn(
-            "absolute left-3 rounded-full bg-white/90 backdrop-blur px-2 py-0.5",
-            total > 1 ? "top-12" : "top-3",
-          )}>
-            <ScamCheckBadge
-              score={data.scamScore}
-              flags={data.scamFlags}
-              variant="compact"
-            />
-          </div>
-
           {/* Tap-Targets für Like/Skip — funktional gleichwertig zum Wischen.
               Größe 12 (48 px) entspricht Apple-HIG-Tap-Mindestgröße.
               Visuell semi-transparent, scaliert mit aktivem Drag. */}
@@ -374,19 +361,35 @@ export function MatchCard({
             </div>
           )}
 
-          {/* Info gradient overlay (Preis + Lage) */}
+          {/* Info gradient overlay (Preis + Lage links, Badges rechts).
+              Layout:
+                Preis €                 [Preisbewertung]
+                Ort                     [Sophie-Check Ampel]
+              Preisbewertung wird ergänzt, sobald market_position in
+              MatchCardData geplumbt ist. Bis dahin nur Scam-Check. */}
           <div className="absolute bottom-0 inset-x-0 p-4 pb-3 bg-gradient-to-t from-black/85 via-black/40 to-transparent text-white">
-            <div className="text-2xl font-semibold leading-none">
-              {formatPrice(data.price)}
-              {data.type === "rent" && (
-                <span className="text-sm font-normal opacity-80"> / Monat</span>
-              )}
-            </div>
-            <div className="mt-1 flex items-center gap-1 text-sm opacity-95">
-              <MapPin className="size-3" />
-              {data.location_district
-                ? `${data.location_district}, ${data.location_city}`
-                : data.location_city}
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-2xl font-semibold leading-none">
+                  {formatPrice(data.price)}
+                  {data.type === "rent" && (
+                    <span className="text-sm font-normal opacity-80"> / Monat</span>
+                  )}
+                </div>
+                <div className="mt-1 flex items-center gap-1 text-sm opacity-95">
+                  <MapPin className="size-3" />
+                  {data.location_district
+                    ? `${data.location_district}, ${data.location_city}`
+                    : data.location_city}
+                </div>
+              </div>
+              <div className="shrink-0 rounded-full bg-white/90 backdrop-blur px-2 py-0.5">
+                <ScamCheckBadge
+                  score={data.scamScore}
+                  flags={data.scamFlags}
+                  variant="compact"
+                />
+              </div>
             </div>
           </div>
 
