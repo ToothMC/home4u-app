@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { MediaUploader, type AttachedMedia } from "@/components/chat/MediaUploader";
 import type { Region } from "@/lib/regions";
+import { emitMatchesUpdated } from "@/lib/events/match-events";
 
 type ToolCall = {
   id: string;
@@ -200,6 +201,12 @@ export function ChatView({
                 ok: Boolean(evt.ok),
                 error: typeof evt.error === "string" ? evt.error : undefined,
               };
+              // Wenn Sophie eine Anfrage bestätigt hat, soll die Anfragen-
+              // Liste auf dem Dashboard sofort re-fetched werden — sonst
+              // sieht der User die neue Anfrage erst nach Refresh.
+              if (tc.name === "confirm_match_request" && tc.result.ok) {
+                emitMatchesUpdated();
+              }
             }
           } else if (evt.type === "error") {
             throw new Error(String(evt.message ?? "stream_error"));

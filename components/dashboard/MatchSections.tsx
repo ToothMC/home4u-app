@@ -6,6 +6,7 @@ import { Inbox, Send, Loader2, Handshake, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { OwnerInboxCard, type OwnerInboxRow } from "./OwnerInboxCard";
 import { AvailabilityChips } from "./AvailabilityChips";
+import { onMatchesUpdated } from "@/lib/events/match-events";
 
 type OutboxRow = {
   match_id: string;
@@ -57,6 +58,12 @@ export function MatchSections({
 
   useEffect(() => {
     load();
+    // Sub: re-fetch sobald irgendwo eine neue Anfrage gesendet wurde
+    // (InquireButton, RequestVisitButton, Sophie's confirm_match_request).
+    const unsub = onMatchesUpdated(() => {
+      load();
+    });
+    return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 

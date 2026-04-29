@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Loader2 } from "lucide-react";
+import { emitMatchesUpdated } from "@/lib/events/match-events";
 
 export function RequestVisitButton({
   listingId,
@@ -41,6 +42,7 @@ export function RequestVisitButton({
       const json = await res.json();
       setMatchId(json.match_id);
       setState("done");
+      emitMatchesUpdated();
       setTimeout(() => router.push(`/matches/${json.match_id}`), 1200);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Netzwerkfehler");

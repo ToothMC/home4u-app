@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Loader2, Send, Hourglass, Handshake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { MatchStatus } from "@/lib/repo/bookmarks";
+import { emitMatchesUpdated } from "@/lib/events/match-events";
 
 /**
  * Pipeline-Aktion auf einer BookmarkCard.
@@ -86,8 +87,10 @@ export function InquireButton({
         setSubmitting(false);
         return;
       }
-      // Erfolg: Page neu laden, damit Server-Filter das Item aus Favoriten
-      // entfernt und die Anfragen-Section es übernimmt.
+      // Erfolg: Page neu laden (Server-Component) + Client-Event für die
+      // Anfragen-Liste, damit MatchSections sofort re-fetched (sonst sieht
+      // der User die Anfrage erst nach manuellem Refresh).
+      emitMatchesUpdated();
       startTransition(() => {
         router.refresh();
       });
