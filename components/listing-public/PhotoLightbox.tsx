@@ -94,10 +94,11 @@ export function PhotoLightbox({
         <img
           src={current.url}
           alt={current.caption ?? ""}
-          // Konstanter Anzeigeplatz unabhängig vom Seitenverhältnis: Hochkant-
-          // und Querformat-Bilder bekommen denselben Rahmen, damit das Layout
-          // beim Durchklicken nicht "atmet" und Thumbnails immer sichtbar sind.
-          className="h-full w-full max-w-5xl object-contain select-none"
+          // Harte max-Maße auf Viewport-Anteile, damit JEDES Bild — egal ob
+          // mit/ohne Caption oder welches Seitenverhältnis — denselben Rahmen
+          // bekommt. Vorher: flex-1 + h-full liess das Bild mitwachsen, sobald
+          // eine Caption fehlte, und die Thumbnails wurden rausgedrueckt.
+          className="max-h-[78vh] max-w-[92vw] sm:max-w-5xl object-contain select-none"
           draggable={false}
         />
 
