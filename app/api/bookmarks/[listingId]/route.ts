@@ -24,6 +24,9 @@ export async function POST(
 
   const body = await req.json().catch(() => ({}));
   const source = typeof body?.source === "string" ? body.source.slice(0, 50) : null;
+  const rawSpid = body?.searchProfileId;
+  const searchProfileId =
+    typeof rawSpid === "string" && /^[0-9a-f-]{36}$/i.test(rawSpid) ? rawSpid : null;
 
   let supabase;
   try {
@@ -41,6 +44,7 @@ export async function POST(
     p_listing_id: listingId,
     p_anonymous_id: null,
     p_source: source,
+    p_search_profile_id: searchProfileId,
   });
   if (error) {
     console.error("[bookmarks] rpc failed", error);
