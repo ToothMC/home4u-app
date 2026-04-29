@@ -207,6 +207,7 @@ export default async function PublicListingPage({
               formattedPrice={formattedPrice}
               priceTitle={priceTitle}
               listingId={listing.id}
+              listingStatus={listing.status}
               marketData={marketData}
             />
             <ScamCheckBlock
@@ -239,6 +240,7 @@ export default async function PublicListingPage({
               formattedPrice={formattedPrice}
               priceTitle={priceTitle}
               listingId={listing.id}
+              listingStatus={listing.status}
               marketData={marketData}
             />
             <ScamCheckBlock
@@ -267,12 +269,14 @@ function PriceBox({
   priceLabel,
   priceTitle,
   listingId,
+  listingStatus,
   marketData,
 }: {
   formattedPrice: string;
   priceLabel: string;
   priceTitle: string;
   listingId: string;
+  listingStatus: string;
   marketData: MarketData | null;
 }) {
   return (
@@ -293,7 +297,7 @@ function PriceBox({
           <MarketPriceBadge data={marketData} />
         )}
       </div>
-      <RequestVisitButton listingId={listingId} full />
+      <RequestVisitButton listingId={listingId} full listingStatus={listingStatus} />
     </section>
   );
 }

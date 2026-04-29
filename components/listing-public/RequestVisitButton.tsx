@@ -5,12 +5,40 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Loader2 } from "lucide-react";
 import { emitMatchesUpdated } from "@/lib/events/match-events";
 
+// Inserat-Status, bei denen die Anfrage keinen Sinn mehr macht — Button wird
+// dann disabled und zeigt den Status direkt als Label. Farben gleich wie im
+// ListingStatusBadge, damit der User den Status auf einen Blick erkennt.
+const NON_INQUIRABLE: Record<string, { label: string; cls: string }> = {
+  reserved: {
+    label: "Reserviert",
+    cls: "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40",
+  },
+  rented: {
+    label: "Vermietet",
+    cls: "bg-[var(--destructive)]/15 text-[var(--destructive)] border border-[var(--destructive)]/30 font-semibold",
+  },
+  sold: {
+    label: "Verkauft",
+    cls: "bg-[var(--destructive)]/15 text-[var(--destructive)] border border-[var(--destructive)]/30 font-semibold",
+  },
+  opted_out: {
+    label: "Nicht verfügbar",
+    cls: "bg-[var(--muted)] text-[var(--muted-foreground)]",
+  },
+  archived: {
+    label: "Archiviert",
+    cls: "bg-[var(--muted)] text-[var(--muted-foreground)]",
+  },
+};
+
 export function RequestVisitButton({
   listingId,
   full,
+  listingStatus,
 }: {
   listingId: string;
   full?: boolean;
+  listingStatus?: string;
 }) {
   const router = useRouter();
   const [state, setState] = React.useState<"idle" | "submitting" | "done" | "error">("idle");
@@ -55,6 +83,24 @@ export function RequestVisitButton({
       <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800 flex items-center gap-2">
         <Check className="size-4" /> Anfrage raus — wir leiten dich weiter…
       </div>
+    );
+  }
+
+  if (listingStatus && NON_INQUIRABLE[listingStatus]) {
+    const s = NON_INQUIRABLE[listingStatus];
+    return (
+      <button
+        type="button"
+        disabled
+        className={
+          "flex items-center justify-center gap-2 rounded-full uppercase tracking-wider text-sm cursor-not-allowed " +
+          (full ? "w-full h-12" : "h-11 px-5") +
+          " " +
+          s.cls
+        }
+      >
+        {s.label}
+      </button>
     );
   }
 

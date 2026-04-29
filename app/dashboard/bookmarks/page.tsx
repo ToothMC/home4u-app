@@ -217,6 +217,7 @@ function BookmarkCard({ bookmark }: { bookmark: BookmarkedListing }) {
             matchStatus={matchStatus}
             matchId={matchId}
             hasSearchProfile={searchProfileId !== null}
+            listingStatus={listing.status}
           />
         </div>
       )}

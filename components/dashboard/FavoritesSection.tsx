@@ -93,6 +93,7 @@ export async function FavoritesSection({ userId }: { userId: string }) {
                       matchStatus={b.matchStatus}
                       matchId={b.matchId}
                       hasSearchProfile={b.searchProfileId !== null}
+                      listingStatus={b.listing.status}
                     />
                   </div>
                 </div>
