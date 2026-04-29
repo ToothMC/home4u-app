@@ -84,21 +84,35 @@ export default async function PublicListingPage({
     <main className="bg-[var(--background)]">
       {unavailable && (
         <div className="mx-auto max-w-7xl w-full px-4 pt-4">
-          <div className="rounded-md border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm">
-            <span className="font-semibold text-[var(--destructive)]">
-              {listing.status === "rented"
-                ? "Inserat ist als vermietet markiert"
-                : listing.status === "sold"
-                  ? "Inserat ist als verkauft markiert"
-                  : "Verfügbarkeit unklar"}
-            </span>
-            <span className="text-[var(--muted-foreground)]">
-              {" "}
-              — der Inserent hat dieses Inserat als nicht mehr verfügbar gemeldet.
-              Falls Du der Inserent bist und es wieder anbieten willst, melde
-              Dich kurz bei uns.
-            </span>
-          </div>
+          {listing.status === "reserved" ? (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+              <span className="font-semibold text-amber-700 dark:text-amber-300">
+                In Verhandlung
+              </span>
+              <span className="text-[var(--muted-foreground)]">
+                {" "}
+                — der Inserent hat eine mündliche Zusage. Falls die platzt,
+                ist das Inserat in den nächsten Tagen wieder regulär in den
+                Treffern.
+              </span>
+            </div>
+          ) : (
+            <div className="rounded-md border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm">
+              <span className="font-semibold text-[var(--destructive)]">
+                {listing.status === "rented"
+                  ? "Inserat ist als vermietet markiert"
+                  : listing.status === "sold"
+                    ? "Inserat ist als verkauft markiert"
+                    : "Verfügbarkeit unklar"}
+              </span>
+              <span className="text-[var(--muted-foreground)]">
+                {" "}
+                — der Inserent hat dieses Inserat als nicht mehr verfügbar
+                gemeldet. Falls die Vermietung platzt und das Original-Inserat
+                noch online ist, reaktivieren wir es nach 7 Tagen automatisch.
+              </span>
+            </div>
+          )}
         </div>
       )}
 

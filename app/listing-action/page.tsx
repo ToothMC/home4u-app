@@ -55,19 +55,23 @@ function ConfirmationView({ token, action }: { token: string; action: string }) 
   const headline =
     action === "mark_rented"
       ? "Inserat als vermietet/verkauft markieren?"
-      : action === "still_available"
-        ? "Bestätigen: Inserat ist noch verfügbar?"
-        : action === "wrong_listing"
-          ? "Diese Anfrage gehört nicht zu Dir?"
-          : "Aktion bestätigen";
+      : action === "mark_reserved"
+        ? "Inserat als „vorerst vermietet“ markieren?"
+        : action === "still_available"
+          ? "Bestätigen: Inserat ist noch verfügbar?"
+          : action === "wrong_listing"
+            ? "Diese Anfrage gehört nicht zu Dir?"
+            : "Aktion bestätigen";
   const body =
     action === "mark_rented"
-      ? "Wir setzen das Inserat in Home4U auf „nicht mehr verfügbar“ und schicken Dir keine weiteren Anfragen dafür."
-      : action === "still_available"
-        ? "Wir reaktivieren das Inserat in Home4U."
-        : action === "wrong_listing"
-          ? "Wir markieren das Inserat als „nicht von Dir“ und unterdrücken zukünftige Anfragen."
-          : "";
+      ? "Wir setzen das Inserat in Home4U auf „nicht mehr verfügbar“ und schicken Dir keine weiteren Anfragen dafür. Falls der Mietvertrag in den nächsten 7 Tagen nicht zustande kommt und Dein Inserat auf der Original-Plattform aktiv bleibt, reaktivieren wir es automatisch."
+      : action === "mark_reserved"
+        ? "Wir blenden das Inserat vorübergehend aus den Treffern aus, weil Du eine mündliche Zusage hast. Falls der Mieter abspringt: bei aktivem Original-Inserat reaktivieren wir nach 3 Tagen automatisch — oder Du nimmst das Inserat einfach wieder online."
+        : action === "still_available"
+          ? "Wir reaktivieren das Inserat in Home4U."
+          : action === "wrong_listing"
+            ? "Wir markieren das Inserat als „nicht von Dir“ und unterdrücken zukünftige Anfragen."
+            : "";
 
   return (
     <main className="mx-auto max-w-md p-8 text-center">

@@ -12,7 +12,14 @@ type OutboxRow = {
   match_id: string;
   listing_id: string;
   listing_title: string | null;
-  listing_status: "active" | "stale" | "opted_out" | "archived" | "rented" | "sold";
+  listing_status:
+    | "active"
+    | "stale"
+    | "opted_out"
+    | "archived"
+    | "rented"
+    | "sold"
+    | "reserved";
   listing_type: "rent" | "sale";
   listing_city: string;
   listing_district: string | null;
@@ -134,7 +141,7 @@ export function MatchSections({
                 key={m.match_id}
                 href={`/matches/${m.match_id}`}
                 className={`group flex items-stretch gap-3 rounded-lg border bg-[var(--card)] p-2 hover:bg-[var(--accent)] transition-colors ${
-                  ["rented", "sold", "opted_out"].includes(m.listing_status)
+                  ["rented", "sold", "opted_out", "reserved"].includes(m.listing_status)
                     ? "opacity-60"
                     : ""
                 }`}
@@ -173,6 +180,10 @@ export function MatchSections({
                     ) : m.listing_status === "sold" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[var(--destructive)]/15 px-2 py-0.5 text-[var(--destructive)] font-semibold uppercase tracking-wider">
                         Inserat verkauft
+                      </span>
+                    ) : m.listing_status === "reserved" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-amber-700 dark:text-amber-300 uppercase tracking-wider">
+                        in Verhandlung
                       </span>
                     ) : m.listing_status === "stale" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-amber-700 dark:text-amber-300 uppercase tracking-wider">

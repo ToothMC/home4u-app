@@ -21,7 +21,12 @@ import { SignJWT, jwtVerify } from "jose";
 const TOKEN_TTL_DAYS = 30;
 const ISSUER = "home4u-outreach";
 
-export type ActionKind = "mark_rented" | "reply" | "wrong_listing" | "still_available";
+export type ActionKind =
+  | "mark_rented"
+  | "mark_reserved"
+  | "reply"
+  | "wrong_listing"
+  | "still_available";
 
 export type ActionTokenPayload = {
   match_id: string;
@@ -69,7 +74,11 @@ export async function verifyActionToken(token: string): Promise<ActionTokenPaylo
     throw new Error("invalid_token_payload");
   }
   const action = payload.action as ActionKind;
-  if (!["mark_rented", "reply", "wrong_listing", "still_available"].includes(action)) {
+  if (
+    !["mark_rented", "mark_reserved", "reply", "wrong_listing", "still_available"].includes(
+      action
+    )
+  ) {
     throw new Error("invalid_action");
   }
   return {
