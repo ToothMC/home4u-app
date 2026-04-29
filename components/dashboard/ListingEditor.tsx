@@ -757,7 +757,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                 className="h-10 w-full rounded-md border bg-[var(--background)] px-3 text-sm"
               >
                 <option value="active">aktiv (sichtbar)</option>
-                <option value="reserved">vorerst vermietet (mündlich)</option>
+                <option value="reserved">reserviert (mündliche Zusage)</option>
                 <option value="rented">vermietet</option>
                 <option value="sold">verkauft</option>
                 <option value="stale">verfügbarkeit unklar</option>

@@ -56,7 +56,7 @@ function ConfirmationView({ token, action }: { token: string; action: string }) 
     action === "mark_rented"
       ? "Inserat als vermietet/verkauft markieren?"
       : action === "mark_reserved"
-        ? "Inserat als „vorerst vermietet“ markieren?"
+        ? "Inserat als „reserviert“ markieren?"
         : action === "still_available"
           ? "Bestätigen: Inserat ist noch verfügbar?"
           : action === "wrong_listing"

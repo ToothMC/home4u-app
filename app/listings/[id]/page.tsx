@@ -87,13 +87,13 @@ export default async function PublicListingPage({
           {listing.status === "reserved" ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
               <span className="font-semibold text-amber-700 dark:text-amber-300">
-                In Verhandlung
+                Reserviert
               </span>
               <span className="text-[var(--muted-foreground)]">
                 {" "}
-                — der Inserent hat eine mündliche Zusage. Falls die platzt,
-                ist das Inserat in den nächsten Tagen wieder regulär in den
-                Treffern.
+                — der Inserent hat eine mündliche Zusage und das Inserat
+                vorübergehend reserviert. Falls die Zusage platzt, ist das
+                Inserat in den nächsten Tagen wieder regulär in den Treffern.
               </span>
             </div>
           ) : (

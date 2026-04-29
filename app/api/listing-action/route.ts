@@ -221,7 +221,7 @@ function successPage(action: string, newStatus: string): string {
     action === "mark_rented"
       ? "Vielen Dank — wir haben das Inserat als nicht mehr verfügbar markiert."
       : action === "mark_reserved"
-        ? "Notiert — Inserat ist vorerst aus den Treffern raus."
+        ? "Notiert — Inserat ist als reserviert markiert."
         : action === "still_available"
           ? "Notiert — das Inserat bleibt aktiv."
           : action === "wrong_listing"

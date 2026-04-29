@@ -183,7 +183,7 @@ export function MatchSections({
                       </span>
                     ) : m.listing_status === "reserved" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-amber-700 dark:text-amber-300 uppercase tracking-wider">
-                        in Verhandlung
+                        reserviert
                       </span>
                     ) : m.listing_status === "stale" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-amber-700 dark:text-amber-300 uppercase tracking-wider">
