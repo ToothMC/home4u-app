@@ -4,6 +4,8 @@ import {
   type ActionTokenPayload,
 } from "@/lib/listings/action-token";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { sendEmail } from "@/lib/email/send";
+import { buildSeekerListingUpdateEmail } from "@/lib/email/templates/seeker-listing-update";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -114,7 +116,95 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Bei rented/sold: Seeker informieren (best-effort, blockiert nicht).
+  // reportKind ist "rented", aber RPC kann es zu "sold" mappen wenn type='sale'.
+  if (result.status === "rented" || result.status === "sold") {
+    const finalStatus: "rented" | "sold" = result.status;
+    notifySeekerListingUnavailable({
+      service,
+      matchId: payload.match_id,
+      listingId: payload.listing_id,
+      newStatus: finalStatus,
+      baseUrl: new URL(req.url).origin,
+    }).catch((e) => console.error("[listing-action] notifySeeker threw", e));
+  }
+
   return htmlResponse(successPage(payload.action, result.status ?? "—"), 200);
+}
+
+async function notifySeekerListingUnavailable(opts: {
+  service: ReturnType<typeof createSupabaseServiceClient>;
+  matchId: string;
+  listingId: string;
+  newStatus: "rented" | "sold";
+  baseUrl: string;
+}) {
+  const { service, matchId, listingId, newStatus, baseUrl } = opts;
+  if (!service) return;
+
+  // Match → search_profile → user_id ODER anonymous_id
+  const { data: match } = await service
+    .from("matches")
+    .select("id, search_profile_id")
+    .eq("id", matchId)
+    .maybeSingle();
+  if (!match?.search_profile_id) return;
+
+  const { data: profile } = await service
+    .from("search_profiles")
+    .select("user_id, anonymous_id")
+    .eq("id", match.search_profile_id)
+    .maybeSingle();
+  if (!profile?.user_id) return; // ohne Login keine Email-Adresse
+
+  // Email aus profiles.notification_email oder auth.users.email
+  let seekerEmail: string | null = null;
+  const { data: seekerProfile } = await service
+    .from("profiles")
+    .select("notification_email, preferred_language")
+    .eq("id", profile.user_id)
+    .maybeSingle();
+  let language: "en" | "de" | "ru" | "el" = "de";
+  if (
+    seekerProfile?.preferred_language &&
+    ["en", "de", "ru", "el"].includes(seekerProfile.preferred_language)
+  ) {
+    language = seekerProfile.preferred_language as typeof language;
+  }
+  seekerEmail = seekerProfile?.notification_email ?? null;
+  if (!seekerEmail) {
+    const { data: authUser } = await service.auth.admin.getUserById(profile.user_id);
+    seekerEmail = authUser?.user?.email ?? null;
+  }
+  if (!seekerEmail) return;
+
+  // Listing-Daten für Template
+  const { data: listing } = await service
+    .from("listings")
+    .select("title, type, location_city")
+    .eq("id", listingId)
+    .maybeSingle();
+  if (!listing) return;
+
+  const { subject, html, text } = buildSeekerListingUpdateEmail({
+    baseUrl,
+    listingTitle: listing.title,
+    listingType: listing.type as "rent" | "sale",
+    listingCity: listing.location_city,
+    newStatus,
+    language,
+  });
+
+  await sendEmail({
+    to: seekerEmail,
+    subject,
+    html,
+    text,
+    tags: [
+      { name: "kind", value: "seeker_listing_update" },
+      { name: "new_status", value: newStatus },
+    ],
+  });
 }
 
 function htmlResponse(html: string, status: number) {
