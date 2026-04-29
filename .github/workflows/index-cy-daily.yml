@@ -43,7 +43,12 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    # Erstlauf indexiert ~41k Listings × ~1s/Listing (Detail-Fetch + pHash)
+    # = ~11h theoretisch. Mehrere Runs nacheinander (idempotent via
+    # fetch_already_indexed) decken alles ab. Daily-Folgelauf ist
+    # inkrementell (~100-500 neue/Tag = 5-15min).
+    # 350 min ist GitHub Actions Free-Tier Job-Limit (max 360).
+    timeout-minutes: 350
     defaults:
       run:
         working-directory: ./index-crawler
