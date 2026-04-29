@@ -34,7 +34,20 @@ const patchSchema = z
     contact_channel: z.string().max(40).nullable().optional(),
     language: z.enum(["de", "en", "ru", "el"]).nullable().optional(),
     media: z.array(z.string().url().max(1024)).max(40).optional(),
-    status: z.enum(["active", "stale", "opted_out", "archived"]).optional(),
+    // Vollständige Statusliste — der Editor bietet im Dropdown alle 7 Werte
+    // an (aktiv/reserviert/vermietet/verkauft/fraglich/archiviert/deaktiviert).
+    // Sonst kippt das Speichern beim Wechsel auf reserved/rented/sold.
+    status: z
+      .enum([
+        "active",
+        "stale",
+        "reserved",
+        "rented",
+        "sold",
+        "opted_out",
+        "archived",
+      ])
+      .optional(),
     // Adresse + Geo
     location_address: z.string().max(240).nullable().optional(),
     lat: z.number().min(-90).max(90).nullable().optional(),
