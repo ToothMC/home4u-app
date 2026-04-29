@@ -1,0 +1,72 @@
+name: Daily INDEX.cy Crawl
+
+# Statisch (httpx + selectolax + lxml-Stack), kein Browser nötig.
+# Inkrementell: nur neue Listings werden gefetched.
+# Dedup-on-Write: pHash-Match gegen bestehende Bazaraki-Listings via
+# bulk_upsert_external_listings → canonical_id-Verlinkung automatisch.
+
+on:
+  schedule:
+    # 05:00 UTC = 1h nach Bazaraki-Daily-Crawl. Damit Bazaraki-Updates
+    # zuerst durch sind und INDEX-Listings dagegen matchen können.
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      max_listings:
+        description: "Cap (0 = unbegrenzt)"
+        required: false
+        default: "0"
+      rate_limit_s:
+        description: "Sekunden Pause pro Detail-Fetch"
+        required: false
+        default: "1.0"
+      dry_run:
+        description: "Nur loggen, kein DB-Write"
+        type: boolean
+        required: false
+        default: false
+      skip_phash:
+        description: "pHash-Phase überspringen (5x schneller, aber kein Cross-Source-Match)"
+        type: boolean
+        required: false
+        default: false
+      force_refetch:
+        description: "Auch bekannte Listings nochmal fetchen"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: index-cy-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    defaults:
+      run:
+        working-directory: ./index-crawler
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+
+      - name: Run crawler
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MAX_LISTINGS: ${{ inputs.max_listings || '0' }}
+          RATE_LIMIT_S: ${{ inputs.rate_limit_s || '1.0' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          SKIP_PHASH: ${{ inputs.skip_phash && '1' || '' }}
+          FORCE_REFETCH: ${{ inputs.force_refetch && '1' || '' }}
+        run: python -m src.main
