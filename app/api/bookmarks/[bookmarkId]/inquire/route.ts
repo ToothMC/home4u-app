@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { triggerOutreachForMatch } from "@/lib/listings/outreach";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,5 +51,17 @@ export async function POST(
   if (!payload.ok) {
     return Response.json({ error: payload.error ?? "unknown" }, { status: 400 });
   }
+
+  // Outreach an den Inserenten — best-effort, blockiert die Response nicht
+  // bei Provider-Fehler. Fehler landen in outreach_log mit status='failed'.
+  if (payload.match_id) {
+    try {
+      const outreach = await triggerOutreachForMatch(payload.match_id);
+      console.info("[bookmarks/inquire] outreach", outreach);
+    } catch (e) {
+      console.error("[bookmarks/inquire] outreach threw", e);
+    }
+  }
+
   return Response.json({ ok: true, matchId: payload.match_id });
 }
