@@ -1,8 +1,8 @@
-"""Bulk-Upsert nach Supabase via RPC `bulk_upsert_bazaraki_listings` (Migration 0029).
+"""Bulk-Upsert nach Supabase via generisches RPC `bulk_upsert_external_listings`
+(Migration 0050) — gleicher Pfad wie INDEX.cy + zukünftige Crawler.
 
-Vorher: PostgREST `/rest/v1/listings?on_conflict=...` mit Klartext-raw_text.
-Jetzt: RPC mit serverseitiger pgp_sym_encrypt-Verschlüsselung von raw_text
-(analog FB, Indexer-Spec v2.0 §4.2 / §6).
+Liefert Cross-Source-Dedup (find_canonical_for_signals) und einheitlichen
+deduped-Counter. Source wird als `p_source='bazaraki'` mitgegeben.
 
 Score-Felder werden NICHT mitgeschickt — der Async-Score-Worker
 (lib/scam/worker.ts) holt sich Listings mit scam_checked_at IS NULL und
@@ -72,8 +72,13 @@ def _to_row(item: RawListing) -> dict:
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
 def _post_chunk(url: str, headers: dict, payload: list[dict]) -> dict:
-    """RPC-Call mit p_rows JSON-Array. Response: {ok, inserted, updated, failed}."""
-    resp = httpx.post(url, headers=headers, json={"p_rows": payload}, timeout=60)
+    """RPC-Call mit p_source + p_rows. Response: {ok, inserted, updated, deduped, failed}."""
+    resp = httpx.post(
+        url,
+        headers=headers,
+        json={"p_source": "bazaraki", "p_rows": payload},
+        timeout=60,
+    )
     if resp.status_code >= 400:
         log.error("RPC failed (%d): %s", resp.status_code, resp.text[:500])
         resp.raise_for_status()
@@ -81,10 +86,10 @@ def _post_chunk(url: str, headers: dict, payload: list[dict]) -> dict:
 
 
 def upsert_listings(items: Iterable[RawListing]) -> dict[str, int]:
-    """Bulk-Upsert via RPC. Konfliktauflösung: on (source='bazaraki', dedup_hash)."""
+    """Bulk-Upsert via generisches RPC. Konfliktauflösung: on (source, dedup_hash)."""
     url_base = os.environ["SUPABASE_URL"].rstrip("/")
     service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    url = f"{url_base}/rest/v1/rpc/bulk_upsert_bazaraki_listings"
+    url = f"{url_base}/rest/v1/rpc/bulk_upsert_external_listings"
     headers = {
         "apikey": service_key,
         "Authorization": f"Bearer {service_key}",
@@ -93,10 +98,11 @@ def upsert_listings(items: Iterable[RawListing]) -> dict[str, int]:
 
     rows = [_to_row(i) for i in items]
     if not rows:
-        return {"chunks": 0, "rows_attempted": 0, "inserted": 0, "updated": 0, "failed": []}
+        return {"chunks": 0, "rows_attempted": 0, "inserted": 0, "updated": 0, "deduped": 0, "failed": []}
 
     inserted = 0
     updated = 0
+    deduped = 0
     chunks = 0
     failed: list = []
     for i in range(0, len(rows), CHUNK_SIZE):
@@ -105,11 +111,16 @@ def upsert_listings(items: Iterable[RawListing]) -> dict[str, int]:
         chunks += 1
         inserted += int(result.get("inserted", 0))
         updated += int(result.get("updated", 0))
+        deduped += int(result.get("deduped", 0))
         chunk_failed = result.get("failed", []) or []
         failed.extend(chunk_failed)
         log.info(
-            "  chunk %d: ins=%d upd=%d fail=%d",
-            chunks, result.get("inserted", 0), result.get("updated", 0), len(chunk_failed),
+            "  chunk %d: ins=%d upd=%d dedup=%d fail=%d",
+            chunks,
+            result.get("inserted", 0),
+            result.get("updated", 0),
+            result.get("deduped", 0),
+            len(chunk_failed),
         )
 
     return {
@@ -117,6 +128,7 @@ def upsert_listings(items: Iterable[RawListing]) -> dict[str, int]:
         "rows_attempted": len(rows),
         "inserted": inserted,
         "updated": updated,
+        "deduped": deduped,
         "failed": failed,
     }
 
