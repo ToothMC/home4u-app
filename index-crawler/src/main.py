@@ -94,70 +94,84 @@ def main() -> int:
             log.info("Nichts zu tun — alle bekannten Listings schon indexiert.")
             return 0
 
-        # Phase 3: Detail-Fetch + Parse
-        log.info("Phase 2: detail-fetch (rate-limit %.1fs) …", rate_limit)
-        parsed: list[ParsedListing] = []
+        # Phase 3: Detail-Fetch + Parse + pHash + Upsert STREAMING.
+        # Wichtig: kein "alles parsen, dann hochladen" — bei 41k Listings
+        # rennt der Workflow ins 350-min-Timeout bevor der finale Upsert kommt
+        # und ALLES Geparste geht verloren. Stattdessen: alle BATCH_SIZE
+        # parsed Listings sofort pHashen + upserten, dann Speicher freigeben.
+        # Bei Timeout sind alle bis dahin geflushten Batches in der DB.
+        BATCH_SIZE = int(os.getenv("STREAM_BATCH_SIZE", "50").strip() or "50")
+        log.info(
+            "Phase 2: detail-fetch + streaming-upsert (rate-limit %.1fs, batch %d) …",
+            rate_limit, BATCH_SIZE,
+        )
         detail_started = time.time()
+        batch: list[ParsedListing] = []
+        total_parsed = 0
+        total_inserted = 0
+        total_updated = 0
+        total_deduped = 0
+        total_failed = 0
+
+        def flush_batch() -> None:
+            nonlocal batch, total_inserted, total_updated, total_deduped, total_failed
+            if not batch:
+                return
+            if not skip_phash:
+                phash_ok = 0
+                for it in batch:
+                    cover = it.media[0] if it.media else None
+                    if not cover:
+                        continue
+                    ph = compute_phash_from_url(cover)
+                    if ph is not None:
+                        it.cover_phash = ph
+                        phash_ok += 1
+                log.info("  phash: %d/%d in batch", phash_ok, len(batch))
+            if dry_run:
+                log.info("  DRY_RUN — skip upsert (sample %s)",
+                         batch[0].listing_id if batch else "")
+            else:
+                result = upsert_listings(batch)
+                total_inserted += int(result.get("inserted", 0))
+                total_updated += int(result.get("updated", 0))
+                total_deduped += int(result.get("deduped", 0))
+                total_failed += len(result.get("failed", []) or [])
+                log.info(
+                    "  flush: ins=%d upd=%d dedup=%d fail=%d (cumulative %d/%d/%d/%d)",
+                    result.get("inserted", 0), result.get("updated", 0),
+                    result.get("deduped", 0), len(result.get("failed", []) or []),
+                    total_inserted, total_updated, total_deduped, total_failed,
+                )
+            batch = []
+
         for idx, sitemap_listing in enumerate(todo, start=1):
             p = fetch_and_parse(client, sitemap_listing)
             if p is not None:
-                parsed.append(p)
+                batch.append(p)
+                total_parsed += 1
+            if len(batch) >= BATCH_SIZE:
+                flush_batch()
             if idx % 50 == 0:
                 log.info(
                     "  detail-progress %d/%d (parsed %d, %.1fs)",
-                    idx, len(todo), len(parsed), time.time() - detail_started,
+                    idx, len(todo), total_parsed, time.time() - detail_started,
                 )
             time.sleep(rate_limit)
+
+        # Final flush für den Rest
+        flush_batch()
         log.info(
-            "Detail-Phase fertig: %d/%d geparsed in %.1fs",
-            len(parsed), len(todo), time.time() - detail_started,
+            "Detail+Upsert-Phase fertig: %d parsed, %d inserted, %d updated, "
+            "%d deduped, %d failed in %.1fs",
+            total_parsed, total_inserted, total_updated, total_deduped,
+            total_failed, time.time() - detail_started,
         )
 
-        if not parsed:
-            log.warning("0 Listings geparsed — DB nicht geändert")
-            return 0
-
-        # Phase 4: pHash
-        if skip_phash:
-            log.info("SKIP_PHASH=1 — pHash-Berechnung übersprungen")
-        else:
-            log.info("Phase 3: pHash für %d Cover-Bilder …", len(parsed))
-            phash_started = time.time()
-            ok = 0
-            for idx, item in enumerate(parsed, start=1):
-                cover = item.media[0] if item.media else None
-                if not cover:
-                    continue
-                ph = compute_phash_from_url(cover)
-                if ph is not None:
-                    item.cover_phash = ph
-                    ok += 1
-                if idx % 100 == 0:
-                    log.info(
-                        "  phash-progress %d/%d (ok %d, %.1fs)",
-                        idx, len(parsed), ok, time.time() - phash_started,
-                    )
-            log.info(
-                "pHash-Phase fertig: %d/%d in %.1fs",
-                ok, len(parsed), time.time() - phash_started,
-            )
-
-    # Phase 5: Upsert
-    if dry_run:
-        log.info("DRY_RUN=1 — kein Supabase-Write. Sample:")
-        for p in parsed[:3]:
-            log.info("  %s | %s %s | €%s | %s rooms | %s m² | %s",
-                     p.listing_id, p.listing_type, p.property_type,
-                     p.price, p.rooms, p.size_sqm, p.location_city)
-        return 0
-
-    log.info("Phase 4: Bulk-Upsert nach Supabase …")
-    result = upsert_listings(parsed)
-    log.info("Upsert: %s", result)
-
-    log.info("Mark stale (>3d unseen) …")
-    stale = mark_stale_old_listings(stale_days=3)
-    log.info("Stale-marked: %d", stale)
+    if not dry_run:
+        log.info("Mark stale (>3d unseen) …")
+        stale = mark_stale_old_listings(stale_days=3)
+        log.info("Stale-marked: %d", stale)
 
     log.info("Crawl-Ende: %.1fs total", time.time() - started)
     return 0
