@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 from .dedup import compute_phash_from_url
 from .detail import ParsedListing, fetch_and_parse
 from .sitemap import discover_all_listings
-from .writer import fetch_already_indexed, upsert_listings
+from .writer import fetch_already_indexed, mark_stale_old_listings, upsert_listings
 
 
 def _setup_logging() -> None:
@@ -154,6 +154,10 @@ def main() -> int:
     log.info("Phase 4: Bulk-Upsert nach Supabase …")
     result = upsert_listings(parsed)
     log.info("Upsert: %s", result)
+
+    log.info("Mark stale (>3d unseen) …")
+    stale = mark_stale_old_listings(stale_days=3)
+    log.info("Stale-marked: %d", stale)
 
     log.info("Crawl-Ende: %.1fs total", time.time() - started)
     return 0

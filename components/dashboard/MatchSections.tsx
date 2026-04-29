@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Inbox, Send, Loader2, Handshake, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { OwnerInboxCard, type OwnerInboxRow } from "./OwnerInboxCard";
+import { AvailabilityChips } from "./AvailabilityChips";
 
 type OutboxRow = {
   match_id: string;
@@ -165,6 +166,7 @@ export function MatchSections({
                       </span>
                     )}
                   </div>
+                  <AvailabilityChips matchId={m.match_id} listingId={m.listing_id} />
                 </div>
                 <ChevronRight className="size-4 self-center text-[var(--muted-foreground)] opacity-0 group-hover:opacity-100 transition-opacity" />
               </Link>

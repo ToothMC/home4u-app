@@ -190,8 +190,8 @@ def main() -> int:
     result = upsert_listings(all_items)
     log.info("Upsert: %s", result)
 
-    log.info("Mark stale (>7d unseen) …")
-    stale = mark_stale_old_listings(stale_days=7)
+    log.info("Mark stale (>3d unseen) …")
+    stale = mark_stale_old_listings(stale_days=3)
     log.info("Stale-marked: %d", stale)
 
     return 0
