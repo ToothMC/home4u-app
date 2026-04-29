@@ -51,8 +51,9 @@ def main() -> int:
         log.error("SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY müssen gesetzt sein")
         return 1
 
-    rate_limit = float(os.getenv("RATE_LIMIT_S", "1.0"))
-    max_listings = int(os.getenv("MAX_LISTINGS", "0")) or None
+    # Robust gegen Komma-Locale (DE/CY tippt "0,5" statt "0.5")
+    rate_limit = float(os.getenv("RATE_LIMIT_S", "1.0").replace(",", "."))
+    max_listings = int(os.getenv("MAX_LISTINGS", "0").strip() or "0") or None
     dry_run = os.getenv("DRY_RUN") == "1"
     skip_phash = os.getenv("SKIP_PHASH") == "1"
     force_refetch = os.getenv("FORCE_REFETCH") == "1"
