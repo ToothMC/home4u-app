@@ -3,6 +3,7 @@ import { ChevronRight, Heart } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { getUserBookmarks } from "@/lib/repo/bookmarks";
 import { InquireButton } from "./InquireButton";
+import { SwipeToDeleteRow } from "./SwipeToDeleteRow";
 
 const PREVIEW_LIMIT = 3;
 
@@ -45,54 +46,57 @@ export async function FavoritesSection({ userId }: { userId: string }) {
           {preview.map((b) => {
             const cover = b.listing.media?.[0];
             return (
-              <div
+              <SwipeToDeleteRow
                 key={b.bookmarkId}
-                className="flex items-stretch gap-3 rounded-lg border bg-[var(--card)] p-2"
+                endpoint={`/api/bookmarks/${b.listing.id}`}
+                what="Diesen Favoriten"
               >
-                <Link
-                  href={`/listings/${b.listing.id}?from=bookmarks`}
-                  className="relative shrink-0 size-20 overflow-hidden rounded-md bg-[var(--muted)] border"
-                >
-                  {cover ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={cover}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center text-[10px] text-[var(--muted-foreground)]">
-                      kein Bild
-                    </div>
-                  )}
-                </Link>
-                <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                <div className="flex items-stretch gap-3 border bg-[var(--card)] p-2">
                   <Link
                     href={`/listings/${b.listing.id}?from=bookmarks`}
-                    className="hover:underline"
+                    className="relative shrink-0 size-20 overflow-hidden rounded-md bg-[var(--muted)] border"
                   >
-                    <p className="truncate text-sm font-medium">
-                      {b.listing.location_city}
-                      {b.listing.location_district
-                        ? ` · ${b.listing.location_district}`
-                        : ""}
-                    </p>
-                    <p className="truncate text-xs text-[var(--muted-foreground)]">
-                      {b.listing.rooms ?? "?"} Zi ·{" "}
-                      {Number(b.listing.price).toLocaleString("de-DE")} €
-                      {b.listing.size_sqm ? ` · ${b.listing.size_sqm} m²` : ""}
-                    </p>
+                    {cover ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={cover}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center text-[10px] text-[var(--muted-foreground)]">
+                        kein Bild
+                      </div>
+                    )}
                   </Link>
+                  <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                    <Link
+                      href={`/listings/${b.listing.id}?from=bookmarks`}
+                      className="hover:underline"
+                    >
+                      <p className="truncate text-sm font-medium">
+                        {b.listing.location_city}
+                        {b.listing.location_district
+                          ? ` · ${b.listing.location_district}`
+                          : ""}
+                      </p>
+                      <p className="truncate text-xs text-[var(--muted-foreground)]">
+                        {b.listing.rooms ?? "?"} Zi ·{" "}
+                        {Number(b.listing.price).toLocaleString("de-DE")} €
+                        {b.listing.size_sqm ? ` · ${b.listing.size_sqm} m²` : ""}
+                      </p>
+                    </Link>
+                  </div>
+                  <div className="shrink-0 self-center w-32">
+                    <InquireButton
+                      bookmarkId={b.bookmarkId}
+                      matchStatus={b.matchStatus}
+                      matchId={b.matchId}
+                      hasSearchProfile={b.searchProfileId !== null}
+                    />
+                  </div>
                 </div>
-                <div className="shrink-0 self-center w-32">
-                  <InquireButton
-                    bookmarkId={b.bookmarkId}
-                    matchStatus={b.matchStatus}
-                    matchId={b.matchId}
-                    hasSearchProfile={b.searchProfileId !== null}
-                  />
-                </div>
-              </div>
+              </SwipeToDeleteRow>
             );
           })}
           {open.length > preview.length && (

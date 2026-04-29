@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { MediaUploader, type AttachedMedia } from "@/components/chat/MediaUploader";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { ListingStatusBadge } from "./ListingStatusBadge";
 
 export type ListingForCard = {
   id: string;
@@ -129,9 +130,7 @@ export function ListingCard({
             {listing.currency || "EUR"}
             {listing.type === "rent" ? "/Monat" : ""}
           </span>
-          <span className="uppercase tracking-wider text-[10px]">
-            {listing.status}
-          </span>
+          <ListingStatusBadge status={listing.status} />
         </CardDescription>
       </CardHeader>
 

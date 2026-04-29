@@ -7,6 +7,7 @@ import { BrandLockup } from "@/components/brand/Logo";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { getUserBookmarks, type BookmarkedListing } from "@/lib/repo/bookmarks";
 import { InquireButton } from "@/components/dashboard/InquireButton";
+import { DeleteBookmarkOverlay } from "@/components/dashboard/DeleteBookmarkOverlay";
 
 export const dynamic = "force-dynamic";
 
@@ -153,7 +154,8 @@ function BookmarkCard({ bookmark }: { bookmark: BookmarkedListing }) {
   const inactive = listing.status !== "active";
 
   return (
-    <div className="group block rounded-2xl border bg-[var(--card)] overflow-hidden hover:shadow-md transition-shadow">
+    <div className="group relative block rounded-2xl border bg-[var(--card)] overflow-hidden hover:shadow-md transition-shadow">
+      <DeleteBookmarkOverlay listingId={listing.id} />
       <Link href={`/listings/${listing.id}?from=bookmarks`} className="block">
         <div className="relative aspect-[4/3] bg-[var(--muted)]">
           {cover ? (

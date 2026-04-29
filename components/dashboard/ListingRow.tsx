@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { ListingStatusBadge } from "./ListingStatusBadge";
 
 export type ListingRowData = {
   id: string;
@@ -12,6 +13,7 @@ export type ListingRowData = {
   rooms: number | null;
   size_sqm: number | null;
   media: string[] | null;
+  status: string;
 };
 
 export function ListingRow({
@@ -66,6 +68,7 @@ export function ListingRow({
       </div>
 
       <div className="flex flex-col items-end gap-1 text-xs">
+        <ListingStatusBadge status={listing.status} />
         {newCount > 0 ? (
           <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-300">
             {newCount} neu

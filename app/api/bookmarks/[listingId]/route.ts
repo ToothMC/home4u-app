@@ -56,3 +56,39 @@ export async function POST(
   }
   return Response.json({ ok: true, saved: payload.saved });
 }
+
+// Idempotenter Direkt-Delete für die Dashboard-Trash-Buttons.
+// Anders als POST (Toggle) kann ein Doppel-Klick hier nicht versehentlich
+// neu speichern — er löscht einfach nichts mehr.
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ listingId: string }> }
+) {
+  const { listingId } = await params;
+  if (!listingId || !/^[0-9a-f-]{36}$/i.test(listingId)) {
+    return Response.json({ error: "invalid_listing_id" }, { status: 400 });
+  }
+
+  let supabase;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch {
+    return Response.json({ error: "supabase_not_configured" }, { status: 500 });
+  }
+
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData?.user) {
+    return Response.json({ error: "auth_required" }, { status: 401 });
+  }
+
+  const { error } = await supabase
+    .from("listing_bookmarks")
+    .delete()
+    .eq("user_id", userData.user.id)
+    .eq("listing_id", listingId);
+  if (error) {
+    console.error("[bookmarks] delete failed", error);
+    return Response.json({ error: "delete_failed", detail: error.message }, { status: 500 });
+  }
+  return Response.json({ ok: true });
+}
