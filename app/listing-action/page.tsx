@@ -3,23 +3,24 @@ import {
   verifyActionToken,
   type ActionTokenPayload,
 } from "@/lib/listings/action-token";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Outreach-Action-Endpoint — wird vom Makler über E-Mail-Link aufgerufen.
+ * Outreach-Action-Confirmation-Page (read-only, NO state-change on GET).
  *
- * Flow:
- *   1. Token aus Query-Param verifizieren (HMAC, exp ≤ 30d).
- *   2. Action ausführen via apply_listing_report mit broker_link-Rolle.
- *   3. update_outreach_status(clicked) → log_id aus Token.
- *   4. Bestätigungsseite rendern (read-only, kein weiterer State-Change).
+ * Reason: Email-security-scanners (Microsoft Defender, Mimecast, Proofpoint,
+ * Google Safe-Browsing) prefetch alle Links in eingehenden Mails. Würde der
+ * GET-Handler direkt apply_listing_report aufrufen, würde JEDES Listing
+ * sofort auf rented gesetzt durch den Scanner — nicht durch den Empfänger.
  *
- * Kein Login nötig — der Token ist die Autorisierung. Mehrfach-Klick:
- * idempotent (apply_listing_report fügt einen weiteren Audit-Eintrag,
- * Status bleibt aber rented/sold).
+ * Daher: GET zeigt nur eine Confirmation-Page mit explizitem Submit-Button.
+ * Die echte Aktion läuft dann via POST /api/listing-action über
+ * components/ListingActionForm.
+ *
+ * `reply` ist die einzige Action ohne State-Change → da geht der Redirect
+ * direkt durch.
  */
 export default async function ListingActionPage({
   searchParams,
@@ -42,56 +43,50 @@ export default async function ListingActionPage({
     );
   }
 
-  // Bei reply: einfacher Redirect zum Match — Inseratsinhaber sieht Anfrage.
+  // Reply = read-only Redirect, keine Bestätigung nötig
   if (payload.action === "reply") {
     redirect(`/matches/${payload.match_id}`);
   }
 
-  const service = createSupabaseServiceClient();
-  if (!service) {
-    return (
-      <ErrorView message="System nicht erreichbar. Versuch es später noch einmal." />
-    );
-  }
+  return <ConfirmationView token={token} action={payload.action} />;
+}
 
-  const reportKind =
-    payload.action === "mark_rented"
-      ? "rented"
-      : payload.action === "still_available"
-        ? "still_available"
-        : payload.action === "wrong_listing"
-          ? "wrong_listing"
-          : null;
+function ConfirmationView({ token, action }: { token: string; action: string }) {
+  const headline =
+    action === "mark_rented"
+      ? "Inserat als vermietet/verkauft markieren?"
+      : action === "still_available"
+        ? "Bestätigen: Inserat ist noch verfügbar?"
+        : action === "wrong_listing"
+          ? "Diese Anfrage gehört nicht zu Dir?"
+          : "Aktion bestätigen";
+  const body =
+    action === "mark_rented"
+      ? "Wir setzen das Inserat in Home4U auf „nicht mehr verfügbar“ und schicken Dir keine weiteren Anfragen dafür."
+      : action === "still_available"
+        ? "Wir reaktivieren das Inserat in Home4U."
+        : action === "wrong_listing"
+          ? "Wir markieren das Inserat als „nicht von Dir“ und unterdrücken zukünftige Anfragen."
+          : "";
 
-  if (!reportKind) {
-    return <ErrorView message="Unbekannte Aktion." />;
-  }
-
-  const { data, error } = await service.rpc("apply_listing_report", {
-    p_listing_id: payload.listing_id,
-    p_kind: reportKind,
-    p_reporter_role: "broker_link",
-    p_match_id: payload.match_id,
-    p_reporter_email_hash: payload.recipient_email_hash,
-  });
-
-  if (error) {
-    console.error("[listing-action] apply_listing_report failed", error);
-    return <ErrorView message="Konnten Deine Meldung nicht speichern. Bitte später nochmal versuchen." />;
-  }
-
-  // Outreach-Log auf 'clicked' setzen
-  await service.rpc("update_outreach_status", {
-    p_log_id: payload.log_id,
-    p_status: "clicked",
-  });
-
-  const result = data as { ok: boolean; status?: string; error?: string };
-  if (!result?.ok) {
-    return <ErrorView message={`Fehler: ${result?.error ?? "unbekannt"}`} />;
-  }
-
-  return <SuccessView action={payload.action} newStatus={result.status} />;
+  return (
+    <main className="mx-auto max-w-md p-8 text-center">
+      <h1 className="text-xl font-semibold mb-3">{headline}</h1>
+      <p className="text-sm text-[var(--muted-foreground)] mb-6">{body}</p>
+      <form method="POST" action="/api/listing-action">
+        <input type="hidden" name="t" value={token} />
+        <button
+          type="submit"
+          className="bg-[var(--primary)] text-[var(--primary-foreground)] px-5 py-2.5 rounded-md font-medium hover:opacity-90"
+        >
+          Bestätigen
+        </button>
+      </form>
+      <p className="mt-6 text-xs text-[var(--muted-foreground)]">
+        Wenn Du das nicht warst — einfach Tab schließen, nichts passiert.
+      </p>
+    </main>
+  );
 }
 
 function ErrorView({ message }: { message: string }) {
@@ -100,39 +95,6 @@ function ErrorView({ message }: { message: string }) {
       <div className="mb-4 text-4xl">⚠️</div>
       <h1 className="text-xl font-semibold mb-2">Ups</h1>
       <p className="text-[var(--muted-foreground)]">{message}</p>
-    </main>
-  );
-}
-
-function SuccessView({
-  action,
-  newStatus,
-}: {
-  action: string;
-  newStatus: string | undefined;
-}) {
-  const headline =
-    action === "mark_rented"
-      ? "Vielen Dank — wir haben das Inserat als nicht mehr verfügbar markiert."
-      : action === "still_available"
-        ? "Notiert — das Inserat bleibt aktiv."
-        : action === "wrong_listing"
-          ? "Notiert — wir senden Dir keine weiteren Anfragen für dieses Inserat."
-          : "Erledigt.";
-  return (
-    <main className="mx-auto max-w-md p-8 text-center">
-      <div className="mb-4 text-4xl">✓</div>
-      <h1 className="text-xl font-semibold mb-2">{headline}</h1>
-      <p className="text-sm text-[var(--muted-foreground)]">
-        Status:{" "}
-        <code className="px-1.5 py-0.5 rounded bg-[var(--muted)] text-xs">
-          {newStatus ?? "—"}
-        </code>
-      </p>
-      <p className="mt-6 text-xs text-[var(--muted-foreground)]">
-        Falls Du Dich vertan hast, antworte einfach auf die ursprüngliche E-Mail
-        — wir korrigieren das manuell.
-      </p>
     </main>
   );
 }
