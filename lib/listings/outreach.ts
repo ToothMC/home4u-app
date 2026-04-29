@@ -70,7 +70,7 @@ export async function triggerOutreachForMatch(matchId: string): Promise<Outreach
     const { data: profile } = await service
       .from("profiles")
       .select("notification_email")
-      .eq("user_id", listing.owner_user_id)
+      .eq("id", listing.owner_user_id)
       .maybeSingle();
     email = profile?.notification_email ?? null;
     if (!email) {
