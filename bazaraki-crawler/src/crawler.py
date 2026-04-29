@@ -62,11 +62,18 @@ class RawListing:
 
     # Dedup-Signale (Spur 0048): cover_phash für pHash-Match,
     # phone_hash für Phone-Match. Beide werden post-list/post-detail
-    # gefüllt, je nach Verfügbarkeit. Bazaraki liefert Phone nicht ohne
-    # XHR-Click → phone_hash bleibt None. Cover-pHash wird über
+    # gefüllt, je nach Verfügbarkeit. Cover-pHash wird über
     # dedup.compute_phash_from_url(image_url oder media[0]) gebildet.
     cover_phash: int | None = None
     phone_hash: str | None = None
+
+    # Klartext-Kontaktdaten für Outreach (encrypted server-side im RPC).
+    # Phone wird per "Show Phone"-Click in crawl_detail() geholt, wenn die
+    # Detail-Seite den Button hat. Email findet sich bei Bazaraki kaum, ist
+    # aber für andere Quellen (INDEX, home.cy) relevant.
+    contact_phone: str | None = None
+    contact_phone_country: str | None = None
+    contact_email: str | None = None
 
 
 # ---------- robots.txt ----------
@@ -235,9 +242,49 @@ DETAIL_EXTRACT_JS = r"""
   // Cover (og:image)
   const cover = text('meta[property="og:image"]', 'content');
 
-  return { address, description, charsRaw, cover, allImages };
+  // Kontaktdaten (best-effort, nur wenn ohne Click sichtbar):
+  // - Phone: <a href="tel:+357..."> oder Klartext im Phones-Block.
+  // - Email: <a href="mailto:..."> oder Plaintext-Pattern.
+  // Bazaraki versteckt Phones meist hinter "Show phone"-Button; falls ja
+  // bleibt phone null und wir versuchen Click-Reveal in der Python-Schicht.
+  let phone = null;
+  const telA = document.querySelector('a[href^="tel:"]');
+  if (telA) {
+    const href = telA.getAttribute('href') || '';
+    phone = href.replace(/^tel:/i, '').trim() || null;
+  }
+  if (!phone) {
+    // Fallback: data-attribute, das nach Click-Reveal gefüllt wird
+    const phoneBlock = document.querySelector('[data-phone], .phone-list a, .show-phone');
+    if (phoneBlock) {
+      const dp = phoneBlock.getAttribute('data-phone');
+      const txt = phoneBlock.textContent?.trim();
+      if (dp) phone = dp;
+      else if (txt && /\d/.test(txt) && !/show/i.test(txt)) phone = txt;
+    }
+  }
+
+  let email = null;
+  const mailA = document.querySelector('a[href^="mailto:"]');
+  if (mailA) {
+    const href = mailA.getAttribute('href') || '';
+    email = href.replace(/^mailto:/i, '').split('?')[0].trim() || null;
+  }
+
+  return { address, description, charsRaw, cover, allImages, phone, email };
 }
 """
+
+# Selector für "Show phone"-Button. Bazaraki rendert ihn variabel — wir
+# probieren mehrere Pattern. Click→XHR→DOM-Update mit echter Nummer.
+SHOW_PHONE_SELECTORS = [
+    'button.show-phone',
+    'a.show-phone',
+    'button[data-action="show-phone"]',
+    'a[data-action="show-phone"]',
+    'button:has-text("Show phone")',
+    'a:has-text("Show phone")',
+]
 
 
 # Charakteristik-Parser: parse "Property area: 50 m²\nBedrooms: Studio\n..."
@@ -388,6 +435,23 @@ def crawl_detail(browser: Browser, item: RawListing) -> None:
     try:
         _navigate_detail(page, item.detail_url)
         data = page.evaluate(DETAIL_EXTRACT_JS)
+
+        # Wenn Phone nicht direkt sichtbar ist, "Show phone"-Button klicken
+        # und kurz auf XHR/DOM-Update warten. Best-effort: bei Fehler oder
+        # fehlendem Button bleibt phone None.
+        if not data.get("phone"):
+            for sel in SHOW_PHONE_SELECTORS:
+                try:
+                    btn = page.query_selector(sel)
+                    if btn:
+                        btn.click(timeout=2_000)
+                        page.wait_for_timeout(800)
+                        data2 = page.evaluate(DETAIL_EXTRACT_JS)
+                        if data2.get("phone"):
+                            data["phone"] = data2["phone"]
+                        break
+                except Exception:
+                    continue
     except Exception as e:
         log.warning("detail-fetch failed for %s: %s", item.external_id, e)
         page.close()
@@ -444,6 +508,34 @@ def crawl_detail(browser: Browser, item: RawListing) -> None:
     desc = data.get("description")
     if desc:
         item.description = desc
+
+    # Kontaktdaten — Klartext für Outreach (server-side encrypted im RPC)
+    raw_phone = data.get("phone")
+    if raw_phone:
+        from .dedup import normalize_phone, compute_phone_hash
+        norm = normalize_phone(raw_phone)
+        if norm:
+            # Klartext ist die normalisierte E.164-ähnliche Form (nur Ziffern,
+            # mit Ländercode). Outreach-Mailer formatiert sie wieder mit "+".
+            item.contact_phone = norm
+            # Country-Code: erste 1-3 Ziffern. Heuristik: wenn mit "357"
+            # beginnt → Cyprus; sonst Best-Guess via E.164-Liste in normalize.
+            if norm.startswith("357"):
+                item.contact_phone_country = "357"
+            elif norm.startswith("44"):
+                item.contact_phone_country = "44"
+            elif norm.startswith("7"):
+                item.contact_phone_country = "7"
+            elif norm.startswith("30"):
+                item.contact_phone_country = "30"
+            else:
+                # Konservativ: 1-3 stellig je nach Länge
+                item.contact_phone_country = norm[:2] if len(norm) > 10 else "357"
+            # phone_hash wird auch gesetzt (für Cross-Source-Dedup)
+            item.phone_hash = compute_phone_hash(raw_phone)
+    raw_email = data.get("email")
+    if raw_email and "@" in raw_email:
+        item.contact_email = raw_email.lower().strip()
 
 
 def crawl_city(

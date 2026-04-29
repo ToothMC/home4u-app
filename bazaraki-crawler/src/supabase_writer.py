@@ -67,6 +67,16 @@ def _to_row(item: RawListing) -> dict:
         row["cover_phash"] = str(item.cover_phash)
     if item.phone_hash:
         row["phone_hash"] = item.phone_hash
+    # Kontakt-Klartext: Server-side encrypted (pgp_sym_encrypt) im RPC.
+    # Nur senden wenn extrahiert. RPC ignoriert leere Strings.
+    if item.contact_phone:
+        row["contact_phone"] = item.contact_phone
+    if item.contact_phone_country:
+        row["contact_phone_country"] = item.contact_phone_country
+    if item.contact_email:
+        row["contact_email"] = item.contact_email
+    # Provenance: Bazaraki-Phone wird aus Inserat selbst geklickt → "public"
+    row["contact_source"] = "public"
     return row
 
 
