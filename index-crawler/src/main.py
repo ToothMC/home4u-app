@@ -100,7 +100,7 @@ def main() -> int:
         # und ALLES Geparste geht verloren. Stattdessen: alle BATCH_SIZE
         # parsed Listings sofort pHashen + upserten, dann Speicher freigeben.
         # Bei Timeout sind alle bis dahin geflushten Batches in der DB.
-        BATCH_SIZE = int(os.getenv("STREAM_BATCH_SIZE", "500").strip() or "500")
+        BATCH_SIZE = int(os.getenv("STREAM_BATCH_SIZE", "50").strip() or "50")
         log.info(
             "Phase 2: detail-fetch + streaming-upsert (rate-limit %.1fs, batch %d) …",
             rate_limit, BATCH_SIZE,
