@@ -46,6 +46,14 @@ class ParsedListing:
     # Dedup-Signal: wird im main.py post-extract berechnet
     cover_phash: int | None = None
 
+    # Klartext-Kontaktdaten für Outreach (encrypted server-side im RPC).
+    # Werden aus Detail-HTML extrahiert wenn sichtbar — INDEX zeigt phone
+    # häufig direkt im Anbieter-Block, email seltener.
+    contact_phone: str | None = None
+    contact_phone_country: str | None = None
+    contact_email: str | None = None
+    phone_hash: str | None = None  # für Cross-Source-Dedup
+
 
 # Title-Pattern: "3 Bedroom Apartment for Sale in Oroklini, Larnaca District €415000"
 # oder "Studio for Rent in Limassol €1500" / "Plot for Sale in Paphos €120000"
@@ -197,6 +205,29 @@ def _extract_meta(html: str) -> dict[str, Any]:
     return out
 
 
+_TEL_HREF_RE = re.compile(r'href="tel:([^"]+)"', re.IGNORECASE)
+_MAILTO_HREF_RE = re.compile(r'href="mailto:([^"?]+)', re.IGNORECASE)
+_PHONE_TEXT_RE = re.compile(r"\+?\d[\d\s().\-]{7,}\d")
+
+
+def _extract_contact(html: str) -> dict[str, Optional[str]]:
+    """Phone+Email aus dem Anbieter-Block. Best-effort, kein Click-Reveal nötig."""
+    phone = None
+    email = None
+    m = _TEL_HREF_RE.search(html)
+    if m:
+        phone = m.group(1).strip()
+    if not phone:
+        # Fallback: Plaintext-Pattern in spezifischen Blocks (data-phone-Attribut etc.)
+        m = re.search(r'data-phone(?:-number)?="([^"]+)"', html, re.IGNORECASE)
+        if m:
+            phone = m.group(1).strip()
+    m = _MAILTO_HREF_RE.search(html)
+    if m:
+        email = m.group(1).strip()
+    return {"phone": phone, "email": email}
+
+
 def parse_detail(html: str, sitemap_listing) -> Optional[ParsedListing]:
     """Hauptmethode: HTML + sitemap.ListingURL → ParsedListing.
 
@@ -274,6 +305,18 @@ def parse_detail(html: str, sitemap_listing) -> Optional[ParsedListing]:
         parsed.bathrooms = specs["bathrooms"]
     if "size_sqm" in specs:
         parsed.size_sqm = specs["size_sqm"]
+
+    # Kontaktdaten — best-effort aus dem Detail-HTML.
+    contact = _extract_contact(html)
+    if contact["phone"]:
+        from .contact import normalize_phone, country_prefix, compute_phone_hash
+        norm = normalize_phone(contact["phone"])
+        if norm:
+            parsed.contact_phone = norm
+            parsed.contact_phone_country = country_prefix(norm)
+            parsed.phone_hash = compute_phone_hash(contact["phone"])
+    if contact["email"] and "@" in contact["email"]:
+        parsed.contact_email = contact["email"].lower().strip()
 
     return parsed
 

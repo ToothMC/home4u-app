@@ -46,6 +46,15 @@ def _to_row(item: ParsedListing) -> dict:
     }
     if item.cover_phash is not None:
         row["cover_phash"] = str(item.cover_phash)
+    if item.phone_hash:
+        row["phone_hash"] = item.phone_hash
+    if item.contact_phone:
+        row["contact_phone"] = item.contact_phone
+    if item.contact_phone_country:
+        row["contact_phone_country"] = item.contact_phone_country
+    if item.contact_email:
+        row["contact_email"] = item.contact_email
+    row["contact_source"] = "public"
     return row
 
 
