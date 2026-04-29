@@ -91,13 +91,17 @@ export function PhotoLightbox({
         }}
       >
         {isVideoUrl(current.url) ? (
+          // <video> respektiert keine reinen max-Maße zum Hochskalieren —
+          // ohne explizite height bleibt das Element bei der intrinsischen
+          // Video-Groesse (smartphone-Hochformat-Clips wirken winzig).
+          // Mit h-[78vh] + w-auto skaliert der Browser proportional mit.
           // eslint-disable-next-line jsx-a11y/media-has-caption
           <video
             key={current.url}
             src={current.url}
             controls
             playsInline
-            className="max-h-[78vh] max-w-[92vw] sm:max-w-5xl object-contain bg-black"
+            className="h-[78vh] w-auto max-w-[92vw] sm:max-w-5xl bg-black"
           />
         ) : (
           /* eslint-disable-next-line @next/next/no-img-element */
