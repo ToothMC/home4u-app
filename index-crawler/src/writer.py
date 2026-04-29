@@ -110,6 +110,36 @@ def upsert_listings(items: Iterable[ParsedListing]) -> dict:
     }
 
 
+def mark_stale_old_listings(stale_days: int = 3) -> int:
+    """Listings die seit N Tagen nicht mehr im Crawl auftauchten → status='stale'.
+
+    Best-Effort: blockiert Crawl-Run nicht bei Fehler.
+    """
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    url = f"{url_base}/rest/v1/rpc/mark_stale_listings"
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = httpx.post(
+            url,
+            headers=headers,
+            json={"p_stale_days": stale_days, "p_source": SOURCE},
+            timeout=20,
+        )
+        if resp.status_code == 404:
+            log.info("RPC mark_stale_listings nicht vorhanden — skip")
+            return 0
+        resp.raise_for_status()
+        return int(resp.json() or 0)
+    except Exception as e:
+        log.warning("mark_stale_listings failed: %s", e)
+        return 0
+
+
 def fetch_already_indexed(client: httpx.Client) -> set[str]:
     """Set aller external_ids die wir schon haben — für Inkrement-Filter
     (wir wollen Detail-Pages der bekannten Listings nicht jeden Tag neu fetchen)."""

@@ -1,0 +1,47 @@
+name: Backfill canonical_id
+
+# Einmaliger Backfill für alle bestehenden Listings (Bazaraki + INDEX +
+# FB), die VOR Migration 0050 reinkamen oder über das alte
+# bulk_upsert_bazaraki_listings ohne Dedup-Logik.
+#
+# Manueller Trigger via GitHub UI → Actions → "Backfill canonical_id" → Run workflow.
+# Idempotent: kann jederzeit abgebrochen + neu gestartet werden, macht
+# weiter wo aufgehört (cursor-basiert via id > last_seen_id).
+#
+# Voraussetzung: Migration 0051 muss in Supabase ausgespielt sein
+# (definiert die backfill_canonical_chunk-Funktion).
+
+on:
+  workflow_dispatch:
+    inputs:
+      chunk_size:
+        description: "Listings pro RPC-Call (500 = sicher, 2000 = schneller)"
+        required: false
+        default: "500"
+
+concurrency:
+  group: backfill-canonical
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Run backfill
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          npx tsx scripts/run-backfill-canonical.ts --chunk ${{ inputs.chunk_size }}

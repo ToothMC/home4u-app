@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 from .dedup import compute_phash_from_url
 from .detail import ParsedListing, fetch_and_parse
 from .sitemap import discover_all_listings
-from .writer import fetch_already_indexed, upsert_listings
+from .writer import fetch_already_indexed, mark_stale_old_listings, upsert_listings
 
 
 def _setup_logging() -> None:
@@ -167,6 +167,11 @@ def main() -> int:
             total_parsed, total_inserted, total_updated, total_deduped,
             total_failed, time.time() - detail_started,
         )
+
+    if not dry_run:
+        log.info("Mark stale (>3d unseen) …")
+        stale = mark_stale_old_listings(stale_days=3)
+        log.info("Stale-marked: %d", stale)
 
     log.info("Crawl-Ende: %.1fs total", time.time() - started)
     return 0
