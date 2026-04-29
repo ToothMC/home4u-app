@@ -1,8 +1,13 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
+export type MatchStatus = "none" | "pending" | "connected" | "rejected";
+
 export type BookmarkedListing = {
   bookmarkId: string;
   bookmarkedAt: string;
+  searchProfileId: string | null;
+  matchStatus: MatchStatus;
+  matchId: string | null;
   listing: {
     id: string;
     type: "rent" | "sale";
@@ -23,6 +28,10 @@ export type BookmarkedListing = {
  * Listing-Feldern für eine kompakte Liste — sortiert nach Speicher-Datum
  * absteigend. Anonymous Bookmarks werden bewusst ignoriert: die Favoriten-
  * Ansicht ist auth-only.
+ *
+ * Joint zusätzlich den Match-Status (LEFT JOIN über listing_id +
+ * search_profile_id), damit das UI die CRM-Pipeline-Stufe pro Item
+ * darstellen kann (Stufe 2 "Favorit" vs. Stufe 3 "angefragt").
  */
 export async function getUserBookmarks(
   userId: string,
@@ -35,7 +44,7 @@ export async function getUserBookmarks(
   const { data, error } = await supabase
     .from("listing_bookmarks")
     .select(
-      `id, created_at,
+      `id, created_at, search_profile_id, listing_id,
        listings!inner (
          id, type, property_type, status,
          location_city, location_district,
@@ -51,14 +60,65 @@ export async function getUserBookmarks(
     return [];
   }
 
-  return (data ?? [])
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
+
+  // Match-Status pro (search_profile_id, listing_id) Tupel abfragen — nur
+  // wo search_profile_id gesetzt ist. Alt-Bookmarks (NULL) bleiben "none".
+  const profileIds = Array.from(
+    new Set(
+      rows
+        .map((r) => r.search_profile_id as string | null)
+        .filter((x): x is string => Boolean(x))
+    )
+  );
+  const listingIds = rows.map((r) => r.listing_id as string);
+
+  type MatchRow = {
+    id: string;
+    listing_id: string;
+    search_profile_id: string;
+    seeker_interest: boolean | null;
+    owner_interest: boolean | null;
+    connected_at: string | null;
+  };
+  let matchMap = new Map<string, MatchRow>();
+  if (profileIds.length > 0 && listingIds.length > 0) {
+    const { data: matchRows } = await supabase
+      .from("matches")
+      .select(
+        "id, listing_id, search_profile_id, seeker_interest, owner_interest, connected_at"
+      )
+      .in("search_profile_id", profileIds)
+      .in("listing_id", listingIds)
+      .eq("seeker_interest", true);
+    matchMap = new Map(
+      (matchRows ?? []).map((m) => [
+        `${m.search_profile_id}:${m.listing_id}`,
+        m as MatchRow,
+      ])
+    );
+  }
+
+  return rows
     .map((row): BookmarkedListing | null => {
-      // Supabase typed `listings` als Array auch bei !inner — flatten.
       const l = Array.isArray(row.listings) ? row.listings[0] : row.listings;
       if (!l) return null;
+      const spid = (row.search_profile_id as string | null) ?? null;
+      const lid = row.listing_id as string;
+      const match = spid ? matchMap.get(`${spid}:${lid}`) : undefined;
+      let matchStatus: MatchStatus = "none";
+      if (match) {
+        if (match.connected_at) matchStatus = "connected";
+        else if (match.owner_interest === false) matchStatus = "rejected";
+        else matchStatus = "pending";
+      }
       return {
         bookmarkId: row.id as string,
         bookmarkedAt: row.created_at as string,
+        searchProfileId: spid,
+        matchStatus,
+        matchId: match?.id ?? null,
         listing: {
           id: l.id,
           type: l.type as "rent" | "sale",

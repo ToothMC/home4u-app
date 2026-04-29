@@ -17,6 +17,7 @@ import { ListingRow } from "@/components/dashboard/ListingRow";
 import { SearchRow } from "@/components/dashboard/SearchRow";
 import { SwipeToDeleteRow } from "@/components/dashboard/SwipeToDeleteRow";
 import { MatchSections } from "@/components/dashboard/MatchSections";
+import { FavoritesSection } from "@/components/dashboard/FavoritesSection";
 import { DashboardViewTabs } from "@/components/dashboard/DashboardViewTabs";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
@@ -168,6 +169,8 @@ export default async function DashboardPage({
             canBulkImport={user.role === "agent" || user.role === "admin"}
           />
         )}
+
+        {view === "seeker" && <FavoritesSection userId={user.id} />}
 
         <MatchSections role={view} />
 

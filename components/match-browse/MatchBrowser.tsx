@@ -18,7 +18,6 @@ import { MatchCard, type MatchCardData, type SwipeDirection } from "./MatchCard"
 
 type Status = "browsing" | "submitting" | "done";
 type ToastState = {
-  matchId: string;
   listingId: string;
   expiresAt: number;
 } | null;
@@ -144,11 +143,21 @@ export function MatchBrowser({
     setStatus("submitting");
     setError(null);
     try {
-      const res = await fetch("/api/matches/like", {
+      // CRM-Pipeline: Swipe-Right = Stufe 2 (Favorit), kein direkter Match.
+      // Anfrage entsteht erst per bewusstem Klick aus den Favoriten heraus.
+      const res = await fetch(`/api/bookmarks/${current.id}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ listing_id: current.id }),
+        body: JSON.stringify({
+          source: "swipe-browse",
+          searchProfileId: searchProfileId ?? null,
+        }),
       });
+      if (res.status === 401) {
+        setError("Bitte einloggen, um Favoriten zu speichern.");
+        setStatus("browsing");
+        return;
+      }
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
         setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
@@ -162,9 +171,11 @@ export function MatchBrowser({
       persistSkipped(searchProfileId, next);
       setStatus("browsing");
       setIdx(0);
-      if (json.match_id) {
+      // saved=false hieße: war schon gebookmarkt und wurde getoggelt — sollte
+      // im Browse-Flow nicht passieren (Skip-Liste hält bereits gesehene weg),
+      // aber wir zeigen den Toast nur bei tatsächlichem saved=true.
+      if (json.saved !== false) {
         setToast({
-          matchId: json.match_id,
           listingId: current.id,
           expiresAt: Date.now() + 5000,
         });
@@ -177,14 +188,14 @@ export function MatchBrowser({
 
   async function undoLast() {
     if (!toast) return;
-    const matchId = toast.matchId;
     const listingId = toast.listingId;
     setToast(null);
     try {
-      await fetch("/api/matches/withdraw", {
+      // Toggle: zweiter POST entfernt das Bookmark wieder.
+      await fetch(`/api/bookmarks/${listingId}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ match_id: matchId }),
+        body: JSON.stringify({ source: "swipe-undo" }),
       });
     } catch {
       // Best-Effort
@@ -302,14 +313,21 @@ function Toast({
     <div className="fixed top-4 right-4 z-50 max-w-xs rounded-xl shadow-lg bg-emerald-700 text-white p-3 flex items-start gap-2 animate-in fade-in slide-in-from-top-4">
       <Check className="size-4 mt-0.5 shrink-0" />
       <div className="flex-1 min-w-0 text-sm">
-        <div className="font-medium">Anfrage raus</div>
+        <div className="font-medium">Zu Favoriten hinzugefügt</div>
         <div className="text-xs opacity-90 flex items-center gap-2 mt-0.5">
+          <Link
+            href="/dashboard/bookmarks"
+            className="underline hover:no-underline"
+          >
+            Favoriten
+          </Link>
+          <span>·</span>
           <Link
             href={`/listings/${listingId}`}
             {...(isDesktop ? { target: "_blank", rel: "noopener noreferrer" } : {})}
             className="underline hover:no-underline"
           >
-            Inserat ansehen
+            Inserat
           </Link>
           <span>·</span>
           <button
