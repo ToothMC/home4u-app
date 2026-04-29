@@ -26,6 +26,7 @@ export type InquiryBrokerTemplateInput = {
   seekerNote: string | null;              // Optional: was der Seeker geschrieben hat
   // Tokens — caller signs separately and passes ready-to-use values
   replyToken: string;
+  markReservedToken: string;
   markRentedToken: string;
   wrongListingToken: string;
   language?: "en" | "de" | "ru" | "el";
@@ -59,6 +60,7 @@ export function buildInquiryBrokerEmail(input: InquiryBrokerTemplateInput): {
   const titleLine = input.listingTitle || propertyDesc || t.your_listing;
 
   const replyUrl = `${input.baseUrl}/listing-action?t=${encodeURIComponent(input.replyToken)}`;
+  const reservedUrl = `${input.baseUrl}/listing-action?t=${encodeURIComponent(input.markReservedToken)}`;
   const rentedUrl = `${input.baseUrl}/listing-action?t=${encodeURIComponent(input.markRentedToken)}`;
   const wrongUrl = `${input.baseUrl}/listing-action?t=${encodeURIComponent(input.wrongListingToken)}`;
 
@@ -79,6 +81,7 @@ export function buildInquiryBrokerEmail(input: InquiryBrokerTemplateInput): {
   ${noteBlock}
   <div style="margin:24px 0;display:flex;gap:8px;flex-wrap:wrap;">
     <a href="${replyUrl}" style="background:#0a66c2;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:600;">${t.btn_reply}</a>
+    <a href="${reservedUrl}" style="background:#fff;border:1px solid #d4a017;color:#a87800;padding:10px 16px;border-radius:6px;text-decoration:none;">${t.btn_reserved}</a>
     <a href="${rentedUrl}" style="background:#fff;border:1px solid #999;color:#444;padding:10px 16px;border-radius:6px;text-decoration:none;">${input.listingType === "rent" ? t.btn_rented : t.btn_sold}</a>
     <a href="${wrongUrl}" style="background:#fff;border:1px solid #ccc;color:#888;padding:10px 16px;border-radius:6px;text-decoration:none;font-size:14px;">${t.btn_wrong}</a>
   </div>
@@ -92,6 +95,7 @@ export function buildInquiryBrokerEmail(input: InquiryBrokerTemplateInput): {
 ${t.intro_line.replace("{title}", titleLine).replace("{price}", priceLine)}
 ${input.seekerNote ? `\n"${input.seekerNote}"\n` : ""}
 ${t.btn_reply}: ${replyUrl}
+${t.btn_reserved}: ${reservedUrl}
 ${input.listingType === "rent" ? t.btn_rented : t.btn_sold}: ${rentedUrl}
 ${t.btn_wrong}: ${wrongUrl}
 
@@ -114,6 +118,7 @@ const TEXTS = {
     your_listing: "your listing",
     from_listing: "Original",
     btn_reply: "Reply / Open inquiry",
+    btn_reserved: "Reserved",
     btn_rented: "Already rented",
     btn_sold: "Already sold",
     btn_wrong: "Not my listing",
@@ -131,6 +136,7 @@ const TEXTS = {
     your_listing: "Dein Inserat",
     from_listing: "Original",
     btn_reply: "Antworten",
+    btn_reserved: "Reserviert",
     btn_rented: "Schon vermietet",
     btn_sold: "Schon verkauft",
     btn_wrong: "Gehört nicht zu mir",
@@ -148,6 +154,7 @@ const TEXTS = {
     your_listing: "Ваше объявление",
     from_listing: "Оригинал",
     btn_reply: "Ответить",
+    btn_reserved: "Забронировано",
     btn_rented: "Уже сдано",
     btn_sold: "Уже продано",
     btn_wrong: "Не моё объявление",
@@ -165,6 +172,7 @@ const TEXTS = {
     your_listing: "η αγγελία σας",
     from_listing: "Πηγή",
     btn_reply: "Απάντηση",
+    btn_reserved: "Δεσμευμένο",
     btn_rented: "Ήδη ενοικιάστηκε",
     btn_sold: "Ήδη πουλήθηκε",
     btn_wrong: "Δεν είναι δική μου",

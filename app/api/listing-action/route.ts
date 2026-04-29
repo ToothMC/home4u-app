@@ -50,11 +50,13 @@ export async function POST(req: NextRequest) {
   const reportKind =
     payload.action === "mark_rented"
       ? "rented"
-      : payload.action === "still_available"
-        ? "still_available"
-        : payload.action === "wrong_listing"
-          ? "wrong_listing"
-          : null;
+      : payload.action === "mark_reserved"
+        ? "reserved"
+        : payload.action === "still_available"
+          ? "still_available"
+          : payload.action === "wrong_listing"
+            ? "wrong_listing"
+            : null;
   if (!reportKind) {
     return htmlResponse(errorPage("Unbekannte Aktion."), 400);
   }
@@ -218,12 +220,18 @@ function successPage(action: string, newStatus: string): string {
   const headline =
     action === "mark_rented"
       ? "Vielen Dank — wir haben das Inserat als nicht mehr verfügbar markiert."
-      : action === "still_available"
-        ? "Notiert — das Inserat bleibt aktiv."
-        : action === "wrong_listing"
-          ? "Notiert — wir senden Dir keine weiteren Anfragen für dieses Inserat."
-          : "Erledigt.";
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Home4U</title><style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:48px auto;padding:24px;text-align:center;color:#222}.muted{color:#888;font-size:13px}code{background:#f0f0f0;padding:2px 6px;border-radius:4px;font-size:12px}</style></head><body><div style="font-size:42px;margin-bottom:12px">✓</div><h1>${escapeHtml(headline)}</h1><p class="muted">Status: <code>${escapeHtml(newStatus)}</code></p><p class="muted" style="margin-top:24px">Falls Du Dich vertan hast, antworte einfach auf die ursprüngliche E-Mail — wir korrigieren das manuell.</p></body></html>`;
+      : action === "mark_reserved"
+        ? "Notiert — Inserat ist als reserviert markiert."
+        : action === "still_available"
+          ? "Notiert — das Inserat bleibt aktiv."
+          : action === "wrong_listing"
+            ? "Notiert — wir senden Dir keine weiteren Anfragen für dieses Inserat."
+            : "Erledigt.";
+  const fineprint =
+    action === "mark_rented" || action === "mark_reserved"
+      ? "Wenn Dein Original-Inserat noch online bleibt und der Mietvertrag platzt, reaktivieren wir es nach der Cooldown-Zeit automatisch. Solltest Du Dich vertan haben, antworte einfach auf die ursprüngliche E-Mail — wir korrigieren das manuell."
+      : "Falls Du Dich vertan hast, antworte einfach auf die ursprüngliche E-Mail — wir korrigieren das manuell.";
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Home4U</title><style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:48px auto;padding:24px;text-align:center;color:#222}.muted{color:#888;font-size:13px;line-height:1.5}code{background:#f0f0f0;padding:2px 6px;border-radius:4px;font-size:12px}</style></head><body><div style="font-size:42px;margin-bottom:12px">✓</div><h1>${escapeHtml(headline)}</h1><p class="muted">Status: <code>${escapeHtml(newStatus)}</code></p><p class="muted" style="margin-top:24px">${escapeHtml(fineprint)}</p></body></html>`;
 }
 
 function errorPage(msg: string): string {

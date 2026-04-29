@@ -132,11 +132,13 @@ export async function triggerOutreachForMatch(matchId: string): Promise<Outreach
     log_id: attempt.log_id,
   };
 
-  const [replyToken, markRentedToken, wrongListingToken] = await Promise.all([
-    signActionToken({ ...tokenBase, action: "reply" }),
-    signActionToken({ ...tokenBase, action: "mark_rented" }),
-    signActionToken({ ...tokenBase, action: "wrong_listing" }),
-  ]);
+  const [replyToken, markReservedToken, markRentedToken, wrongListingToken] =
+    await Promise.all([
+      signActionToken({ ...tokenBase, action: "reply" }),
+      signActionToken({ ...tokenBase, action: "mark_reserved" }),
+      signActionToken({ ...tokenBase, action: "mark_rented" }),
+      signActionToken({ ...tokenBase, action: "wrong_listing" }),
+    ]);
 
   const sourceUrl =
     typeof listing.extracted_data === "object" &&
@@ -158,6 +160,7 @@ export async function triggerOutreachForMatch(matchId: string): Promise<Outreach
     listingSourceUrl: sourceUrl,
     seekerNote: null,
     replyToken,
+    markReservedToken,
     markRentedToken,
     wrongListingToken,
     language: (listing.language as "en" | "de" | "ru" | "el") ?? "en",
