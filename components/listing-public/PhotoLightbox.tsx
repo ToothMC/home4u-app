@@ -41,12 +41,29 @@ export function PhotoLightbox({
     return () => window.removeEventListener("keydown", onKey);
   }, [next, prev, onClose]);
 
-  // Body scroll lock
+  // Body scroll lock — iOS-Safari-tauglich.
+  // Reines overflow:hidden reicht auf iOS NICHT (Body bounct trotzdem).
+  // Trick: Body auf position:fixed parken mit top=-scrollY, beim Schliessen
+  // zurueckspringen, damit der User nicht oben landet.
   React.useEffect(() => {
-    const original = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const prev = {
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = original;
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.width = prev.width;
+      body.style.overflow = prev.overflow;
+      window.scrollTo(0, scrollY);
     };
   }, []);
 
