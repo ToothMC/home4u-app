@@ -756,10 +756,17 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                 }
                 className="h-10 w-full rounded-md border bg-[var(--background)] px-3 text-sm"
               >
-                <option value="active">aktiv</option>
+                <option value="active">aktiv (sichtbar)</option>
+                <option value="rented">vermietet</option>
+                <option value="sold">verkauft</option>
+                <option value="stale">verfügbarkeit unklar</option>
                 <option value="archived">archiviert</option>
-                <option value="stale">veraltet</option>
+                <option value="opted_out">nicht auf Home4U zeigen</option>
               </select>
+              <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
+                Auf „aktiv" setzen reaktiviert das Inserat — es taucht wieder
+                in Suchen auf.
+              </p>
             </Field>
             <div className="border-t pt-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">

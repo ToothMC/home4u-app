@@ -30,9 +30,16 @@ export default async function PublicListingPage({
   const { from } = await searchParams;
   const listing = await loadPublicListing(id);
 
-  if (!listing || listing.status !== "active") {
+  if (!listing) {
     notFound();
   }
+  // opted_out / archived: hart 404 (Inserent will nicht mehr gezeigt werden).
+  // rented / sold / stale: weiterhin sichtbar mit Verfügbarkeits-Banner —
+  // Seeker mit Anfrage-Historie soll das Listing nochmal nachschauen können.
+  if (listing.status === "opted_out" || listing.status === "archived") {
+    notFound();
+  }
+  const unavailable = listing.status !== "active";
 
   // Bookmark-Status parallel zur Listing-Auflösung wäre netter, aber load
   // ist schon über. Schnell genug — ein simpler indexierter Lookup.
@@ -75,6 +82,26 @@ export default async function PublicListingPage({
 
   return (
     <main className="bg-[var(--background)]">
+      {unavailable && (
+        <div className="mx-auto max-w-7xl w-full px-4 pt-4">
+          <div className="rounded-md border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm">
+            <span className="font-semibold text-[var(--destructive)]">
+              {listing.status === "rented"
+                ? "Inserat ist als vermietet markiert"
+                : listing.status === "sold"
+                  ? "Inserat ist als verkauft markiert"
+                  : "Verfügbarkeit unklar"}
+            </span>
+            <span className="text-[var(--muted-foreground)]">
+              {" "}
+              — der Inserent hat dieses Inserat als nicht mehr verfügbar gemeldet.
+              Falls Du der Inserent bist und es wieder anbieten willst, melde
+              Dich kurz bei uns.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Top bar */}
       <header className="mx-auto max-w-7xl w-full px-4 pt-4 pb-2 flex items-center justify-between">
         <Link
