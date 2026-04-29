@@ -94,7 +94,10 @@ export function PhotoLightbox({
         <img
           src={current.url}
           alt={current.caption ?? ""}
-          className="max-h-full max-w-full object-contain select-none"
+          // Konstanter Anzeigeplatz unabhängig vom Seitenverhältnis: Hochkant-
+          // und Querformat-Bilder bekommen denselben Rahmen, damit das Layout
+          // beim Durchklicken nicht "atmet" und Thumbnails immer sichtbar sind.
+          className="h-full w-full max-w-5xl object-contain select-none"
           draggable={false}
         />
 
@@ -146,7 +149,9 @@ export function PhotoLightbox({
                 type="button"
                 onClick={() => setIdx(i)}
                 className={cn(
-                  "shrink-0 size-16 sm:size-20 rounded-md overflow-hidden border-2 transition-all",
+                  // flex-none + explizite h-/w-Werte: vermeidet, dass der Flex-
+                  // Container Thumbnails ungleichmäßig zusammenstaucht.
+                  "flex-none h-16 w-16 sm:h-20 sm:w-20 rounded-md overflow-hidden border-2 transition-all",
                   i === idx
                     ? "border-white opacity-100"
                     : "border-transparent opacity-60 hover:opacity-100"
