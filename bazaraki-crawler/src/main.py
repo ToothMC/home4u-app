@@ -13,6 +13,7 @@ from .config import PROPERTY_SUBTYPES_BY_TYPE, RATE_LIMIT_SECONDS, selected_citi
 from .crawler import RawListing, crawl_city, crawl_detail, fetch_disallowed_paths, with_browser
 from .supabase_writer import (
     fetch_already_drilled_external_ids,
+    fetch_already_phashed_external_ids,
     mark_stale_old_listings,
     upsert_listings,
 )
@@ -131,34 +132,55 @@ def main() -> int:
         log.warning("Keine Items gefunden — DB nicht geändert.")
         return 0
 
-    # pHash-Berechnung für Cover-Bilder (Dedup-Signal). Nur für items, die wir
-    # auch wirklich upserten werden — bei skip_details (oder kein neues Item)
-    # haben wir trotzdem item.image_url von der Listenseite.
+    # pHash-Berechnung für Cover-Bilder (Dedup-Signal). INKREMENTELL:
+    # nur für Items deren external_id noch keinen image_hashes-Eintrag hat.
+    # Ohne diesen Filter würde der Daily-Crawl bei 27k bestehenden Items
+    # ~4h reine Image-Downloads verursachen → Job-Timeout.
+    # FORCE_REPHASH=1 ignoriert den Filter (für Reparatur-Läufe).
     skip_phash = os.getenv("SKIP_PHASH") == "1"
-    if not skip_phash:
-        from .dedup import compute_phash_from_url
-        phash_started = time.time()
-        phash_ok = 0
-        # Nur für die Items berechnen, die noch keinen pHash haben (also alle
-        # frisch gecrawlten — bestehende RawListing-Objekte sind ephemeral pro Run).
-        candidates = [it for it in all_items if it.cover_phash is None]
-        log.info("pHash für %d Cover-Bilder berechnen …", len(candidates))
-        for idx, item in enumerate(candidates, start=1):
-            cover = (item.media[0] if item.media else item.image_url)
-            if not cover:
-                continue
-            ph = compute_phash_from_url(cover)
-            if ph is not None:
-                item.cover_phash = ph
-                phash_ok += 1
-            if idx % 100 == 0:
-                log.info(
-                    "  phash-progress %d/%d (ok %d, %.1fs)",
-                    idx, len(candidates), phash_ok, time.time() - phash_started,
-                )
-        log.info("pHash-Phase fertig: %d/%d in %.1fs", phash_ok, len(candidates), time.time() - phash_started)
-    else:
+    force_rephash = os.getenv("FORCE_REPHASH") == "1"
+    if skip_phash:
         log.info("SKIP_PHASH=1 — pHash-Berechnung übersprungen.")
+    else:
+        from .dedup import compute_phash_from_url
+        if force_rephash:
+            phash_candidates = [it for it in all_items if it.cover_phash is None]
+            log.info("FORCE_REPHASH=1 — pHash für alle %d Items", len(phash_candidates))
+        else:
+            log.info("Frage bereits gehashte external_ids ab …")
+            phashed_ids = fetch_already_phashed_external_ids()
+            log.info("Schon gehasht: %d", len(phashed_ids))
+            phash_candidates = [
+                it for it in all_items
+                if it.cover_phash is None and it.external_id not in phashed_ids
+            ]
+            log.info(
+                "pHash: %d neue von %d Items (Rest schon gehasht)",
+                len(phash_candidates), len(all_items),
+            )
+
+        if not phash_candidates:
+            log.info("Keine Items für pHash — überspringe Phase.")
+        else:
+            phash_started = time.time()
+            phash_ok = 0
+            for idx, item in enumerate(phash_candidates, start=1):
+                cover = (item.media[0] if item.media else item.image_url)
+                if not cover:
+                    continue
+                ph = compute_phash_from_url(cover)
+                if ph is not None:
+                    item.cover_phash = ph
+                    phash_ok += 1
+                if idx % 100 == 0:
+                    log.info(
+                        "  phash-progress %d/%d (ok %d, %.1fs)",
+                        idx, len(phash_candidates), phash_ok, time.time() - phash_started,
+                    )
+            log.info(
+                "pHash-Phase fertig: %d/%d in %.1fs",
+                phash_ok, len(phash_candidates), time.time() - phash_started,
+            )
 
     if os.getenv("DRY_RUN") == "1":
         log.info("DRY_RUN=1 — kein Supabase-Write.")

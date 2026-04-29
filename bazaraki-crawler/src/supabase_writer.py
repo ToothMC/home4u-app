@@ -175,6 +175,77 @@ def fetch_already_drilled_external_ids() -> set[str]:
     return drilled
 
 
+def fetch_already_phashed_external_ids() -> set[str]:
+    """Bazaraki-Listings, die schon einen image_hashes-Eintrag haben.
+    Daily-Crawl überspringt deren pHash-Compute — die teuersten Phase
+    war pHash-Compute für 27k bestehende Items (~4h Image-Downloads).
+    Backfill-Job sollte das initial füllen.
+    """
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+    }
+    phashed: set[str] = set()
+    offset, page = 0, 1000
+    # JOIN-trick via PostgREST embed: image_hashes(listing_id) → listings(external_id)
+    # Einfacher: erst alle listing_ids aus image_hashes holen, dann mapping über
+    # listings-Tabelle. Zwei Queries, aber jede simpel.
+    listing_ids: set[str] = set()
+    while True:
+        try:
+            resp = httpx.get(
+                f"{url_base}/rest/v1/image_hashes?select=listing_id",
+                headers={
+                    **headers,
+                    "Range-Unit": "items",
+                    "Range": f"{offset}-{offset + page - 1}",
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            log.warning("fetch_already_phashed (image_hashes) failed: %s", e)
+            return set()
+        rows = resp.json() or []
+        for r in rows:
+            lid = r.get("listing_id")
+            if lid:
+                listing_ids.add(str(lid))
+        if len(rows) < page:
+            break
+        offset += page
+
+    if not listing_ids:
+        return set()
+
+    # Map listing_ids → external_ids in Bazaraki
+    offset = 0
+    ids_list = list(listing_ids)
+    BATCH = 200  # PostgREST IN-Filter Länge
+    while offset < len(ids_list):
+        chunk = ids_list[offset : offset + BATCH]
+        in_filter = ",".join(chunk)
+        try:
+            resp = httpx.get(
+                f"{url_base}/rest/v1/listings?source=eq.bazaraki&id=in.({in_filter})&select=external_id",
+                headers=headers,
+                timeout=30,
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            log.warning("fetch_already_phashed (listings map) failed at offset %d: %s", offset, e)
+            offset += BATCH
+            continue
+        for r in resp.json() or []:
+            ext = r.get("external_id")
+            if ext:
+                phashed.add(str(ext))
+        offset += BATCH
+    return phashed
+
+
 def mark_stale_old_listings(stale_days: int = 7) -> int:
     """Listings, die seit N Tagen nicht mehr gesehen wurden → status='stale'.
 
