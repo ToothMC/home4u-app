@@ -60,6 +60,14 @@ class RawListing:
     # crawl_detail() hebt das auf 0.85 bei erfolgreichem Drill.
     confidence: float = 0.5
 
+    # Dedup-Signale (Spur 0048): cover_phash für pHash-Match,
+    # phone_hash für Phone-Match. Beide werden post-list/post-detail
+    # gefüllt, je nach Verfügbarkeit. Bazaraki liefert Phone nicht ohne
+    # XHR-Click → phone_hash bleibt None. Cover-pHash wird über
+    # dedup.compute_phash_from_url(image_url oder media[0]) gebildet.
+    cover_phash: int | None = None
+    phone_hash: str | None = None
+
 
 # ---------- robots.txt ----------
 

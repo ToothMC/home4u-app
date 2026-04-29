@@ -1,0 +1,51 @@
+name: Bazaraki pHash Backfill
+
+# Manuell triggerbarer One-Shot: pHash + canonical-Merge für bestehende
+# Bazaraki-Listings, die noch keinen image_hashes-Eintrag haben.
+# Idempotent — kann erneut laufen wenn er abgebrochen wird.
+#
+# Erwartete Laufzeit: ~3-4h für ~27k Listings bei 0.3s Rate-Limit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max Listings (0 = unbegrenzt)"
+        required: false
+        default: "0"
+      rate_limit_s:
+        description: "Sekunden Pause pro Listing"
+        required: false
+        default: "0.3"
+
+concurrency:
+  group: bazaraki-backfill-phash
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    defaults:
+      run:
+        working-directory: ./bazaraki-crawler
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+
+      - name: Run backfill
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKFILL_LIMIT: ${{ inputs.limit || '0' }}
+          BACKFILL_RATE_LIMIT_S: ${{ inputs.rate_limit_s || '0.3' }}
+        run: python -m src.backfill_phash

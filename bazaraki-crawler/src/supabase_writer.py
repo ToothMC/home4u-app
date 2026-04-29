@@ -32,7 +32,7 @@ def _build_dedup_hash(external_id: str) -> str:
 def _to_row(item: RawListing) -> dict:
     # Media: Detail-Page-Galerie wenn gedrillt, sonst Listenseiten-Cover
     media = item.media if item.media else ([item.image_url] if item.image_url else [])
-    return {
+    row = {
         "external_id": item.external_id,
         "type": item.listing_type,
         "location_city": item.city,
@@ -61,6 +61,13 @@ def _to_row(item: RawListing) -> dict:
         # Score-Felder bewusst NICHT — Worker setzt scam_checked_at später.
         "dedup_hash": _build_dedup_hash(item.external_id),
     }
+    # Dedup-Signale (optional): RPC ignoriert nullable Felder.
+    # cover_phash kommt als string ins JSON, RPC casted zu bigint.
+    if item.cover_phash is not None:
+        row["cover_phash"] = str(item.cover_phash)
+    if item.phone_hash:
+        row["phone_hash"] = item.phone_hash
+    return row
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
