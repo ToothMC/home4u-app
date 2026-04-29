@@ -3,7 +3,7 @@
  *
  * Env:
  *   RESEND_API_KEY       — von resend.com/api-keys
- *   RESEND_FROM_ADDRESS  — verifizierte Domain-Sender, z.B. "Home4U <outreach@home4u.app>"
+ *   RESEND_FROM_ADDRESS  — verifizierte Domain-Sender, z.B. "Home4U <outreach@home4u.ai>"
  *
  * Ohne Env: sendEmail() loggt + returned { ok: false, reason: 'not_configured' } —
  * App crasht nicht, Outreach wird übersprungen (mit outreach_log status='skipped').
