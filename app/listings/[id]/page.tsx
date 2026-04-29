@@ -33,19 +33,24 @@ export default async function PublicListingPage({
   if (!listing) {
     notFound();
   }
-  // opted_out / archived: hart 404 (Inserent will nicht mehr gezeigt werden).
-  // rented / sold / stale: weiterhin sichtbar mit Verfügbarkeits-Banner —
-  // Seeker mit Anfrage-Historie soll das Listing nochmal nachschauen können.
-  if (listing.status === "opted_out" || listing.status === "archived") {
-    notFound();
-  }
-  const unavailable = listing.status !== "active";
 
   // Bookmark-Status parallel zur Listing-Auflösung wäre netter, aber load
   // ist schon über. Schnell genug — ein simpler indexierter Lookup.
   // Favoriten sind auth-only: Anon-User sehen den Save-Button immer "leer"
   // und werden beim Klick in den Login-Dialog geschickt.
   const user = await getAuthUser();
+
+  // opted_out / archived: hart 404 (Inserent will nicht mehr gezeigt werden) —
+  // ABER: der Eigentümer selbst muss die Vorschau weiter sehen können, sonst
+  // bricht der Vorschau-Link im Editor sobald jemand das Inserat deaktiviert.
+  const isOwner = !!user && listing.owner_user_id === user.id;
+  if (
+    !isOwner &&
+    (listing.status === "opted_out" || listing.status === "archived")
+  ) {
+    notFound();
+  }
+  const unavailable = listing.status !== "active";
   const initialSaved = user
     ? await isListingBookmarked(id, { userId: user.id })
     : false;

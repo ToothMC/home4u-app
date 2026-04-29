@@ -15,7 +15,7 @@ export async function loadPublicListing(
   const { data: l, error } = await supabase
     .from("listings")
     .select(
-      `id, title, description, type, status, property_type,
+      `id, title, description, type, status, property_type, owner_user_id,
        location_city, location_district, location_address, lat, lng,
        price, price_warm, price_cold, deposit, service_charge_monthly, utilities, currency,
        rooms, bathrooms, size_sqm, plot_sqm,
@@ -68,6 +68,7 @@ export async function loadPublicListing(
     type: l.type as "rent" | "sale",
     property_type: l.property_type ?? null,
     status: l.status,
+    owner_user_id: l.owner_user_id ?? null,
     location_city: l.location_city,
     location_district: l.location_district ?? null,
     location_address: l.location_address ?? null,

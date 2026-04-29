@@ -80,6 +80,7 @@ export type PublicListingData = {
   type: "rent" | "sale";
   property_type: string | null;
   status: string;
+  owner_user_id: string | null;
   location_city: string;
   location_district: string | null;
   location_address: string | null;
