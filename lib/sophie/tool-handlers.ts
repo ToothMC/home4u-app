@@ -4,6 +4,7 @@ import {
 } from "@/lib/repo/search-profiles";
 import { findMatchesForSession } from "@/lib/repo/listings";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { triggerOutreachForMatch } from "@/lib/listings/outreach";
 import {
   embedAndStoreListing,
   embedAndStoreSearchProfile,
@@ -341,6 +342,17 @@ const handlers: Record<string, Handler> = {
     if (!payload.ok) {
       return { ok: false, error: payload.error ?? "unknown_error" };
     }
+
+    // Outreach an den Inserenten — best-effort, blockiert die Sophie-Response nicht.
+    if (payload.match_id) {
+      try {
+        const outreach = await triggerOutreachForMatch(payload.match_id);
+        console.info("[confirm_match_request] outreach", outreach);
+      } catch (e) {
+        console.error("[confirm_match_request] outreach threw", e);
+      }
+    }
+
     return {
       ok: true,
       data: {

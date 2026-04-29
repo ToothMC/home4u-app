@@ -9,6 +9,7 @@ import {
   createSupabaseServerClient,
   createSupabaseServiceClient,
 } from "@/lib/supabase/server";
+import { triggerOutreachForMatch } from "@/lib/listings/outreach";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +59,17 @@ export async function POST(req: Request) {
   if (!payload.ok) {
     return Response.json({ error: payload.error ?? "unknown" }, { status: 400 });
   }
+
+  // Outreach an den Inserenten — best-effort, blockiert die Response nicht.
+  if (payload.match_id) {
+    try {
+      const outreach = await triggerOutreachForMatch(payload.match_id);
+      console.info("[matches/like] outreach", outreach);
+    } catch (e) {
+      console.error("[matches/like] outreach threw", e);
+    }
+  }
+
   return Response.json({
     match_id: payload.match_id,
     connected: Boolean(payload.connected_at),
