@@ -63,6 +63,14 @@ export const ROOM_ORDER = [
   "other",
 ];
 
+// Erkennt Video-URLs auch wenn ein Query-String dahinter haengt (Supabase
+// Storage-URLs liefern z.B. ?token=...). Genutzt im Lightbox/Hero/RoomGrid,
+// damit Videos als <video> statt als kaputtes <img> gerendert werden.
+export function isVideoUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return /\.(mp4|mov|webm|m4v)(\?|#|$)/i.test(url);
+}
+
 export const POI_LABEL: Record<NearbyPOI["category"], string> = {
   transit: "ÖPNV",
   park: "Park",

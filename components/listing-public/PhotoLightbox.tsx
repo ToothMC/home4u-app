@@ -4,7 +4,7 @@ import * as React from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ListingPhoto } from "./types";
-import { ROOM_LABEL } from "./types";
+import { ROOM_LABEL, isVideoUrl } from "./types";
 
 export function PhotoLightbox({
   photos,
@@ -90,17 +90,28 @@ export function PhotoLightbox({
           setTouchStart(null);
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={current.url}
-          alt={current.caption ?? ""}
-          // Harte max-Maße auf Viewport-Anteile, damit JEDES Bild — egal ob
-          // mit/ohne Caption oder welches Seitenverhältnis — denselben Rahmen
-          // bekommt. Vorher: flex-1 + h-full liess das Bild mitwachsen, sobald
-          // eine Caption fehlte, und die Thumbnails wurden rausgedrueckt.
-          className="max-h-[78vh] max-w-[92vw] sm:max-w-5xl object-contain select-none"
-          draggable={false}
-        />
+        {isVideoUrl(current.url) ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video
+            key={current.url}
+            src={current.url}
+            controls
+            playsInline
+            className="max-h-[78vh] max-w-[92vw] sm:max-w-5xl object-contain bg-black"
+          />
+        ) : (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={current.url}
+            alt={current.caption ?? ""}
+            // Harte max-Maße auf Viewport-Anteile, damit JEDES Bild — egal ob
+            // mit/ohne Caption oder welches Seitenverhältnis — denselben Rahmen
+            // bekommt. Vorher: flex-1 + h-full liess das Bild mitwachsen, sobald
+            // eine Caption fehlte, und die Thumbnails wurden rausgedrueckt.
+            className="max-h-[78vh] max-w-[92vw] sm:max-w-5xl object-contain select-none"
+            draggable={false}
+          />
+        )}
 
         {total > 1 && (
           <>
@@ -159,13 +170,24 @@ export function PhotoLightbox({
                 )}
                 aria-label={`Bild ${i + 1}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={p.url}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  draggable={false}
-                />
+                {isVideoUrl(p.url) ? (
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video
+                    src={p.url}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={p.url}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                  />
+                )}
               </button>
             ))}
           </div>

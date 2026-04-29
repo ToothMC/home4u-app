@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Expand } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PhotoLightbox } from "./PhotoLightbox";
 import type { ListingPhoto } from "./types";
+import { isVideoUrl } from "./types";
 
 export function HeroGallery({ images }: { images: string[] }) {
   const [idx, setIdx] = React.useState(0);
@@ -39,28 +40,48 @@ export function HeroGallery({ images }: { images: string[] }) {
       {/* Hero */}
       <div className="relative aspect-[16/10] sm:aspect-[5/3] overflow-hidden rounded-2xl bg-[var(--muted)]">
         {!broken.has(idx) ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={images[idx]}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover cursor-zoom-in"
-            draggable={false}
-            onClick={() => setLightboxStart(idx)}
-            onError={() =>
-              setBroken((p) => {
-                const n = new Set(p);
-                n.add(idx);
-                return n;
-              })
-            }
-            onTouchStart={(e) => setTouchStart(e.touches[0].clientX)}
-            onTouchEnd={(e) => {
-              if (touchStart === null) return;
-              const dx = e.changedTouches[0].clientX - touchStart;
-              if (Math.abs(dx) > 50) (dx < 0 ? next : prev)();
-              setTouchStart(null);
-            }}
-          />
+          isVideoUrl(images[idx]) ? (
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <video
+              key={images[idx]}
+              src={images[idx]}
+              muted
+              playsInline
+              preload="metadata"
+              className="absolute inset-0 h-full w-full object-cover cursor-zoom-in"
+              onClick={() => setLightboxStart(idx)}
+              onError={() =>
+                setBroken((p) => {
+                  const n = new Set(p);
+                  n.add(idx);
+                  return n;
+                })
+              }
+            />
+          ) : (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={images[idx]}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover cursor-zoom-in"
+              draggable={false}
+              onClick={() => setLightboxStart(idx)}
+              onError={() =>
+                setBroken((p) => {
+                  const n = new Set(p);
+                  n.add(idx);
+                  return n;
+                })
+              }
+              onTouchStart={(e) => setTouchStart(e.touches[0].clientX)}
+              onTouchEnd={(e) => {
+                if (touchStart === null) return;
+                const dx = e.changedTouches[0].clientX - touchStart;
+                if (Math.abs(dx) > 50) (dx < 0 ? next : prev)();
+                setTouchStart(null);
+              }}
+            />
+          )
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted-foreground)]">
             Bild nicht ladbar
@@ -117,19 +138,37 @@ export function HeroGallery({ images }: { images: string[] }) {
             aria-label={i === 4 && total > 5 ? "Alle Bilder anzeigen" : `Bild ${i + 1}`}
           >
             {!broken.has(i) ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={images[i]}
-                alt=""
-                className="h-full w-full object-cover"
-                onError={() =>
-                  setBroken((p) => {
-                    const n = new Set(p);
-                    n.add(i);
-                    return n;
-                  })
-                }
-              />
+              isVideoUrl(images[i]) ? (
+                // eslint-disable-next-line jsx-a11y/media-has-caption
+                <video
+                  src={images[i]}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="h-full w-full object-cover"
+                  onError={() =>
+                    setBroken((p) => {
+                      const n = new Set(p);
+                      n.add(i);
+                      return n;
+                    })
+                  }
+                />
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={images[i]}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  onError={() =>
+                    setBroken((p) => {
+                      const n = new Set(p);
+                      n.add(i);
+                      return n;
+                    })
+                  }
+                />
+              )
             ) : (
               <div className="h-full w-full bg-[var(--muted)]" />
             )}

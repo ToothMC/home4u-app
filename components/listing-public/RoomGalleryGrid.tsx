@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ROOM_LABEL, type ListingPhoto } from "./types";
+import { ROOM_LABEL, isVideoUrl, type ListingPhoto } from "./types";
 import { PhotoLightbox } from "./PhotoLightbox";
 
 export function RoomGalleryGrid({ photos }: { photos: ListingPhoto[] }) {
@@ -50,13 +50,24 @@ export function RoomGalleryGrid({ photos }: { photos: ListingPhoto[] }) {
                 "focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               )}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={list[0].url}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105"
-                draggable={false}
-              />
+              {isVideoUrl(list[0].url) ? (
+                // eslint-disable-next-line jsx-a11y/media-has-caption
+                <video
+                  src={list[0].url}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105"
+                />
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={list[0].url}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105"
+                  draggable={false}
+                />
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
               <div className="absolute bottom-0 inset-x-0 p-3 text-white flex items-end justify-between gap-2">
                 <div>
