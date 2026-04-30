@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { LogIn, LogOut, User as UserIcon, Loader2, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SignInDialog } from "@/components/auth/SignInDialog";
@@ -24,9 +23,19 @@ export function AuthMenu({
 }) {
   const [state, setState] = useState<AuthState>({ status: "loading" });
   const [open, setOpen] = useState(false);
-  const searchParams = useSearchParams();
-  const authRequired = searchParams.get("auth") === "required";
-  const nextUrl = searchParams.get("next");
+  const [authRequired, setAuthRequired] = useState(false);
+  const [nextUrl, setNextUrl] = useState<string | null>(null);
+
+  // window.location statt useSearchParams() — letzteres bricht den
+  // Vercel-Build wenn der parent kein <Suspense>-Boundary hat. Effekt
+  // ist gleich, läuft nur clientseitig (SSR sieht's nicht, was hier OK
+  // ist da AuthMenu primär ein Client-Widget ist).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    setAuthRequired(params.get("auth") === "required");
+    setNextUrl(params.get("next"));
+  }, []);
 
   // Wenn andere Seiten via ?auth=required redirecten (z.B. /scam-check
   // ohne Login), öffnen wir den Dialog automatisch sobald wir wissen
