@@ -3,10 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, X } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DeleteRecordButton } from "@/components/dashboard/DeleteRecordButton";
+import { emitMatchesUpdated } from "@/lib/events/match-events";
 import { cn } from "@/lib/utils";
 
 export type EditableSearchProfile = {
@@ -42,6 +44,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
   const [form, setForm] = React.useState<Partial<EditableSearchProfile>>({});
   const [busy, setBusy] = React.useState<"save" | null>(null);
   const [savedAt, setSavedAt] = React.useState<number | null>(null);
+  const [matchCount, setMatchCount] = React.useState<number | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const set = <K extends keyof EditableSearchProfile>(
@@ -77,8 +80,14 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
         setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
         return;
       }
+      const json = await res.json().catch(() => ({} as { match_count?: number }));
       setForm({});
       setSavedAt(Date.now());
+      setMatchCount(
+        typeof json.match_count === "number" ? json.match_count : null
+      );
+      // Andere geöffnete Listen (z.B. /matches) sofort refreshen lassen.
+      emitMatchesUpdated();
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Netzwerkfehler");
@@ -289,6 +298,14 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
           {savedAt && !dirty && (
             <span className="text-xs text-emerald-700 flex items-center gap-1">
               <Check className="size-3" /> Gespeichert
+              {matchCount !== null && (
+                <Link
+                  href="/matches"
+                  className="ml-1 underline hover:no-underline"
+                >
+                  · {matchCount} {matchCount === 1 ? "Treffer" : "Treffer"}
+                </Link>
+              )}
             </span>
           )}
           <Button onClick={save} disabled={!dirty || busy === "save"}>

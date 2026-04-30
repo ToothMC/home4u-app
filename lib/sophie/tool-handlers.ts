@@ -161,7 +161,14 @@ const handlers: Record<string, Handler> = {
       lifestyle_tags: asStringArray(input.lifestyle_tags),
       free_text: asString(input.free_text),
     });
-    return { ok: true, data: { persisted: true, profile_id: result.id } };
+    // Direkt nach Profil-Save eine frische Suche fahren, damit Sophie in der
+    // gleichen Antwort die Trefferzahl nennt — Regel: jede Profil-Änderung
+    // löst eine neue Suche aus.
+    const fresh = await runFreshMatchForCtx(ctx);
+    return {
+      ok: true,
+      data: { persisted: true, profile_id: result.id, ...fresh },
+    };
   },
 
   async update_search_profile(input, ctx) {
@@ -180,6 +187,9 @@ const handlers: Record<string, Handler> = {
       // Bei jedem Profil-Update Embedding neu rechnen (Best-Effort, async)
       void refreshProfileEmbedding(ctx);
     }
+    // Auch bei Field-Update: sofort eine frische Suche laufen lassen, damit
+    // Sophie z.B. nach "Budget 300→400" direkt sagen kann "jetzt 12 Treffer".
+    const fresh = ok ? await runFreshMatchForCtx(ctx) : { match_count: null };
     return {
       ok: true,
       data: {
@@ -187,6 +197,7 @@ const handlers: Record<string, Handler> = {
         note: ok
           ? undefined
           : "Kein bestehendes Profil gefunden oder Supabase nicht konfiguriert.",
+        ...fresh,
       },
     };
   },
@@ -398,6 +409,55 @@ export async function executeTool(
     return await handler(safeInput, ctx);
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Frische Suche direkt nach einer Profil-Änderung. Sophies Response-Modell
+ * sieht in `match_count` und `top_matches` den neuen Stand und kann ihn
+ * natürlich in den Antworttext einbauen ("mit 400€ jetzt 12 Treffer").
+ *
+ * Best-Effort: bei Fehler/Supabase-Down liefern wir match_count=null,
+ * blockieren aber nicht die Profil-Persistenz.
+ */
+async function runFreshMatchForCtx(ctx: ToolContext): Promise<{
+  match_count: number | null;
+  top_matches?: Array<{
+    id: string;
+    city: string;
+    district: string | null;
+    price: number;
+    currency: string;
+    rooms: number | null;
+    size_sqm: number | null;
+    score: number;
+  }>;
+  match_error?: string;
+}> {
+  if (!ctx.userId && !ctx.anonymousId) return { match_count: null };
+  try {
+    const matches = await findMatchesForSession(
+      { anonymousId: ctx.anonymousId, userId: ctx.userId },
+      12
+    );
+    return {
+      match_count: matches.length,
+      top_matches: matches.slice(0, 3).map((m) => ({
+        id: m.id,
+        city: m.location_city,
+        district: m.location_district,
+        price: m.price,
+        currency: m.currency,
+        rooms: m.rooms,
+        size_sqm: m.size_sqm,
+        score: Math.round(m.score * 100) / 100,
+      })),
+    };
+  } catch (err) {
+    return {
+      match_count: null,
+      match_error: err instanceof Error ? err.message : "match_failed",
+    };
   }
 }
 

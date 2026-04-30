@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { getOrCreateAnonymousSession } from "@/lib/session";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { findMatchesForSession } from "@/lib/repo/listings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +45,12 @@ async function loadAndAuthorize(id: string) {
   if (!ownedByUser && !ownedByAnon) {
     return { ok: false as const, status: 403, error: "forbidden" };
   }
-  return { ok: true as const, supabase };
+  return {
+    ok: true as const,
+    supabase,
+    userId: ownedByUser ? user.id : undefined,
+    anonymousId: ownedByAnon ? session.anonymousId : undefined,
+  };
 }
 
 export async function PATCH(
@@ -83,7 +89,23 @@ export async function PATCH(
       { status: 500 }
     );
   }
-  return Response.json({ ok: true, id });
+
+  // Regel: jede Profil-Änderung löst eine neue Suche aus. Wir liefern
+  // Trefferzahl zurück damit das Frontend (Edit-Form) die /matches-Anzeige
+  // direkt refreshen oder einen "X neue Treffer"-Toast zeigen kann.
+  // Best-Effort — bei Fehler bleibt der PATCH trotzdem erfolgreich.
+  let matchCount: number | null = null;
+  try {
+    const matches = await findMatchesForSession(
+      { userId: auth.userId, anonymousId: auth.anonymousId },
+      50
+    );
+    matchCount = matches.length;
+  } catch (e) {
+    console.warn("[searches/PATCH] match-refresh failed", e);
+  }
+
+  return Response.json({ ok: true, id, match_count: matchCount });
 }
 
 export async function DELETE(
