@@ -22,6 +22,7 @@ const patchSchema = z
     pets: z.boolean().nullable().optional(),
     free_text: z.string().max(2000).nullable().optional(),
     active: z.boolean().optional(),
+    notify_new_matches: z.boolean().optional(),
   })
   .strict();
 

@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, UserCircle } from "lucide-react";
+import { ArrowLeft, Bell, UserCircle } from "lucide-react";
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { BrandLockup } from "@/components/brand/Logo";
 import {
   ProfileEditor,
   type ProfileForm,
 } from "@/components/dashboard/ProfileEditor";
+import {
+  SearchNotificationToggles,
+  type SearchNotificationItem,
+} from "@/components/dashboard/SearchNotificationToggles";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
@@ -36,6 +40,22 @@ export default async function ProfilePage() {
     contact_channel: (data?.contact_channel ?? null) as ProfileForm["contact_channel"],
     notification_email: data?.notification_email ?? null,
   };
+
+  const { data: searchRows } = await supabase
+    .from("search_profiles")
+    .select("id, location, type, rooms, budget_max, notify_new_matches")
+    .eq("user_id", user.id)
+    .eq("active", true)
+    .order("updated_at", { ascending: false });
+
+  const searches: SearchNotificationItem[] = (searchRows ?? []).map((r) => ({
+    id: r.id as string,
+    location: (r.location as string) ?? "",
+    type: (r.type as "rent" | "sale") ?? "rent",
+    rooms: (r.rooms as number | null) ?? null,
+    budget_max: r.budget_max != null ? Number(r.budget_max) : null,
+    notify_new_matches: r.notify_new_matches !== false,
+  }));
 
   return (
     <main className="min-h-screen bg-[var(--background)]">
@@ -74,6 +94,20 @@ export default async function ProfilePage() {
           Telefon und Kontakt-Kanal werden erst geteilt, wenn beide Seiten
           einem Match zustimmen — vorher sieht niemand außer dir diese Daten.
         </p>
+
+        <div className="mt-8 rounded-2xl border bg-[var(--card)] p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <Bell className="size-5 text-[var(--brand-navy)]" />
+            <h2 className="text-lg font-semibold text-[var(--brand-navy)]">
+              Benachrichtigungen für meine Suchen
+            </h2>
+          </div>
+          <p className="text-xs text-[var(--muted-foreground)] mb-4">
+            Wir schicken Dir einmal pro Tag eine E-Mail, wenn neue passende
+            Inserate dazugekommen sind. Pro Suche einzeln steuerbar.
+          </p>
+          <SearchNotificationToggles initial={searches} />
+        </div>
       </section>
     </main>
   );
