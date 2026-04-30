@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import * as Dialog from "@radix-ui/react-dialog";
 import { Loader2, Mail, LogIn, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,7 +96,6 @@ export function SignInDialog({
       if (!res.ok || !data.ok) {
         throw new Error(data.detail || data.error || "verify_failed");
       }
-      // Browser-Client-Session refresh, damit getUser() im UI ebenfalls den User sieht
       try {
         const supabase = createSupabaseBrowserClient();
         await supabase.auth.getSession();
@@ -120,157 +119,143 @@ export function SignInDialog({
     }
   }
 
-  // Body-Lock: verhindert Scrollen der Hintergrund-Page während Dialog offen.
-  useEffect(() => {
-    if (!open || typeof document === "undefined") return;
-    const orig = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = orig;
-    };
-  }, [open]);
-
-  if (!open || typeof document === "undefined") return null;
-
-  // createPortal nach document.body — umgeht das Problem dass fixed-positioning
-  // bei ancestor mit transform/filter/perspective zur containing-block wird
-  // (Header/Layout-Wrapper können `fixed` sonst kapern → Dialog erscheint
-  // an falscher Stelle).
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-      role="dialog"
-      aria-modal="true"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onOpenChange(false);
-      }}
-    >
-      <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl bg-[var(--background)] p-6 shadow-lg relative">
-        <button
-          onClick={() => onOpenChange(false)}
-          aria-label="Schließen"
-          className="absolute right-3 top-3 p-1 hover:bg-[var(--accent)] rounded-md"
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+        <Dialog.Content
+          className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl bg-[var(--background)] p-6 shadow-lg focus:outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+          onOpenAutoFocus={(e) => {
+            // Auto-focus auf Email-Input überlassen wir dem Browser;
+            // Radix' Default-Auto-Focus auf Close-Button überspringen.
+            e.preventDefault();
+          }}
         >
-          <X className="size-4" />
-        </button>
+          <Dialog.Close
+            aria-label="Schließen"
+            className="absolute right-3 top-3 p-1 hover:bg-[var(--accent)] rounded-md"
+          >
+            <X className="size-4" />
+          </Dialog.Close>
 
-        {mode === "email" && (
-          <div>
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
+          {mode === "email" && (
+            <div>
+              <Dialog.Title className="text-lg font-semibold flex items-center gap-2">
                 <LogIn className="size-4" /> Anmelden
-              </h2>
-              <p className="text-sm text-[var(--muted-foreground)] mt-1">
+              </Dialog.Title>
+              <Dialog.Description className="text-sm text-[var(--muted-foreground)] mt-1 mb-4">
                 Wir schicken dir einen Code per E-Mail.
-              </p>
+              </Dialog.Description>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  sendOtp();
+                }}
+                className="space-y-3"
+              >
+                <Input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  placeholder="du@beispiel.de"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={busy}
+                  required
+                  autoFocus
+                />
+                <Button type="submit" className="w-full" disabled={busy || !email}>
+                  {busy ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Mail className="size-4" />
+                  )}
+                  Code senden
+                </Button>
+              </form>
+              {error && (
+                <p className="mt-3 text-sm text-[var(--destructive)]">{error}</p>
+              )}
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                sendOtp();
-              }}
-              className="space-y-3"
-            >
-              <Input
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="du@beispiel.de"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={busy}
-                required
-              />
-              <Button type="submit" className="w-full" disabled={busy || !email}>
-                {busy ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <Mail className="size-4" />
-                )}
-                Code senden
-              </Button>
-            </form>
-            {error && (
-              <p className="mt-3 text-sm text-[var(--destructive)]">{error}</p>
-            )}
-          </div>
-        )}
+          )}
 
-        {mode === "code" && (
-          <div>
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold">Code eingeben</h2>
-              <p className="text-sm text-[var(--muted-foreground)] mt-1">
+          {mode === "code" && (
+            <div>
+              <Dialog.Title className="text-lg font-semibold">
+                Code eingeben
+              </Dialog.Title>
+              <Dialog.Description className="text-sm text-[var(--muted-foreground)] mt-1 mb-4">
                 Wir haben einen Code an <strong>{email}</strong> geschickt.
                 Schau in deinem Posteingang nach.
-              </p>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                verify();
-              }}
-              className="space-y-3"
-            >
-              <Input
-                ref={codeInputRef}
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="\d{6,8}"
-                placeholder="12345678"
-                value={code}
-                onChange={(e) =>
-                  setCode(e.target.value.replace(/\D/g, "").slice(0, 8))
-                }
-                disabled={busy}
-                className="text-center tracking-[0.3em] text-lg"
-                required
-              />
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={busy || code.length < 6}
+              </Dialog.Description>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  verify();
+                }}
+                className="space-y-3"
               >
-                {busy ? <Loader2 className="animate-spin" /> : null}
-                Anmelden
-              </Button>
-              <div className="flex items-center justify-between text-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("email");
-                    setCode("");
-                    setError(null);
-                  }}
-                  className="text-[var(--muted-foreground)] hover:underline"
-                >
-                  ← andere E-Mail
-                </button>
-                <ResendButton
-                  cooldownEnd={cooldownEnd}
-                  onResend={() => sendOtp({ resend: true })}
+                <Input
+                  ref={codeInputRef}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="\d{6,8}"
+                  placeholder="12345678"
+                  value={code}
+                  onChange={(e) =>
+                    setCode(e.target.value.replace(/\D/g, "").slice(0, 8))
+                  }
                   disabled={busy}
+                  className="text-center tracking-[0.3em] text-lg"
+                  required
                 />
-              </div>
-            </form>
-            {error && (
-              <p className="mt-3 text-sm text-[var(--destructive)]">{error}</p>
-            )}
-          </div>
-        )}
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={busy || code.length < 6}
+                >
+                  {busy ? <Loader2 className="animate-spin" /> : null}
+                  Anmelden
+                </Button>
+                <div className="flex items-center justify-between text-sm">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("email");
+                      setCode("");
+                      setError(null);
+                    }}
+                    className="text-[var(--muted-foreground)] hover:underline"
+                  >
+                    ← andere E-Mail
+                  </button>
+                  <ResendButton
+                    cooldownEnd={cooldownEnd}
+                    onResend={() => sendOtp({ resend: true })}
+                    disabled={busy}
+                  />
+                </div>
+              </form>
+              {error && (
+                <p className="mt-3 text-sm text-[var(--destructive)]">{error}</p>
+              )}
+            </div>
+          )}
 
-        {mode === "success" && (
-          <div className="py-8 text-center">
-            <p className="text-lg font-semibold">Eingeloggt ✓</p>
-            <p className="text-sm text-[var(--muted-foreground)] mt-1">
-              Moment …
-            </p>
-          </div>
-        )}
-      </div>
-    </div>,
-    document.body
+          {mode === "success" && (
+            <div className="py-8 text-center">
+              <Dialog.Title className="text-lg font-semibold">
+                Eingeloggt ✓
+              </Dialog.Title>
+              <Dialog.Description className="text-sm text-[var(--muted-foreground)] mt-1">
+                Moment …
+              </Dialog.Description>
+            </div>
+          )}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
