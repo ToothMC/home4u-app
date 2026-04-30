@@ -19,6 +19,8 @@ type Offer = {
   currency: string;
   contact_channel: string | null;
   is_canonical: boolean;
+  last_seen?: string;
+  days_since_seen?: number;
 };
 
 /**
