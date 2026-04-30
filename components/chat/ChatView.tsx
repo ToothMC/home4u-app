@@ -151,6 +151,10 @@ export function ChatView({
       let assistantText = "";
       const toolCalls: ToolCall[] = [];
       let currentTool: ToolCall | null = null;
+      // Wenn ein neuer Turn (Sophie spricht erneut nach einem Tool-Call) Text
+      // produziert, beginnt eine NEUE Assistant-Bubble. Vorher wurden alle
+      // Rounden in eine Bubble gemerged → "Frage?Frage?"-Doppel-Strings.
+      let pendingNewBubble = false;
 
       setMessages((prev) => [
         ...prev,
@@ -180,6 +184,15 @@ export function ChatView({
           if (evt.type === "conversation" && typeof evt.id === "string") {
             setConversationId(evt.id);
           } else if (evt.type === "text" && typeof evt.delta === "string") {
+            // Erster Text nach einem Tool-Call → neue Bubble.
+            if (pendingNewBubble) {
+              pendingNewBubble = false;
+              assistantText = "";
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: "", toolCalls: [] },
+              ]);
+            }
             assistantText += evt.delta;
           } else if (
             evt.type === "tool_use_start" &&
@@ -208,6 +221,8 @@ export function ChatView({
                 emitMatchesUpdated();
               }
             }
+            // Nächster Text-Delta startet neue Bubble (= neuer Turn nach Tool).
+            pendingNewBubble = true;
           } else if (evt.type === "error") {
             throw new Error(String(evt.message ?? "stream_error"));
           }
