@@ -293,7 +293,11 @@ export function ChatView({
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl px-4 py-4 space-y-4">
           {messages.map((m, i) => (
-            <MessageBubble key={i} message={m} />
+            <MessageBubble
+              key={i}
+              message={m}
+              showMatchCard={shouldShowMatchCard(messages, i)}
+            />
           ))}
           {streaming && (
             <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)] px-2">
@@ -354,21 +358,43 @@ export function ChatView({
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
-  const isUser = message.role === "user";
-  // Spezial-Renderer für 'Treffer ansehen'-Card.
-  // create_search_profile + update_search_profile lösen seit Prompt v0.4.0
-  // selber Match-Refresh aus (server-side findMatchesForSession), find_matches
-  // wird nur noch für expliziten Refresh aufgerufen — alle drei führen zu
-  // einer Trefferliste auf /matches und sollen die Klick-Karte zeigen.
-  const matchTool = message.toolCalls?.find(
-    (t) =>
-      t.result?.ok &&
-      (t.name === "find_matches" ||
-        t.name === "create_search_profile" ||
-        t.name === "upsert_search_profile" ||
-        t.name === "update_search_profile")
+const MATCH_TOOL_NAMES = new Set([
+  "find_matches",
+  "create_search_profile",
+  "upsert_search_profile",
+  "update_search_profile",
+]);
+
+function hasMatchTool(message: ChatMessage): boolean {
+  return !!message.toolCalls?.some(
+    (t) => t.result?.ok && MATCH_TOOL_NAMES.has(t.name)
   );
+}
+
+// Karte nur auf der LETZTEN Assistant-Bubble eines Runs mit Match-Tool zeigen.
+// Sophie kann eine Antwort über mehrere Bubbles strecken (Tool-Round 1,
+// Tool-Round 2, finaler Text) — ohne diese Filterung sähe man pro Round eine
+// Karte. Wir zeigen die Karte nur einmal, am Ende der Assistant-Sequenz.
+function shouldShowMatchCard(messages: ChatMessage[], index: number): boolean {
+  const m = messages[index];
+  if (m.role === "user") return false;
+  if (!hasMatchTool(m)) return false;
+  for (let j = index + 1; j < messages.length; j++) {
+    const next = messages[j];
+    if (next.role === "user") return true; // Lauf endet → Karte hier
+    if (hasMatchTool(next)) return false; // späterer Bubble übernimmt
+  }
+  return true; // letztes Element überhaupt
+}
+
+function MessageBubble({
+  message,
+  showMatchCard,
+}: {
+  message: ChatMessage;
+  showMatchCard: boolean;
+}) {
+  const isUser = message.role === "user";
 
   return (
     <div className={isUser ? "flex justify-end" : "flex flex-col items-start"}>
@@ -403,7 +429,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         )}
       </div>
 
-      {!isUser && matchTool && (
+      {!isUser && showMatchCard && (
         <Link
           href="/matches"
           className="mt-2 max-w-[85%] w-full sm:w-auto sm:min-w-[280px] flex items-center justify-between gap-3 rounded-2xl border-2 border-rose-200 bg-gradient-to-br from-rose-50 to-white px-4 py-3 hover:border-rose-300 hover:shadow-sm transition-all group"
