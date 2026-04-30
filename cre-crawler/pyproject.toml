@@ -1,0 +1,19 @@
+[project]
+name = "home4u-cre-crawler"
+version = "0.1.0"
+description = "cyprus-real.estate listings indexer for Home4U (static-crawler stack)"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28,<1",
+    "python-dotenv>=1.0,<2",
+    "tenacity>=9.0,<10",
+    "imagehash>=4.3,<5",
+    "Pillow>=10.4,<12",
+]
+
+[project.scripts]
+crawl-cre = "src.main:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

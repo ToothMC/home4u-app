@@ -1,0 +1,78 @@
+name: Daily cyprus-real.estate Crawl
+
+# Statisch (httpx + microdata-Parsing), kein Browser nötig.
+# Discovery via sitemap-en.xml → 5 sub-sitemaps mit ~20k /property/o{ID}/-URLs.
+# Inkrementell: bereits indexierte external_ids werden ausgefiltert.
+# Dedup-on-Write: pHash-Match gegen Bazaraki + INDEX.cy via
+# bulk_upsert_external_listings → canonical_id automatisch.
+
+on:
+  schedule:
+    # 23:00 UTC = 1h nach INDEX.cy (22:00 UTC). Reihenfolge spielt für c-r-e
+    # keine Rolle — pHash-Match läuft eh gegen alle Sources die bis dahin
+    # in der DB sind.
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+    inputs:
+      max_listings:
+        description: "Cap (0 = unbegrenzt)"
+        required: false
+        default: "0"
+      rate_limit_s:
+        description: "Sekunden Pause pro Detail-Fetch"
+        required: false
+        default: "1.0"
+      dry_run:
+        description: "Nur loggen, kein DB-Write"
+        type: boolean
+        required: false
+        default: false
+      skip_phash:
+        description: "pHash-Phase überspringen (5x schneller, aber kein Cross-Source-Match)"
+        type: boolean
+        required: false
+        default: false
+      force_refetch:
+        description: "Auch bekannte Listings nochmal fetchen"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: cre-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    # Erstlauf indexiert ~20k Listings × ~1s/Listing = ~5.5h theoretisch.
+    # Idempotent via fetch_already_indexed → mehrere Runs decken alles ab.
+    # Daily-Folgelauf ist inkrementell (~50-200 neue/Tag = 2-5min).
+    # 350 min = GitHub-Actions Free-Tier Job-Limit (max 360).
+    timeout-minutes: 350
+    defaults:
+      run:
+        working-directory: ./cre-crawler
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+
+      - name: Run crawler
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MAX_LISTINGS: ${{ inputs.max_listings || '0' }}
+          RATE_LIMIT_S: ${{ inputs.rate_limit_s || '1.0' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          SKIP_PHASH: ${{ inputs.skip_phash && '1' || '' }}
+          FORCE_REFETCH: ${{ inputs.force_refetch && '1' || '' }}
+        run: python -m src.main
