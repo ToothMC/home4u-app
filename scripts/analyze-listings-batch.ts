@@ -154,7 +154,9 @@ async function pickListingIds(supabase: any, opts: Opts): Promise<string[]> {
       .maybeSingle();
     const media = ((l as { media: string[] | null } | null)?.media ?? []) as string[];
     const photos = media.filter((u) => /\.(jpe?g|png|webp|heic|avif)(\?|$)/i.test(u));
-    if (photos.length >= 3) ids.push(row.id);
+    // Min. 1 Foto reicht — Vision kann Pool/Garden auch aus dem Cover
+    // erkennen. Bei mehr Bildern wird's nur reicher (room_type-Tagging).
+    if (photos.length >= 1) ids.push(row.id);
   }
   return ids;
 }
