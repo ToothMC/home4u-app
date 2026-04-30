@@ -39,7 +39,7 @@ export function RevealPhoneButton({
           }
         >
           <Phone className="size-4" />
-          Anmelden, um Telefonnummer zu sehen
+          Anmelden für Telefon-Nr.
         </a>
         <p className="text-xs text-[var(--muted-foreground)] text-center px-2">
           Wir zeigen Telefonnummern nur eingeloggten Nutzern — schützt vor
