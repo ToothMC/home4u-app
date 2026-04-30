@@ -18,27 +18,37 @@ async function fetchStats(): Promise<Stat[] | null> {
 
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
+  // "Verfügbare Immobilien" = unique-Cluster (canonical-Master), nicht
+  // alle aktiven Rows. Sonst werden Duplikate (gleiche Wohnung von Bazaraki
+  // + INDEX) doppelt gezählt und der Count ist irreführend.
+  // canonical_id IS NULL bedeutet: dieses Listing ist selbst der Master
+  // (kein parent). Self-Referenzen (canonical_id = id) gibt's nicht.
+
   const [activeRes, newRes, scamRes, priceRes] = await Promise.all([
     supabase
       .from("listings")
       .select("*", { count: "exact", head: true })
-      .eq("status", "active"),
+      .eq("status", "active")
+      .is("canonical_id", null),
     supabase
       .from("listings")
       .select("*", { count: "exact", head: true })
       .eq("status", "active")
-      .gte("created_at", since24h),
+      .gte("created_at", since24h)
+      .is("canonical_id", null),
     supabase
       .from("listings")
       .select("*", { count: "exact", head: true })
       .eq("status", "active")
-      .not("scam_checked_at", "is", null),
+      .not("scam_checked_at", "is", null)
+      .is("canonical_id", null),
     supabase
       .from("listings")
       .select("*", { count: "exact", head: true })
       .eq("status", "active")
       .not("market_position", "is", null)
-      .neq("market_position", "unknown"),
+      .neq("market_position", "unknown")
+      .is("canonical_id", null),
   ]);
 
   const active = activeRes.count ?? 0;
