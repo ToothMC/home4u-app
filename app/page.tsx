@@ -25,7 +25,7 @@ export default async function LandingPage({
         <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between gap-4">
           <BrandLockup iconSize={36} />
           <nav className="hidden lg:flex items-center gap-7 text-sm text-[var(--brand-navy)]">
-            <Link href="/matches" className="hover:text-[var(--brand-gold)] transition-colors">Suchen</Link>
+            <ChatLink flow="seeker" className="hover:text-[var(--brand-gold)] transition-colors">Suchen</ChatLink>
             <Link href="/chat?flow=owner" className="hover:text-[var(--brand-gold)] transition-colors">Vermieten</Link>
             <Link href="/chat?flow=owner&intent=sale" className="hover:text-[var(--brand-gold)] transition-colors">Verkaufen</Link>
             <Link href="/chat?flow=agent" className="hover:text-[var(--brand-gold)] transition-colors">Für Makler</Link>
@@ -244,7 +244,7 @@ export default async function LandingPage({
             <span>© {new Date().getFullYear()} Dein Zuhause auf Zypern</span>
           </div>
           <div className="flex items-center gap-5 text-white/50">
-            <Link href="/matches" className="hover:text-white">Suchen</Link>
+            <ChatLink flow="seeker" className="hover:text-white">Suchen</ChatLink>
             <a href="#pfade" className="hover:text-white">Drei Wege</a>
           </div>
         </div>
