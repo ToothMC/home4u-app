@@ -310,7 +310,15 @@ async function processProfile(
     channel: "email",
     listing_ids: newMatches.map((m) => m.listing_id),
     status: "sent",
+    // Resend message-id ins error_message-Feld misbrauchen (kein eigener Column).
+    // Hilft beim Debug: Resend-Dashboard → Logs → message-id suchen → tatsächlicher
+    // Delivery-Status (delivered/bounced/complained). „sent" hier heißt nur
+    // „Resend-API hat akzeptiert", nicht „zugestellt".
+    error_message: `resend_msg_id=${sendResult.messageId}`,
   });
+  console.log(
+    `[notify] sent → ${email} (resend_msg_id=${sendResult.messageId}) — check resend.com/emails for delivery status`
+  );
   await touchLastNotifiedAt(supabase, profile.id, false);
 
   return {
