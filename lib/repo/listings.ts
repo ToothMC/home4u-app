@@ -123,6 +123,14 @@ export type ListingMatch = Listing & {
    *  denselben Broker oder Branded-Default-Cover). UI rendert „+N weitere"
    *  Hinweis. Identifikation per (media[1], city, type, property_type). */
   clusterSize?: number;
+  /** Variante A (Cluster-Offers): günstigster Preis im Cluster der gleichen
+   *  Wohnung (alle Anbieter mit canonical_id = master.id + Master selbst).
+   *  Wenn = price → keine günstigere Alternative. Frontend zeigt
+   *  "ab €X · N Anbieter"-Badge wenn clusterOffersCount > 1. */
+  minClusterPrice?: number;
+  /** Anzahl der Anbieter im selben Cluster (= dieselbe Wohnung). 1 = unique,
+   *  ≥2 = mehrere Makler bieten die gleiche Wohnung. */
+  clusterOffersCount?: number;
 };
 
 /**
@@ -173,6 +181,12 @@ export async function findMatchesForSession(
     clusterSize:
       typeof row.cluster_size === "number" && row.cluster_size > 1
         ? row.cluster_size
+        : undefined,
+    minClusterPrice:
+      row.min_cluster_price != null ? Number(row.min_cluster_price) : undefined,
+    clusterOffersCount:
+      typeof row.cluster_offers_count === "number" && row.cluster_offers_count > 1
+        ? row.cluster_offers_count
         : undefined,
   }));
 

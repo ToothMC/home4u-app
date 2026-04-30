@@ -19,6 +19,7 @@ import {
   SourceLinkButton,
   NoContactFallback,
 } from "@/components/listing-public/SourceLinkButton";
+import { ClusterOffersBlock } from "@/components/listing-public/ClusterOffersBlock";
 import { loadPublicListing } from "@/lib/repo/public-listing";
 
 export const dynamic = "force-dynamic";
@@ -199,6 +200,8 @@ export default async function PublicListingPage({
               </p>
             </section>
           )}
+
+          <ClusterOffersBlock canonicalListingId={listing.id} />
 
           {listing.features.length > 0 && (
             <section id="features" className="space-y-2">

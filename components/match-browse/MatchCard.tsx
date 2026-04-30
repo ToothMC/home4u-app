@@ -85,6 +85,11 @@ export type MatchCardData = {
    *  City/Type/Property-Type-Gruppe. Wenn ≥2 → Karte zeigt einen Hinweis
    *  „+N weitere ähnliche". Vermutete Re-Listings vom selben Broker. */
   clusterSize?: number;
+  /** Variante A: günstigster Preis im Cluster (= dieselbe Wohnung von
+   *  mehreren Anbietern). Wenn < price → Card zeigt „ab €X · N Anbieter". */
+  minClusterPrice?: number;
+  /** Anzahl Anbieter desselben Cluster-Masters. ≥2 → Mehrfach-Anbieter-Badge. */
+  clusterOffersCount?: number;
 };
 
 export type SwipeDirection = "like" | "skip";
@@ -429,11 +434,19 @@ export function MatchCard({
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-2xl font-semibold leading-none">
-                  {formatPrice(data.price)}
+                  {data.minClusterPrice != null &&
+                  data.minClusterPrice < data.price
+                    ? `ab ${formatPrice(data.minClusterPrice)}`
+                    : formatPrice(data.price)}
                   {data.type === "rent" && (
                     <span className="text-sm font-normal opacity-80"> / Monat</span>
                   )}
                 </div>
+                {data.clusterOffersCount && data.clusterOffersCount > 1 && (
+                  <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-500/90 text-amber-950 text-[10px] font-medium px-2 py-0.5">
+                    {data.clusterOffersCount} Anbieter
+                  </div>
+                )}
                 <div className="mt-1 flex items-center gap-1 text-sm opacity-95">
                   <MapPin className="size-3" />
                   {data.location_district

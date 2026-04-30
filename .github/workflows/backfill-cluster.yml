@@ -1,0 +1,68 @@
+name: pHash-Cluster-Backfill
+
+# Verbindet bestehende Listings die dieselben Cover-Bilder zeigen aber
+# wegen abweichender Preise bisher als separate canonical-Master existieren.
+# Manuell triggern (nicht im Daily-Schedule, würde je Run nur ~1000
+# Listings durchgehen — bei 33k Backlog mehrere Triggers nötig).
+#
+# Required GitHub Secrets:
+#   - SUPABASE_URL
+#   - SUPABASE_SERVICE_ROLE_KEY
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Listings pro Batch (max 10000)"
+        required: true
+        default: "2000"
+      source:
+        description: "Nur eine Source (leer = alle)"
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - bazaraki
+          - index_cy
+          - cyprus_real_estate
+          - fb
+          - direct
+      dry_run:
+        description: "Nur simulieren, keine DB-Writes"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: backfill-cluster
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run backfill
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          ARGS="--limit ${{ inputs.limit }}"
+          if [ -n "${{ inputs.source }}" ]; then
+            ARGS="$ARGS --source ${{ inputs.source }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry"
+          fi
+          node --import tsx scripts/backfill-cluster.ts $ARGS
