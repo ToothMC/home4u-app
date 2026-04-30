@@ -15,9 +15,10 @@ on:
       filter:
         description: "Listing-Filter"
         required: true
-        default: "paphos_rent_houses_3br"
+        default: "paphos_rent_3br_in_budget"
         type: choice
         options:
+          - paphos_rent_3br_in_budget
           - paphos_rent_houses_3br
           - paphos_rent_houses
           - paphos_sale_houses
@@ -27,7 +28,7 @@ on:
       limit:
         description: "Anzahl Listings (max 200)"
         required: true
-        default: "20"
+        default: "100"
       model:
         description: "Vision-Modell (haiku=günstig, sonnet=top)"
         required: true

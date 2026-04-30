@@ -39,6 +39,7 @@ type Filter =
   | "paphos_villas_3br"
   | "paphos_rent_houses"
   | "paphos_rent_houses_3br"
+  | "paphos_rent_3br_in_budget"
   | "paphos_sale_houses";
 
 type Opts = {
@@ -72,6 +73,7 @@ function parseArgs(argv: string[]): Opts {
         "paphos_villas_3br",
         "paphos_rent_houses",
         "paphos_rent_houses_3br",
+        "paphos_rent_3br_in_budget",
         "paphos_sale_houses",
       ];
       if ((known as string[]).includes(f)) {
@@ -93,11 +95,14 @@ function parseArgs(argv: string[]): Opts {
 async function pickListingIds(supabase: any, opts: Opts): Promise<string[]> {
   if (opts.ids && opts.ids.length > 0) return opts.ids;
 
+  // Nur canonical Listings — Duplikate (canonical_id != id) zeigen wir
+  // im Match eh nicht, Vision-Analyse dort wäre verschwendet.
   let q = supabase
     .from("listings")
     .select("id")
     .eq("status", "active")
-    .not("media", "is", null);
+    .not("media", "is", null)
+    .or("canonical_id.is.null,canonical_id.eq.id");
 
   if (!opts.reanalyze) q = q.is("ai_analyzed_at", null);
 
@@ -115,6 +120,18 @@ async function pickListingIds(supabase: any, opts: Opts): Promise<string[]> {
       .eq("rooms", 3);
   } else if (opts.filter === "paphos_sale_houses") {
     q = q.ilike("location_city", "Paphos%").eq("property_type", "house").eq("type", "sale");
+  } else if (opts.filter === "paphos_rent_3br_in_budget") {
+    // Gesamter Match-Bereich für Mietsuche-Profil 1500-2000 €:
+    // Paphos-Region, rent, alle house-Familien (incl. villa/townhouse/bungalow/
+    // maisonette/penthouse), 2-4 Zimmer, Preis 1275-2300 €.
+    q = q
+      .ilike("location_city", "Paphos%")
+      .eq("type", "rent")
+      .in("property_type", ["house", "villa", "townhouse", "bungalow", "maisonette", "penthouse"])
+      .gte("rooms", 2)
+      .lte("rooms", 4)
+      .gte("price", 1275)
+      .lte("price", 2300);
   }
 
   q = q.order("updated_at", { ascending: false }).limit(opts.limit);
