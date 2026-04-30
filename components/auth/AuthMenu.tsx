@@ -23,26 +23,19 @@ export function AuthMenu({
 }) {
   const [state, setState] = useState<AuthState>({ status: "loading" });
   const [open, setOpen] = useState(false);
-  const [authRequired, setAuthRequired] = useState(false);
   const [nextUrl, setNextUrl] = useState<string | null>(null);
 
-  // window.location statt useSearchParams() — letzteres bricht den
-  // Vercel-Build wenn der parent kein <Suspense>-Boundary hat. Effekt
-  // ist gleich, läuft nur clientseitig (SSR sieht's nicht, was hier OK
-  // ist da AuthMenu primär ein Client-Widget ist).
+  // window.location statt useSearchParams() — Suspense-Boundary-Build-Trap.
+  // Wir öffnen den Dialog sofort beim Mount falls ?auth=required in der URL
+  // steht, unabhängig vom auth-Loading-State. Wenn der User schon eingeloggt
+  // ist, schließt sich der Dialog beim onAuthStateChange-Event eh wieder
+  // (oder existiert gar nicht weil der "user"-Branch oben rendert).
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    setAuthRequired(params.get("auth") === "required");
+    if (params.get("auth") === "required") setOpen(true);
     setNextUrl(params.get("next"));
   }, []);
-
-  // Wenn andere Seiten via ?auth=required redirecten (z.B. /scam-check
-  // ohne Login), öffnen wir den Dialog automatisch sobald wir wissen
-  // dass der User anon ist.
-  useEffect(() => {
-    if (authRequired && state.status === "anon") setOpen(true);
-  }, [authRequired, state.status]);
 
   useEffect(() => {
     let cancelled = false;
