@@ -1,17 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
 
 import { AuthMenu } from "@/components/auth/AuthMenu";
+import { Button } from "@/components/ui/button";
 import { ScamCheckClient } from "@/components/scam-shield/ScamCheckClient";
+import { getAuthUser } from "@/lib/supabase/auth";
 
 export const metadata: Metadata = {
   title: "Scam-Check — Sophie prüft dein Inserat",
   description:
-    "Schick Sophie ein verdächtiges Wohnungs-Inserat aus Zypern. Sie sagt dir, ob es Scam ist. 3 Checks pro Monat kostenlos.",
+    "Schick Sophie ein verdächtiges Wohnungs-Inserat aus Zypern. Sie sagt dir, ob es Scam ist. Mit Home4U-Login kostenlos.",
 };
 
-export default function ScamCheckPage() {
+export default async function ScamCheckPage() {
+  const user = await getAuthUser();
+
   return (
     <main className="min-h-screen bg-[var(--background)]">
       <header className="mx-auto max-w-3xl w-full px-4 pt-4 pb-2 flex items-center justify-between">
@@ -32,13 +36,45 @@ export default function ScamCheckPage() {
           Sie sagt dir, ob es Scam ist.
         </p>
         <p className="text-sm text-[var(--muted-foreground)]">
-          3 kostenlose Checks pro Monat · keine Anmeldung nötig
+          3 kostenlose Checks pro Monat
         </p>
       </div>
 
       <div className="px-4 pb-12">
-        <ScamCheckClient />
+        {user ? (
+          <ScamCheckClient />
+        ) : (
+          <LoginPrompt />
+        )}
       </div>
     </main>
+  );
+}
+
+function LoginPrompt() {
+  return (
+    <div className="mx-auto max-w-md rounded-2xl border bg-[var(--card)] p-6 text-center space-y-4">
+      <div className="mx-auto size-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+        <ShieldCheck className="size-6" />
+      </div>
+      <h2 className="text-lg font-semibold text-[var(--brand-navy)]">
+        Für die Verwendung des Scam-Checkers bitte erst einloggen.
+      </h2>
+      <p className="text-sm text-[var(--muted-foreground)]">
+        Du bekommst 3 kostenlose Checks pro Monat — wir brauchen einen Login,
+        damit wir die Quote pro Person sauber zählen können und kein Spam-
+        Missbrauch entsteht.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+        <Button asChild>
+          <Link href="/?auth=required&next=/scam-check">Anmelden</Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/?auth=required&next=/scam-check&mode=signup">
+            Konto erstellen
+          </Link>
+        </Button>
+      </div>
+    </div>
   );
 }

@@ -12,7 +12,6 @@
 import { createHash } from "node:crypto";
 
 import { getAuthUser } from "@/lib/supabase/auth";
-import { getOrCreateAnonymousSession } from "@/lib/session";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { computeScamScore, SCAM_THRESHOLDS, type ScamFlag } from "@/lib/scam/score";
 import { extractTextListing } from "@/lib/scam/extract-text";
@@ -354,14 +353,23 @@ function renderUrlExplanation(
 
 export async function POST(req: Request) {
   // --- 1) Identity auflösen ----------------------------------------------
+  // Auth-only seit 2026-04-30: anonymous-Pfad geschlossen damit die Quota
+  // sauber pro Person zählt und kein Bot-Spam entsteht.
   const authUser = await getAuthUser();
-  let identity: { userId: string; anonymousId?: null } | { userId?: null; anonymousId: string };
-  if (authUser) {
-    identity = { userId: authUser.id };
-  } else {
-    const sess = await getOrCreateAnonymousSession();
-    identity = { anonymousId: sess.anonymousId };
+  if (!authUser) {
+    return Response.json(
+      {
+        ok: false,
+        error: "auth_required",
+        message:
+          "Für die Verwendung des Scam-Checkers bitte erst einloggen.",
+      },
+      { status: 401 }
+    );
   }
+  const identity: { userId: string; anonymousId?: null } = {
+    userId: authUser.id,
+  };
 
   // --- 2) Body lesen + Kind-Switch ---------------------------------------
   // multipart/form-data → image-path; sonst json
