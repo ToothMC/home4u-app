@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, Mail, LogIn, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,9 +120,23 @@ export function SignInDialog({
     }
   }
 
-  if (!open) return null;
+  // Body-Lock: verhindert Scrollen der Hintergrund-Page während Dialog offen.
+  useEffect(() => {
+    if (!open || typeof document === "undefined") return;
+    const orig = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = orig;
+    };
+  }, [open]);
 
-  return (
+  if (!open || typeof document === "undefined") return null;
+
+  // createPortal nach document.body — umgeht das Problem dass fixed-positioning
+  // bei ancestor mit transform/filter/perspective zur containing-block wird
+  // (Header/Layout-Wrapper können `fixed` sonst kapern → Dialog erscheint
+  // an falscher Stelle).
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
       role="dialog"
@@ -254,7 +269,8 @@ export function SignInDialog({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
