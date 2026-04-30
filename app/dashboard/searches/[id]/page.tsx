@@ -28,7 +28,8 @@ export default async function SearchDetailPage({
     .from("search_profiles")
     .select(
       `id, location, type, budget_min, budget_max, rooms, move_in_date,
-       household, lifestyle_tags, pets, free_text, active, user_id, anonymous_id`
+       household, lifestyle_tags, pets, free_text, active, notify_new_matches,
+       user_id, anonymous_id`
     )
     .eq("id", id)
     .maybeSingle();
@@ -57,6 +58,7 @@ export default async function SearchDetailPage({
     pets: data.pets,
     free_text: data.free_text,
     active: data.active,
+    notify_new_matches: data.notify_new_matches !== false,
   };
 
   return (

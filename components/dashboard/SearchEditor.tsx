@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, X } from "lucide-react";
+import { Bell, BellOff, Check, Loader2, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ export type EditableSearchProfile = {
   pets: boolean | null;
   free_text: string | null;
   active: boolean;
+  notify_new_matches: boolean;
 };
 
 const HOUSEHOLD = [
@@ -270,6 +271,46 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
             );
           })}
         </div>
+      </Field>
+
+      <Field label="E-Mail-Benachrichtigung bei neuen Treffern">
+        <button
+          type="button"
+          onClick={() => set("notify_new_matches", !(get("notify_new_matches") as boolean))}
+          className={cn(
+            "w-full flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm transition-colors",
+            get("notify_new_matches")
+              ? "border-emerald-300 bg-emerald-500/10 text-emerald-800"
+              : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]"
+          )}
+          aria-pressed={get("notify_new_matches") as boolean}
+        >
+          <span className="flex items-center gap-2">
+            {get("notify_new_matches") ? (
+              <Bell className="size-4" />
+            ) : (
+              <BellOff className="size-4" />
+            )}
+            <span>
+              {get("notify_new_matches")
+                ? "Tägliche E-Mail bei neuen Treffern aktiv"
+                : "Keine E-Mail-Benachrichtigung"}
+            </span>
+          </span>
+          <span
+            className={cn(
+              "relative inline-flex h-5 w-10 shrink-0 items-center rounded-full transition-colors",
+              get("notify_new_matches") ? "bg-emerald-500" : "bg-neutral-300"
+            )}
+          >
+            <span
+              className={cn(
+                "absolute left-0.5 inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
+                get("notify_new_matches") ? "translate-x-5" : "translate-x-0"
+              )}
+            />
+          </span>
+        </button>
       </Field>
 
       <Field label="Was Sophie sonst noch wissen sollte">
