@@ -144,6 +144,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
           value={(get("location") as string) ?? ""}
           onChange={(e) => set("location", e.target.value)}
           placeholder="z. B. Paphos Kato oder Limassol Tourist Area"
+          className="bg-white"
         />
       </Field>
 
@@ -152,7 +153,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
           <select
             value={get("type") as string}
             onChange={(e) => set("type", e.target.value as "rent" | "sale")}
-            className="h-10 w-full rounded-md border bg-[var(--background)] px-3 text-sm"
+            className="h-10 w-full rounded-md border bg-white px-3 text-sm"
           >
             <option value="rent">Miete</option>
             <option value="sale">Kauf</option>
@@ -198,6 +199,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
               set("budget_min", Number.isFinite(n) ? n : null);
             }}
             min={0}
+            className="bg-white"
           />
         </Field>
         <Field label={get("type") === "sale" ? "Budget max (€)" : "Budget max pro Monat (€)"}>
@@ -209,6 +211,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
               set("budget_max", Number.isFinite(n) ? n : null);
             }}
             min={0}
+            className="bg-white"
           />
         </Field>
       </div>
@@ -224,6 +227,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
             }}
             min={0}
             max={20}
+            className="bg-white"
           />
         </Field>
         <Field label="Einzug ab">
@@ -231,6 +235,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
             type="date"
             value={((get("move_in_date") as string) ?? "").slice(0, 10)}
             onChange={(e) => set("move_in_date", e.target.value || null)}
+            className="bg-white"
           />
         </Field>
       </div>
@@ -318,6 +323,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
           placeholder="z. B. 'arbeite remote, brauche schnelles Internet und Balkon für Pflanzen'"
           rows={4}
           maxLength={2000}
+          className="bg-white"
         />
       </Field>
 
