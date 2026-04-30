@@ -15,6 +15,7 @@ import { MarketPriceBadge } from "@/components/listing-public/MarketPriceBadge";
 import type { MarketData } from "@/components/listing-public/MarketPriceBlock";
 import { ScamCheckBlock } from "@/components/scam-shield/ScamCheckBlock";
 import { RequestVisitButton } from "@/components/listing-public/RequestVisitButton";
+import { RevealPhoneButton } from "@/components/listing-public/RevealPhoneButton";
 import {
   SourceLinkButton,
   NoContactFallback,
@@ -79,6 +80,11 @@ export default async function PublicListingPage({
   const hasImportedContact =
     listing.has_phone_contact || listing.has_email_contact;
   const hasInternalContact = hasOwnerContact || hasImportedContact;
+  // Phone-Reveal-CTA gewinnt wenn das Listing Phone hat, aber keine Email
+  // (typischer INDEX.cy-Fall: 100% Phone, 0% Email — Email-Outreach würde
+  // hart skippen, manueller Anruf ist die einzige Anbieter-Verbindung).
+  const showRevealPhone =
+    !hasOwnerContact && listing.has_phone_contact && !listing.has_email_contact;
 
   const heroImages = listing.photos.map((p) => p.url);
   const formattedPrice = formatPrice(
@@ -229,6 +235,8 @@ export default async function PublicListingPage({
               listingStatus={listing.status}
               marketData={marketData}
               hasInternalContact={hasInternalContact}
+              showRevealPhone={showRevealPhone}
+              isAuthenticated={!!user}
               sourceUrl={listing.source_url}
               source={listing.source}
             />
@@ -267,6 +275,8 @@ export default async function PublicListingPage({
               listingStatus={listing.status}
               marketData={marketData}
               hasInternalContact={hasInternalContact}
+              showRevealPhone={showRevealPhone}
+              isAuthenticated={!!user}
               sourceUrl={listing.source_url}
               source={listing.source}
             />
@@ -299,6 +309,8 @@ function PriceBox({
   listingStatus,
   marketData,
   hasInternalContact,
+  showRevealPhone,
+  isAuthenticated,
   sourceUrl,
   source,
 }: {
@@ -309,6 +321,8 @@ function PriceBox({
   listingStatus: string;
   marketData: MarketData | null;
   hasInternalContact: boolean;
+  showRevealPhone: boolean;
+  isAuthenticated: boolean;
   sourceUrl: string | null;
   source: string;
 }) {
@@ -330,7 +344,15 @@ function PriceBox({
           <MarketPriceBadge data={marketData} />
         )}
       </div>
-      {hasInternalContact ? (
+      {showRevealPhone ? (
+        <RevealPhoneButton
+          listingId={listingId}
+          isAuthenticated={isAuthenticated}
+          source={source}
+          sourceUrl={sourceUrl}
+          full
+        />
+      ) : hasInternalContact ? (
         <RequestVisitButton listingId={listingId} full listingStatus={listingStatus} />
       ) : sourceUrl ? (
         <SourceLinkButton sourceUrl={sourceUrl} source={source} full />
