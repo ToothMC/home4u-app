@@ -44,11 +44,11 @@ jobs:
     # Inkrementelles Drill-Verhalten (siehe main.py): bereits in der DB
     # enriched-te Listings werden nicht nochmal gedrillt. Daily-Lauf =
     # List-Scrape (~30 min) + nur NEUE Listings drillen (~10 min für ~200
-    # neue/Tag). Cap deutlich kleiner als 4h. 90 Minuten reichen mit Puffer.
-    # FORCE_FULL_DRILL=1 für gelegentliche Reparatur-Läufe braucht 4h+ —
-    # dafür diesen Job manuell mit höherem Timeout starten oder separates
-    # weekly-full-drill.yml-Workflow.
-    timeout-minutes: 90
+    # neue/Tag) — also weit unter 1h.
+    # 350 min = GH-Actions Free-Tier Job-Max (cap 360). Der hohe Wert
+    # erlaubt FORCE_FULL_DRILL=1-Reparaturläufe (~5-7h für 27k Listings)
+    # in einem Lauf statt mehreren idempotenten Re-Runs.
+    timeout-minutes: 350
     defaults:
       run:
         working-directory: ./bazaraki-crawler
