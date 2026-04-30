@@ -96,13 +96,14 @@ async function pickListingIds(supabase: any, opts: Opts): Promise<string[]> {
   if (opts.ids && opts.ids.length > 0) return opts.ids;
 
   // Nur canonical Listings — Duplikate (canonical_id != id) zeigen wir
-  // im Match eh nicht, Vision-Analyse dort wäre verschwendet.
+  // im Match eh nicht, Vision-Analyse dort wäre verschwendet. PostgREST
+  // kann nicht "spalte = andere-spalte" filtern, also holen wir id +
+  // canonical_id und filtern in JS.
   let q = supabase
     .from("listings")
-    .select("id")
+    .select("id, canonical_id")
     .eq("status", "active")
-    .not("media", "is", null)
-    .or("canonical_id.is.null,canonical_id.eq.id");
+    .not("media", "is", null);
 
   if (!opts.reanalyze) q = q.is("ai_analyzed_at", null);
 
@@ -134,13 +135,18 @@ async function pickListingIds(supabase: any, opts: Opts): Promise<string[]> {
       .lte("price", 2300);
   }
 
-  q = q.order("updated_at", { ascending: false }).limit(opts.limit);
+  // Großzügiger fetchen weil wir client-side noch auf canonical + ≥3
+  // Bilder filtern. Faktor 3 reicht bei realistischen Daten.
+  q = q.order("updated_at", { ascending: false }).limit(opts.limit * 3);
 
   const { data, error } = await q;
   if (error) throw new Error(`pickListingIds failed: ${error.message}`);
-  // Filter: nur Listings mit ≥3 Bildern — sonst zu wenig Vision-Signal.
+
   const ids: string[] = [];
-  for (const row of (data ?? []) as Array<{ id: string }>) {
+  for (const row of (data ?? []) as Array<{ id: string; canonical_id: string | null }>) {
+    if (ids.length >= opts.limit) break;
+    // Nur canonical Listings (canonical_id null oder selbstreferenziert).
+    if (row.canonical_id !== null && row.canonical_id !== row.id) continue;
     const { data: l } = await supabase
       .from("listings")
       .select("media")
