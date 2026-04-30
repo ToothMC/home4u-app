@@ -1,23 +1,24 @@
--- 20260430120000_match_filter_amenity_keywords.sql
+-- 20260430120000_match_amenity_soft_boost.sql
 --
--- match_listings_for_profile filtert jetzt auf Ausstattungs-Keywords aus
--- lifestyle_tags + free_text. Symptom vorher: User schreibt "mit pool" →
--- Match-Liste filtert nicht.
+-- Amenity-Wünsche aus search_profile (lifestyle_tags + free_text) werden
+-- als SOFT-BOOST in den Match-Score integriert, NICHT als Hard-Filter.
 --
--- Hybrider Filter: ('pool' = ANY(features))  OR  description/title ILIKE '%pool%'.
--- listings.features ist heute (2026-04-30) bei 0/35k Listings befüllt —
--- der Text-Fallback macht den Filter sofort nutzbar. Sobald Crawler
--- Features extrahieren, gewinnt der strukturierte Pfad automatisch.
+-- Hintergrund: Crawler-Daten sind heute oft sparse (50/69 Paphos-Häuser
+-- ohne Description). Ein Hard-Filter auf "pool" reißt 95% der Listings
+-- raus, obwohl in Cyprus fast jede Villa einen Pool hat. Mit Soft-Boost
+-- sieht der User alle property-type-passenden Listings; die mit
+-- explizitem Pool-Hinweis (features-Array oder Text in title/description/
+-- extracted_data) ranken oben.
 --
--- Mehrere Keywords werden mit AND verknüpft (Schnittmenge): "pool, garten"
--- liefert nur Listings mit beiden Hinweisen.
+-- Score-Formel:
+--   score = w_cosine·cosine + w_hard·(price + room + amenity)/3 + w_scam·(1−scam)
+-- amenity_score: Anteil der geforderten Amenities die nachweisbar sind
+-- (1.0 alle, 0.0 keine, dazwischen partial). Wenn nichts gefordert → 1.0.
 --
--- Negationen ("ohne pool") werden NICHT erkannt — User soll Sophie nutzen
--- für nuancierte Suchen, freie Eingaben sind best-effort positiv.
+-- Die 18 Amenity-Tokens werden via private.extract_amenity_tokens aus
+-- DE+EN-Aliasen erkannt (siehe gleichnamige Migration für den Helper —
+-- der Helper ist in dieser Datei via apply_migration mit-deployt).
 
--- ─────────────────────────────────────────────────────────────────────
--- Helper: extrahiert kanonische Feature-Tokens aus Free-Text + Tags.
--- ─────────────────────────────────────────────────────────────────────
 create or replace function private.extract_amenity_tokens(
   p_lifestyle_tags text[],
   p_free_text text
@@ -37,7 +38,7 @@ declare
     'parking',          jsonb_build_array('parkplatz', 'stellplatz', 'parking'),
     'covered_parking',  jsonb_build_array('garage', 'covered parking'),
     'elevator',         jsonb_build_array('aufzug', 'fahrstuhl', 'lift', 'elevator'),
-    'air_conditioning', jsonb_build_array('klima', 'klimaanlage', 'air condition', 'aircon', ' ac '),
+    'air_conditioning', jsonb_build_array('klima', 'klimaanlage', 'air condition', 'aircon'),
     'solar',            jsonb_build_array('solar', 'photovoltaik'),
     'sea_view',         jsonb_build_array('meerblick', 'sea view', 'seaview'),
     'mountain_view',    jsonb_build_array('bergblick', 'mountain view'),
@@ -60,15 +61,13 @@ begin
     return '{}'::text[];
   end if;
 
-  -- Whitespace + Padding zur Token-Begrenzung — verhindert dass " ac " in
-  -- "back" matched.
   v_input := ' ' || v_input || ' ';
 
   for v_canonical, v_aliases in select * from jsonb_each(v_alias_map) loop
     for v_alias in select jsonb_array_elements_text(v_aliases) loop
       if position(v_alias in v_input) > 0 then
         v_tokens := array_append(v_tokens, v_canonical);
-        exit;  -- nächster canonical
+        exit;
       end if;
     end loop;
   end loop;
@@ -79,9 +78,6 @@ $$;
 
 revoke all on function private.extract_amenity_tokens(text[], text) from public, anon, authenticated;
 
--- ─────────────────────────────────────────────────────────────────────
--- match_listings_for_profile mit Amenity-Filter erweitern.
--- ─────────────────────────────────────────────────────────────────────
 create or replace function public.match_listings_for_profile(
   p_anonymous_id text default null,
   p_user_id uuid default null,
@@ -204,7 +200,27 @@ begin
         when v_has_profile_emb and l.embedding is not null
         then 1 - (l.embedding <=> v_profile.embedding) / 2.0
         else 0
-      end as cosine_score
+      end as cosine_score,
+      case
+        when v_required_amenities is null or array_length(v_required_amenities, 1) is null then 1.0
+        else (
+          select coalesce(avg(case when sub.amen_found then 1.0 else 0.0 end), 0.5)
+          from (
+            select
+              (req = any(coalesce(l.features, '{}'::text[]))
+              or exists (
+                select 1
+                from jsonb_array_elements_text(v_amenity_alias_map->req) as alias
+                where lower(
+                  coalesce(l.title, '') || ' ' ||
+                  coalesce(l.description, '') || ' ' ||
+                  coalesce(l.extracted_data::text, '')
+                ) like '%' || alias || '%'
+              )) as amen_found
+            from unnest(v_required_amenities) as req
+          ) sub
+        )
+      end as amenity_score
     from listings l
     where l.status = 'active'
       and (l.scam_score < 0.5 or l.scam_score is null)
@@ -238,33 +254,13 @@ begin
         or l.pets_allowed is null
         or l.pets_allowed = true
       )
-      -- Amenity-Filter: jeder geforderte Feature muss entweder strukturiert
-      -- in features stecken ODER textlich in title/description vorkommen.
-      and (
-        v_required_amenities is null
-        or array_length(v_required_amenities, 1) is null
-        or (
-          select bool_and(
-            -- structured match
-            req = any(coalesce(l.features, '{}'::text[]))
-            -- ODER text-match auf irgendeinen Alias des Features
-            or exists (
-              select 1
-              from jsonb_array_elements_text(v_amenity_alias_map->req) as alias
-              where lower(coalesce(l.title, '') || ' ' || coalesce(l.description, ''))
-                like '%' || alias || '%'
-            )
-          )
-          from unnest(v_required_amenities) as req
-        )
-      )
   ),
   scored as (
     select
       c.*,
       least(1.0, greatest(0.0,
         v_w_cosine * c.cosine_score
-        + v_w_hard  * (c.price_score + c.room_score) / 2.0
+        + v_w_hard  * (c.price_score + c.room_score + c.amenity_score) / 3.0
         + v_w_scam  * (1.0 - coalesce(c.scam_score, 0.0))
       ))::real as score,
       coalesce(c.media[1], c.id::text) as cluster_key
