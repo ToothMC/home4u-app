@@ -15,6 +15,10 @@ import { MarketPriceBadge } from "@/components/listing-public/MarketPriceBadge";
 import type { MarketData } from "@/components/listing-public/MarketPriceBlock";
 import { ScamCheckBlock } from "@/components/scam-shield/ScamCheckBlock";
 import { RequestVisitButton } from "@/components/listing-public/RequestVisitButton";
+import {
+  SourceLinkButton,
+  NoContactFallback,
+} from "@/components/listing-public/SourceLinkButton";
 import { loadPublicListing } from "@/lib/repo/public-listing";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +66,18 @@ export default async function PublicListingPage({
     from === "edit"
       ? { href: `/dashboard/listings/${id}`, label: "Zurück zur Bearbeitung" }
       : { href: "/matches", label: "Zurück zur Suche" };
+
+  // Kontakt-Strategie pro Listing (Regel: keine Anzeige ohne Kontaktmöglichkeit):
+  //   1. eigene Kontakte (source='direct' + owner_user_id) → Home4U-Outreach
+  //   2. importierte Kontakte (encrypted phone/email) → Broker-Outreach
+  //   3. fallback → Link zur Original-Quelle
+  //   4. degeneriert → "Kontakt aktuell nicht verfügbar" (sollte nicht auftreten,
+  //      Crawler liefern entweder Kontakte oder source_url)
+  const hasOwnerContact =
+    listing.source === "direct" && !!listing.owner_user_id;
+  const hasImportedContact =
+    listing.has_phone_contact || listing.has_email_contact;
+  const hasInternalContact = hasOwnerContact || hasImportedContact;
 
   const heroImages = listing.photos.map((p) => p.url);
   const formattedPrice = formatPrice(
@@ -209,6 +225,9 @@ export default async function PublicListingPage({
               listingId={listing.id}
               listingStatus={listing.status}
               marketData={marketData}
+              hasInternalContact={hasInternalContact}
+              sourceUrl={listing.source_url}
+              source={listing.source}
             />
             <ScamCheckBlock
               scamScore={listing.scam_score}
@@ -229,6 +248,8 @@ export default async function PublicListingPage({
           <FooterMeta
             externalId={listing.external_id}
             createdAt={listing.created_at}
+            source={listing.source}
+            sourceUrl={listing.source_url}
           />
         </div>
 
@@ -242,6 +263,9 @@ export default async function PublicListingPage({
               listingId={listing.id}
               listingStatus={listing.status}
               marketData={marketData}
+              hasInternalContact={hasInternalContact}
+              sourceUrl={listing.source_url}
+              source={listing.source}
             />
             <ScamCheckBlock
               scamScore={listing.scam_score}
@@ -271,6 +295,9 @@ function PriceBox({
   listingId,
   listingStatus,
   marketData,
+  hasInternalContact,
+  sourceUrl,
+  source,
 }: {
   formattedPrice: string;
   priceLabel: string;
@@ -278,6 +305,9 @@ function PriceBox({
   listingId: string;
   listingStatus: string;
   marketData: MarketData | null;
+  hasInternalContact: boolean;
+  sourceUrl: string | null;
+  source: string;
 }) {
   return (
     <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-3">
@@ -297,27 +327,61 @@ function PriceBox({
           <MarketPriceBadge data={marketData} />
         )}
       </div>
-      <RequestVisitButton listingId={listingId} full listingStatus={listingStatus} />
+      {hasInternalContact ? (
+        <RequestVisitButton listingId={listingId} full listingStatus={listingStatus} />
+      ) : sourceUrl ? (
+        <SourceLinkButton sourceUrl={sourceUrl} source={source} full />
+      ) : (
+        <NoContactFallback full />
+      )}
     </section>
   );
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  bazaraki: "Bazaraki",
+  index_cy: "INDEX.cy",
+  cyprus_real_estate: "Cyprus-Real.Estate",
+  fb: "Facebook",
+  direct: "Home4U",
+  other: "externer Quelle",
+};
+
 function FooterMeta({
   externalId,
   createdAt,
+  source,
+  sourceUrl,
 }: {
   externalId: string | null;
   createdAt: string;
+  source: string;
+  sourceUrl: string | null;
 }) {
+  const sourceLabel = SOURCE_LABELS[source] ?? source;
   return (
-    <div className="text-xs text-[var(--muted-foreground)] flex items-center justify-between border-t pt-4">
+    <div className="text-xs text-[var(--muted-foreground)] flex flex-wrap items-center justify-between gap-2 border-t pt-4">
       <span>
         Inserat online seit{" "}
         {new Date(createdAt).toLocaleDateString("de-DE")}
       </span>
-      {externalId && (
-        <span className="font-mono">Objekt-ID {externalId.slice(0, 30)}</span>
-      )}
+      <div className="flex items-center gap-3">
+        {sourceUrl ? (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline"
+          >
+            Original auf {sourceLabel} ↗
+          </a>
+        ) : source !== "direct" ? (
+          <span>Quelle: {sourceLabel}</span>
+        ) : null}
+        {externalId && (
+          <span className="font-mono">Objekt-ID {externalId.slice(0, 30)}</span>
+        )}
+      </div>
     </div>
   );
 }

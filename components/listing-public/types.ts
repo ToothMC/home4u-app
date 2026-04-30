@@ -150,6 +150,12 @@ export type PublicListingData = {
   scam_checked_at: string | null;
   source: string;
   external_id: string | null;
+  /** Kanonische URL des Originals (extracted_data.source_url oder Fallback). */
+  source_url: string | null;
+  /** True wenn ein verschlüsselter Phone-Kontakt im Datensatz liegt. */
+  has_phone_contact: boolean;
+  /** True wenn ein verschlüsselter Email-Kontakt im Datensatz liegt. */
+  has_email_contact: boolean;
   ai_analyzed_at: string | null;
   created_at: string;
 };

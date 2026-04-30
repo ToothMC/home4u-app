@@ -5,6 +5,7 @@ import type {
   NearbyPOI,
   PublicListingData,
 } from "@/components/listing-public/types";
+import { buildSourceUrl } from "@/lib/listings/source-url";
 
 export async function loadPublicListing(
   id: string
@@ -26,8 +27,9 @@ export async function loadPublicListing(
        contract_min_months, contract_notes,
        price_per_sqm, market_position, market_compset_size,
        market_p10_eur_sqm, market_p25_eur_sqm, market_median_eur_sqm, market_p75_eur_sqm,
-       source, external_id, ai_analyzed_at, created_at,
-       scam_score, scam_flags, scam_checked_at`
+       source, external_id, extracted_data, ai_analyzed_at, created_at,
+       scam_score, scam_flags, scam_checked_at,
+       contact_phone_enc, contact_email_enc`
     )
     .eq("id", id)
     .maybeSingle();
@@ -119,6 +121,13 @@ export async function loadPublicListing(
     scam_checked_at: l.scam_checked_at ?? null,
     source: l.source as string,
     external_id: l.external_id ?? null,
+    source_url: buildSourceUrl({
+      source: l.source as string,
+      external_id: l.external_id ?? null,
+      extracted_data: (l.extracted_data as Record<string, unknown> | null) ?? null,
+    }),
+    has_phone_contact: l.contact_phone_enc != null,
+    has_email_contact: l.contact_email_enc != null,
     ai_analyzed_at: l.ai_analyzed_at ?? null,
     created_at: l.created_at,
   };
