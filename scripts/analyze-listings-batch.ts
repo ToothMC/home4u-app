@@ -33,7 +33,13 @@
 import { createClient } from "@supabase/supabase-js";
 import { analyzeListing, type AnalyzeModel } from "../lib/listing-analyze/analyze";
 
-type Filter = "paphos_houses" | "all_unanalyzed" | "paphos_villas_3br";
+type Filter =
+  | "paphos_houses"
+  | "all_unanalyzed"
+  | "paphos_villas_3br"
+  | "paphos_rent_houses"
+  | "paphos_rent_houses_3br"
+  | "paphos_sale_houses";
 
 type Opts = {
   limit: number;
@@ -60,8 +66,16 @@ function parseArgs(argv: string[]): Opts {
     if (a === "--limit") opts.limit = Math.max(1, Math.min(200, parseInt(argv[++i], 10)));
     else if (a === "--filter") {
       const f = argv[++i];
-      if (f === "paphos_houses" || f === "all_unanalyzed" || f === "paphos_villas_3br") {
-        opts.filter = f;
+      const known: Filter[] = [
+        "paphos_houses",
+        "all_unanalyzed",
+        "paphos_villas_3br",
+        "paphos_rent_houses",
+        "paphos_rent_houses_3br",
+        "paphos_sale_houses",
+      ];
+      if ((known as string[]).includes(f)) {
+        opts.filter = f as Filter;
       }
     } else if (a === "--ids") opts.ids = argv[++i].split(",").map((s) => s.trim()).filter(Boolean);
     else if (a === "--model") {
@@ -91,6 +105,16 @@ async function pickListingIds(supabase: any, opts: Opts): Promise<string[]> {
     q = q.ilike("location_city", "Paphos%").eq("property_type", "house");
   } else if (opts.filter === "paphos_villas_3br") {
     q = q.ilike("location_city", "Paphos%").eq("property_type", "house").eq("rooms", 3);
+  } else if (opts.filter === "paphos_rent_houses") {
+    q = q.ilike("location_city", "Paphos%").eq("property_type", "house").eq("type", "rent");
+  } else if (opts.filter === "paphos_rent_houses_3br") {
+    q = q
+      .ilike("location_city", "Paphos%")
+      .eq("property_type", "house")
+      .eq("type", "rent")
+      .eq("rooms", 3);
+  } else if (opts.filter === "paphos_sale_houses") {
+    q = q.ilike("location_city", "Paphos%").eq("property_type", "house").eq("type", "sale");
   }
 
   q = q.order("updated_at", { ascending: false }).limit(opts.limit);

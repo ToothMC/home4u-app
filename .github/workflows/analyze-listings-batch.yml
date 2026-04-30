@@ -15,9 +15,12 @@ on:
       filter:
         description: "Listing-Filter"
         required: true
-        default: "paphos_houses"
+        default: "paphos_rent_houses_3br"
         type: choice
         options:
+          - paphos_rent_houses_3br
+          - paphos_rent_houses
+          - paphos_sale_houses
           - paphos_houses
           - paphos_villas_3br
           - all_unanalyzed
