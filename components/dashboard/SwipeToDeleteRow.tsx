@@ -170,7 +170,7 @@ export function SwipeToDeleteRow({ endpoint, what, children }: Props) {
             Auf Touch funktioniert zusätzlich der Swipe nach links. */}
         <button
           type="button"
-          onClick={open ? close : openTrash}
+          onClick={open ? close : expandConfirm}
           aria-label={open ? "Schließen" : `${what} löschen`}
           className="shrink-0 px-2 self-center text-[var(--muted-foreground)] hover:text-red-600"
         >
