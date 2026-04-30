@@ -144,20 +144,16 @@ async function notifySeekerListingUnavailable(opts: {
   const { service, matchId, listingId, newStatus, baseUrl } = opts;
   if (!service) return;
 
-  // Match → search_profile → user_id ODER anonymous_id
+  // Match identifiziert den Seeker direkt — search_profile_id ist nur
+  // optionaler Kontext.
   const { data: match } = await service
     .from("matches")
-    .select("id, search_profile_id")
+    .select("id, seeker_user_id")
     .eq("id", matchId)
     .maybeSingle();
-  if (!match?.search_profile_id) return;
+  if (!match?.seeker_user_id) return; // ohne Login keine Email-Adresse
 
-  const { data: profile } = await service
-    .from("search_profiles")
-    .select("user_id, anonymous_id")
-    .eq("id", match.search_profile_id)
-    .maybeSingle();
-  if (!profile?.user_id) return; // ohne Login keine Email-Adresse
+  const profile = { user_id: match.seeker_user_id as string };
 
   // Email aus profiles.notification_email oder auth.users.email
   let seekerEmail: string | null = null;

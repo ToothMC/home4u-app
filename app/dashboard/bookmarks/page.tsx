@@ -144,7 +144,7 @@ export default async function BookmarksPage({
 }
 
 function BookmarkCard({ bookmark }: { bookmark: BookmarkedListing }) {
-  const { listing, bookmarkedAt, bookmarkId, matchStatus, matchId, searchProfileId } = bookmark;
+  const { listing, bookmarkedAt, bookmarkId, matchStatus, matchId } = bookmark;
   const cover = listing.media?.[0];
   const isVideo = cover ? /\.(mp4|mov|webm)$/i.test(cover) : false;
   const typeLabel = listing.property_type
@@ -216,7 +216,6 @@ function BookmarkCard({ bookmark }: { bookmark: BookmarkedListing }) {
             bookmarkId={bookmarkId}
             matchStatus={matchStatus}
             matchId={matchId}
-            hasSearchProfile={searchProfileId !== null}
             listingStatus={listing.status}
           />
         </div>

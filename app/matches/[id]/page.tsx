@@ -49,13 +49,14 @@ export default async function MatchDetailPage({
     redirect("/dashboard");
   }
 
-  // Match + Listing + Profil-Owner laden
+  // Match + Listing laden. Seeker-Identität liegt direkt am Match
+  // (seit Migration 20260430110000); search_profile_id ist optional.
   const { data: match, error } = await supabase
     .from("matches")
     .select(
       `id, search_profile_id, listing_id, owner_interest, connected_at,
        seeker_decided_at, owner_decided_at,
-       search_profiles!inner ( user_id, anonymous_id ),
+       seeker_user_id, seeker_anonymous_id,
        listings!inner (
          id, type, location_city, location_district, price, currency,
          rooms, size_sqm, media, status, contact_channel, owner_user_id,
@@ -69,14 +70,12 @@ export default async function MatchDetailPage({
     notFound();
   }
 
-  // Authorisierung: nur Eigentümer des Suchprofils darf hier rein
-  const profile = (match.search_profiles as unknown) as {
-    user_id: string | null;
-    anonymous_id: string | null;
-  };
-  const isOwnerByUser = user && profile.user_id === user.id;
+  // Authorisierung: Match gehört dem Seeker direkt
+  const seekerUserId = (match.seeker_user_id as string | null) ?? null;
+  const seekerAnonId = (match.seeker_anonymous_id as string | null) ?? null;
+  const isOwnerByUser = user && seekerUserId === user.id;
   const isOwnerByAnon =
-    session?.anonymousId && profile.anonymous_id === session.anonymousId;
+    session?.anonymousId && seekerAnonId === session.anonymousId;
   if (!isOwnerByUser && !isOwnerByAnon) {
     redirect("/matches");
   }

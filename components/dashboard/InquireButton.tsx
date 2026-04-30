@@ -10,11 +10,13 @@ import { emitMatchesUpdated } from "@/lib/events/match-events";
 
 /**
  * Pipeline-Aktion auf einer BookmarkCard.
- * - matchStatus="none" + searchProfileId vorhanden → "Anfragen" (Primary)
- * - matchStatus="none" + kein searchProfileId       → Hinweis (alt-bookmarked)
- * - matchStatus="pending"                            → "Wartet auf Anbieter"
- * - matchStatus="connected"                          → Link "Verbunden →"
- * - matchStatus="rejected"                           → "Abgelehnt"
+ * - matchStatus="none"      → "Anfragen" (Primary, immer aktiv)
+ * - matchStatus="pending"   → "Wartet auf Anbieter"
+ * - matchStatus="connected" → Link "Verbunden →"
+ * - matchStatus="rejected"  → "Abgelehnt"
+ *
+ * Seit Migration 20260430110000 ist search_profile_id auf matches optional —
+ * orphan-Bookmarks (ohne Profil-Anker) sind voll anfragbar.
  */
 // Status-Werte, bei denen keine neuen Anfragen mehr Sinn machen — Inserat ist
 // entweder weg oder pausiert. "stale" bleibt anfragbar, weil eine Anfrage genau
@@ -48,13 +50,11 @@ export function InquireButton({
   bookmarkId,
   matchStatus,
   matchId,
-  hasSearchProfile,
   listingStatus,
 }: {
   bookmarkId: string;
   matchStatus: MatchStatus;
   matchId: string | null;
-  hasSearchProfile: boolean;
   listingStatus?: string;
 }) {
   const router = useRouter();
@@ -105,20 +105,7 @@ export function InquireButton({
     );
   }
 
-  // matchStatus === "none"
-  if (!hasSearchProfile) {
-    return (
-      <Button
-        size="sm"
-        variant="outline"
-        className="w-full"
-        disabled
-        title="Dieser Favorit wurde ohne Bezug zu einer Suche gespeichert. Speichere das Inserat erneut aus einer Suche, um anfragen zu können."
-      >
-        Bitte aus Suche speichern
-      </Button>
-    );
-  }
+  // matchStatus === "none" → "Anfragen" (immer aktiv, profil-unabhängig)
 
   async function inquire(e: React.MouseEvent) {
     e.preventDefault();

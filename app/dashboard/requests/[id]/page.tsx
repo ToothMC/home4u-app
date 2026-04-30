@@ -47,12 +47,16 @@ export default async function OwnerRequestDetailPage({
   const supabase = createSupabaseServiceClient();
   if (!supabase) redirect("/dashboard");
 
+  // search_profiles wird LEFT-joined — orphan-Bookmarks haben keinen
+  // Profil-Anker, sollen aber für den Anbieter sichtbar bleiben.
+  // Seeker-Identität liegt direkt am Match.
   const { data: match, error } = await supabase
     .from("matches")
     .select(
       `id, search_profile_id, listing_id, owner_interest, connected_at,
        seeker_decided_at, owner_decided_at,
-       search_profiles!inner (
+       seeker_user_id, seeker_anonymous_id,
+       search_profiles (
          id, location, budget_min, budget_max, rooms, household,
          move_in_date, lifestyle_tags, pets, free_text, user_id
        ),
@@ -91,9 +95,10 @@ export default async function OwnerRequestDetailPage({
     redirect("/dashboard");
   }
 
+  // Profil ist optional — bei orphan-Bookmarks NULL.
   const profile = (match.search_profiles as unknown) as {
     id: string;
-    location: string;
+    location: string | null;
     budget_min: number | null;
     budget_max: number | null;
     rooms: number | null;
@@ -103,15 +108,16 @@ export default async function OwnerRequestDetailPage({
     pets: boolean | null;
     free_text: string | null;
     user_id: string | null;
-  };
+  } | null;
 
   const status = deriveStatus(match);
+  const seekerUserId = (match.seeker_user_id as string | null) ?? null;
 
-  // Seeker-Email nur bei connected
+  // Seeker-Email nur bei connected, aus seeker_user_id (direkt am Match).
   let seekerEmail: string | null = null;
-  if (status === "connected" && profile.user_id) {
+  if (status === "connected" && seekerUserId) {
     try {
-      const { data } = await supabase.auth.admin.getUserById(profile.user_id);
+      const { data } = await supabase.auth.admin.getUserById(seekerUserId);
       seekerEmail = data?.user?.email ?? null;
     } catch (err) {
       console.error("[request-detail] seeker email lookup failed", err);
@@ -135,7 +141,9 @@ export default async function OwnerRequestDetailPage({
       (listing.market_position as MatchCardData["marketPosition"]) ?? null,
   };
 
-  const budgetLabel = formatBudget(profile.budget_min, profile.budget_max);
+  const budgetLabel = profile
+    ? formatBudget(profile.budget_min, profile.budget_max)
+    : null;
   const householdMap: Record<string, string> = {
     single: "Einzelperson",
     couple: "Paar",
@@ -175,71 +183,96 @@ export default async function OwnerRequestDetailPage({
           <MatchCard data={cardData} />
         </div>
 
-        {/* Seeker-Profil */}
-        <article className="rounded-xl border bg-[var(--card)] p-4 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="size-12 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-base font-semibold">
-              {(seekerEmail ?? "?")[0].toUpperCase()}
+        {/* Seeker-Profil — nur wenn Suche verknüpft. Bei orphan-Anfragen
+            (User hat das Inserat direkt favorisiert ohne festes Profil)
+            zeigen wir einen knappen Hinweis statt die Profil-Box. */}
+        {profile ? (
+          <article className="rounded-xl border bg-[var(--card)] p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="size-12 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-base font-semibold">
+                {(seekerEmail ?? "?")[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {status === "connected" && seekerEmail
+                    ? seekerEmail
+                    : "Suchender"}
+                </p>
+                {profile.location && (
+                  <p className="text-xs text-[var(--muted-foreground)] flex items-center gap-1 truncate">
+                    <MapPin className="size-3" /> sucht in {profile.location}
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">
-                {status === "connected" && seekerEmail
-                  ? seekerEmail
-                  : "Suchender"}
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              {profile.rooms != null && (
+                <Detail label="Zimmer" value={`${profile.rooms} Zi`} />
+              )}
+              {budgetLabel && <Detail label="Budget" value={budgetLabel} />}
+              {profile.household && (
+                <Detail
+                  label="Haushalt"
+                  icon={<Users2 className="size-3" />}
+                  value={householdMap[profile.household] ?? profile.household}
+                />
+              )}
+              {profile.move_in_date && (
+                <Detail
+                  label="Einzug"
+                  icon={<CalendarDays className="size-3" />}
+                  value={new Date(profile.move_in_date).toLocaleDateString("de-DE")}
+                />
+              )}
+              {profile.pets != null && (
+                <Detail
+                  label="Haustiere"
+                  icon={<PawPrint className="size-3" />}
+                  value={profile.pets ? "ja" : "nein"}
+                />
+              )}
+            </div>
+
+            {profile.lifestyle_tags && profile.lifestyle_tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {profile.lifestyle_tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full bg-[var(--accent)] border px-2 py-0.5 text-[11px]"
+                  >
+                    <Sparkles className="inline size-2.5 mr-0.5" /> {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {profile.free_text && (
+              <p className="text-sm italic text-[var(--muted-foreground)] border-l-2 pl-3">
+                &bdquo;{profile.free_text}&ldquo;
               </p>
-              <p className="text-xs text-[var(--muted-foreground)] flex items-center gap-1 truncate">
-                <MapPin className="size-3" /> sucht in {profile.location}
-              </p>
+            )}
+          </article>
+        ) : (
+          <article className="rounded-xl border bg-[var(--card)] p-4 space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="size-12 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-base font-semibold">
+                {(seekerEmail ?? "?")[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {status === "connected" && seekerEmail
+                    ? seekerEmail
+                    : "Suchender"}
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Direkt-Anfrage auf dein Inserat — keine zusätzlichen
+                  Suchkriterien hinterlegt.
+                </p>
+              </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            {profile.rooms != null && (
-              <Detail label="Zimmer" value={`${profile.rooms} Zi`} />
-            )}
-            {budgetLabel && <Detail label="Budget" value={budgetLabel} />}
-            {profile.household && (
-              <Detail
-                label="Haushalt"
-                icon={<Users2 className="size-3" />}
-                value={householdMap[profile.household] ?? profile.household}
-              />
-            )}
-            {profile.move_in_date && (
-              <Detail
-                label="Einzug"
-                icon={<CalendarDays className="size-3" />}
-                value={new Date(profile.move_in_date).toLocaleDateString("de-DE")}
-              />
-            )}
-            {profile.pets != null && (
-              <Detail
-                label="Haustiere"
-                icon={<PawPrint className="size-3" />}
-                value={profile.pets ? "ja" : "nein"}
-              />
-            )}
-          </div>
-
-          {profile.lifestyle_tags && profile.lifestyle_tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-1">
-              {profile.lifestyle_tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full bg-[var(--accent)] border px-2 py-0.5 text-[11px]"
-                >
-                  <Sparkles className="inline size-2.5 mr-0.5" /> {tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {profile.free_text && (
-            <p className="text-sm italic text-[var(--muted-foreground)] border-l-2 pl-3">
-              &bdquo;{profile.free_text}&ldquo;
-            </p>
-          )}
-        </article>
+          </article>
+        )}
 
         {/* Action area */}
         <div className="pt-2">
