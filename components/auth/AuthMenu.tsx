@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { LogIn, LogOut, User as UserIcon, Loader2, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SignInDialog } from "@/components/auth/SignInDialog";
@@ -23,6 +24,16 @@ export function AuthMenu({
 }) {
   const [state, setState] = useState<AuthState>({ status: "loading" });
   const [open, setOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const authRequired = searchParams.get("auth") === "required";
+  const nextUrl = searchParams.get("next");
+
+  // Wenn andere Seiten via ?auth=required redirecten (z.B. /scam-check
+  // ohne Login), öffnen wir den Dialog automatisch sobald wir wissen
+  // dass der User anon ist.
+  useEffect(() => {
+    if (authRequired && state.status === "anon") setOpen(true);
+  }, [authRequired, state.status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,7 +127,11 @@ export function AuthMenu({
         <LogIn className="size-3" />
         Anmelden
       </Button>
-      <SignInDialog open={open} onOpenChange={setOpen} />
+      <SignInDialog
+        open={open}
+        onOpenChange={setOpen}
+        redirectAfter={nextUrl ?? undefined}
+      />
     </>
   );
 }

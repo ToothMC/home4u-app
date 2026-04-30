@@ -12,10 +12,13 @@ export function SignInDialog({
   open,
   onOpenChange,
   onSignedIn,
+  redirectAfter,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSignedIn?: (info: { email: string }) => void;
+  /** Wenn gesetzt: nach Login dorthin navigieren statt window.location.reload(). */
+  redirectAfter?: string;
 }) {
   const [mode, setMode] = useState<Mode>("email");
   const [email, setEmail] = useState("");
@@ -103,7 +106,11 @@ export function SignInDialog({
       onSignedIn?.({ email });
       setTimeout(() => {
         onOpenChange(false);
-        window.location.reload();
+        if (redirectAfter && redirectAfter.startsWith("/")) {
+          window.location.href = redirectAfter;
+        } else {
+          window.location.reload();
+        }
       }, 900);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -116,14 +123,20 @@ export function SignInDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/50"
       role="dialog"
       aria-modal="true"
       onClick={(e) => {
         if (e.target === e.currentTarget) onOpenChange(false);
       }}
     >
-      <div className="w-full max-w-md rounded-xl bg-[var(--background)] p-6 shadow-lg relative">
+      <div
+        className="flex min-h-full items-center justify-center p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onOpenChange(false);
+        }}
+      >
+      <div className="w-full max-w-md rounded-xl bg-[var(--background)] p-6 shadow-lg relative my-8">
         <button
           onClick={() => onOpenChange(false)}
           aria-label="Schließen"
@@ -246,6 +259,7 @@ export function SignInDialog({
             </p>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
