@@ -356,9 +356,18 @@ export function ChatView({
 
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
-  // Spezial-Renderer für find_matches-Result: prominente 'Treffer ansehen'-Card
+  // Spezial-Renderer für 'Treffer ansehen'-Card.
+  // create_search_profile + update_search_profile lösen seit Prompt v0.4.0
+  // selber Match-Refresh aus (server-side findMatchesForSession), find_matches
+  // wird nur noch für expliziten Refresh aufgerufen — alle drei führen zu
+  // einer Trefferliste auf /matches und sollen die Klick-Karte zeigen.
   const matchTool = message.toolCalls?.find(
-    (t) => t.name === "find_matches" && t.result?.ok
+    (t) =>
+      t.result?.ok &&
+      (t.name === "find_matches" ||
+        t.name === "create_search_profile" ||
+        t.name === "upsert_search_profile" ||
+        t.name === "update_search_profile")
   );
 
   return (
