@@ -7,9 +7,9 @@ name: Daily INDEX.cy Crawl
 
 on:
   schedule:
-    # 05:00 UTC = 1h nach Bazaraki-Daily-Crawl. Damit Bazaraki-Updates
-    # zuerst durch sind und INDEX-Listings dagegen matchen können.
-    - cron: "0 5 * * *"
+    # 22:00 UTC = 1h nach Bazaraki. Damit Bazaraki-Updates zuerst durch
+    # sind und INDEX-Listings dagegen matchen können.
+    - cron: "0 22 * * *"
   workflow_dispatch:
     inputs:
       max_listings:

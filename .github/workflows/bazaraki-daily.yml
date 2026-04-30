@@ -2,8 +2,8 @@ name: Daily Bazaraki Crawl
 
 on:
   schedule:
-    # 04:00 UTC = 06:00 Cyprus Sommerzeit / 07:00 Winterzeit (vor Tagesgeschäft)
-    - cron: "0 4 * * *"
+    # 21:00 UTC = 00:00 EEST (Sommer) / 23:00 EET (Winter) — Cron kennt keine DST
+    - cron: "0 21 * * *"
   workflow_dispatch:
     inputs:
       cities:
