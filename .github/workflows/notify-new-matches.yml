@@ -1,0 +1,66 @@
+name: Daily „Neue Inserate"-Mails
+
+# Schickt einmal pro Tag eine Digest-Mail an jeden eingeloggten User mit
+# aktiver Suche (search_profiles.notify_new_matches=true), für alle
+# Listings die seit dem letzten Versand neu reingekommen sind und zum
+# Profil matchen.
+#
+# Schedule (UTC):
+#   05:00  bazaraki/index/cre Daily-Crawls + analyze sind bis 02:00 fertig.
+#          5 Uhr UTC = 7-8 Uhr lokal CY → Mail liegt morgens im Postfach.
+#
+# Required GitHub Secrets:
+#   - SUPABASE_URL
+#   - SUPABASE_SERVICE_ROLE_KEY
+#   - RESEND_API_KEY
+#   - RESEND_FROM_ADDRESS
+#   - PUBLIC_BASE_URL  (z.B. https://home4u.ai — für Listing-Links in der Mail)
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "Dry-Run (nur loggen, keine Mails)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      profile:
+        description: "Optional: nur dieses search_profile.id"
+        required: false
+
+concurrency:
+  group: notify-new-matches
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run notify-new-matches
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_ADDRESS: ${{ secrets.RESEND_FROM_ADDRESS }}
+          NEXT_PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.dry }}" = "true" ]; then ARGS="$ARGS --dry"; fi
+          if [ -n "${{ inputs.profile }}" ]; then ARGS="$ARGS --profile ${{ inputs.profile }}"; fi
+          node --import tsx scripts/notify-new-matches.ts $ARGS

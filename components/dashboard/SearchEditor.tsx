@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, X } from "lucide-react";
+import { Bell, BellOff, Check, Loader2, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ export type EditableSearchProfile = {
   pets: boolean | null;
   free_text: string | null;
   active: boolean;
+  notify_new_matches: boolean;
 };
 
 const HOUSEHOLD = [
@@ -100,11 +101,50 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
 
   return (
     <div className="space-y-5">
+      <button
+        type="button"
+        onClick={() => set("notify_new_matches", !(get("notify_new_matches") as boolean))}
+        className={cn(
+          "w-full flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm transition-colors",
+          get("notify_new_matches")
+            ? "border-emerald-300 bg-emerald-500/10 text-emerald-800"
+            : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]"
+        )}
+        aria-pressed={get("notify_new_matches") as boolean}
+      >
+        <span className="flex items-center gap-2">
+          {get("notify_new_matches") ? (
+            <Bell className="size-4" />
+          ) : (
+            <BellOff className="size-4" />
+          )}
+          <span>
+            {get("notify_new_matches")
+              ? "Tägliche E-Mail bei neuen Treffern aktiv"
+              : "Keine E-Mail-Benachrichtigung"}
+          </span>
+        </span>
+        <span
+          className={cn(
+            "relative inline-flex h-5 w-10 shrink-0 items-center rounded-full transition-colors",
+            get("notify_new_matches") ? "bg-emerald-500" : "bg-neutral-300"
+          )}
+        >
+          <span
+            className={cn(
+              "absolute left-0.5 inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
+              get("notify_new_matches") ? "translate-x-5" : "translate-x-0"
+            )}
+          />
+        </span>
+      </button>
+
       <Field label="Wo suchst du?">
         <Input
           value={(get("location") as string) ?? ""}
           onChange={(e) => set("location", e.target.value)}
           placeholder="z. B. Paphos Kato oder Limassol Tourist Area"
+          className="bg-white"
         />
       </Field>
 
@@ -113,7 +153,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
           <select
             value={get("type") as string}
             onChange={(e) => set("type", e.target.value as "rent" | "sale")}
-            className="h-10 w-full rounded-md border bg-[var(--background)] px-3 text-sm"
+            className="h-10 w-full rounded-md border bg-white px-3 text-sm"
           >
             <option value="rent">Miete</option>
             <option value="sale">Kauf</option>
@@ -159,6 +199,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
               set("budget_min", Number.isFinite(n) ? n : null);
             }}
             min={0}
+            className="bg-white"
           />
         </Field>
         <Field label={get("type") === "sale" ? "Budget max (€)" : "Budget max pro Monat (€)"}>
@@ -170,6 +211,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
               set("budget_max", Number.isFinite(n) ? n : null);
             }}
             min={0}
+            className="bg-white"
           />
         </Field>
       </div>
@@ -185,6 +227,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
             }}
             min={0}
             max={20}
+            className="bg-white"
           />
         </Field>
         <Field label="Einzug ab">
@@ -192,6 +235,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
             type="date"
             value={((get("move_in_date") as string) ?? "").slice(0, 10)}
             onChange={(e) => set("move_in_date", e.target.value || null)}
+            className="bg-white"
           />
         </Field>
       </div>
@@ -279,6 +323,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
           placeholder="z. B. 'arbeite remote, brauche schnelles Internet und Balkon für Pflanzen'"
           rows={4}
           maxLength={2000}
+          className="bg-white"
         />
       </Field>
 
