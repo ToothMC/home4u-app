@@ -1,0 +1,80 @@
+name: Analyze Listings (Vision-Backfill)
+
+# Sophie-Vision-Pipeline für Crawler-Listings: füllt title, description,
+# features, furnishing, bathrooms, honest_assessment + room-getaggte Photos
+# basierend auf den hochgeladenen Bildern. Manuell triggerbar.
+#
+# Required GitHub Secrets:
+#   - SUPABASE_URL
+#   - SUPABASE_SERVICE_ROLE_KEY
+#   - ANTHROPIC_API_KEY  (siehe https://console.anthropic.com/settings/keys)
+
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: "Listing-Filter"
+        required: true
+        default: "paphos_houses"
+        type: choice
+        options:
+          - paphos_houses
+          - paphos_villas_3br
+          - all_unanalyzed
+      limit:
+        description: "Anzahl Listings (max 200)"
+        required: true
+        default: "20"
+      model:
+        description: "Vision-Modell (haiku=günstig, sonnet=top)"
+        required: true
+        default: "haiku"
+        type: choice
+        options:
+          - haiku
+          - sonnet
+      concurrency:
+        description: "Parallele Calls (1-5)"
+        required: true
+        default: "3"
+      reanalyze:
+        description: "Auch schon analysierte Listings neu analysieren"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: analyze-listings
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run analyze batch
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          REANALYZE_FLAG=""
+          if [ "${{ inputs.reanalyze }}" = "true" ]; then
+            REANALYZE_FLAG="--reanalyze"
+          fi
+          node --import tsx scripts/analyze-listings-batch.ts \
+            --filter "${{ inputs.filter }}" \
+            --limit "${{ inputs.limit }}" \
+            --model "${{ inputs.model }}" \
+            --concurrency "${{ inputs.concurrency }}" \
+            $REANALYZE_FLAG
