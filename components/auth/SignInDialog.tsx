@@ -146,7 +146,7 @@ export function SignInDialog({
                 <LogIn className="size-4" /> Anmelden
               </h2>
               <p className="text-sm text-[var(--muted-foreground)] mt-1">
-                Wir schicken dir einen 6-stelligen Code per E-Mail.
+                Wir schicken dir einen Code per E-Mail.
               </p>
             </div>
             <form
@@ -203,7 +203,7 @@ export function SignInDialog({
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 pattern="\d{6,8}"
-                placeholder="123456"
+                placeholder="12345678"
                 value={code}
                 onChange={(e) =>
                   setCode(e.target.value.replace(/\D/g, "").slice(0, 8))
