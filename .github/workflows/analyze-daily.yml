@@ -1,0 +1,70 @@
+name: Daily Auto-Analyze (Vision-Backfill)
+
+# Läuft täglich nach den Crawler-Daily-Runs und analysiert die neu
+# importierten Listings via Sophie-Vision-Pipeline. Keine User-Action
+# nötig — Coverage bleibt automatisch hoch, neue Listings sind ab Tag 1
+# mit features[] filterbar.
+#
+# Schedule-Layout (UTC):
+#   21:00  bazaraki-daily       — neue Bazaraki-Listings
+#   22:00  index-cy-daily       — neue INDEX.cy-Listings
+#   23:00  cre-daily            — neue cyprus-real.estate-Listings
+#   02:00  analyze-daily (this) — analysiert alle neuen unanalysierten
+#                                 (3h Puffer falls cre länger braucht)
+#
+# Required GitHub Secrets:
+#   - SUPABASE_URL
+#   - SUPABASE_SERVICE_ROLE_KEY
+#   - ANTHROPIC_API_KEY
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Anzahl Listings (default 500)"
+        required: false
+        default: "500"
+      model:
+        description: "Vision-Modell"
+        required: false
+        default: "haiku"
+        type: choice
+        options:
+          - haiku
+          - sonnet
+
+concurrency:
+  group: analyze-daily
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    # 500 listings × ~3s Vision-Call / concurrency 3 ≈ 500s (~9 min).
+    # Bei Backlog (Erstlauf nach Deploy) deutlich mehr — 120 min ist
+    # GH-Free-Tier-freundlich und reicht für ~2k Listings.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run analyze batch
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          node --import tsx scripts/analyze-listings-batch.ts \
+            --filter all_unanalyzed \
+            --limit "${{ inputs.limit || '500' }}" \
+            --model "${{ inputs.model || 'haiku' }}" \
+            --concurrency 3
