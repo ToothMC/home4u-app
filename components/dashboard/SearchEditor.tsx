@@ -35,8 +35,8 @@ const HOUSEHOLD = [
 
 const LIFESTYLE_OPTIONS = [
   "ruhig", "zentrale Lage", "nah am Strand", "Familienviertel",
-  "Expat-freundlich", "Homeoffice", "öffentlicher Nahverkehr",
-  "Schulen", "Restaurants", "Gastfreundlich", "Internationale Community",
+  "Homeoffice", "Schulen", "Restaurants",
+  "Pool", "Community-Pool", "Garage", "Parkplatz",
 ];
 
 export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
