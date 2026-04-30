@@ -1,0 +1,77 @@
+name: Daily Scam-Check
+
+# Läuft täglich nach analyze-daily und prüft alle neu importierten +
+# bisher ungecheckten Listings auf Scam-Signale (Spec §6).
+# Worker (lib/scam/worker.ts) pickt nur listings mit scam_checked_at IS NULL,
+# d.h. Re-Checks werden NICHT gemacht — nur neue Inserate.
+#
+# Schedule-Layout (UTC):
+#   21:00  bazaraki-daily
+#   22:00  index-cy-daily
+#   23:00  cre-daily
+#   02:00  analyze-daily        — Vision-Features
+#   03:00  scam-daily (this)    — Scam-Score
+#
+# Required GitHub Secrets:
+#   - SUPABASE_URL
+#   - SUPABASE_SERVICE_ROLE_KEY
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Listings pro Batch (max 50)"
+        required: false
+        default: "50"
+      max_batches:
+        description: "Max Batches pro Run (Default 20 → bis zu 1000 Listings/Run)"
+        required: false
+        default: "20"
+      source:
+        description: "Nur eine Source (leer = alle)"
+        required: false
+        default: ""
+        type: choice
+        options:
+          - ""
+          - bazaraki
+          - fb
+          - direct
+          - other
+
+concurrency:
+  group: scam-daily
+  cancel-in-progress: false
+
+jobs:
+  scam:
+    runs-on: ubuntu-latest
+    # 1000 listings × ~2s pro Listing (pHash-Compute + DB-Write) ≈ 30 min.
+    # Backlog ~35k → 35 Tage zur Vollabdeckung bei diesem Pace.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run scam batch
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          SOURCE_FLAG=""
+          if [ -n "${{ inputs.source }}" ]; then
+            SOURCE_FLAG="--source ${{ inputs.source }}"
+          fi
+          node --import tsx scripts/run-scam-batch.ts \
+            --limit "${{ inputs.limit || '50' }}" \
+            --max-batches "${{ inputs.max_batches || '20' }}" \
+            $SOURCE_FLAG
