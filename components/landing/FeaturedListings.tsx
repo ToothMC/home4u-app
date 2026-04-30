@@ -1,8 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, MapPin, Bed, Bath, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { detectRegion } from "@/lib/geo/detect-region";
 
 type FeaturedListing = {
   id: string;
@@ -42,13 +42,21 @@ function roomsTitle(rooms: number | null, propertyType: string | null) {
   return `${rooms} Schlafzimmer ${t}`;
 }
 
-export async function FeaturedListings() {
+export async function FeaturedListings({
+  regionSlug,
+}: {
+  regionSlug?: string | null;
+} = {}) {
   const supabase = createSupabaseServiceClient();
   if (!supabase) {
     return null;
   }
 
-  const { data } = await supabase
+  // Region: URL-Param → letzte Suche → IP-Geo → fallback (kein Filter).
+  const detected = await detectRegion({ urlSlug: regionSlug });
+  const region = detected.region;
+
+  let query = supabase
     .from("listings")
     .select(
       "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, updated_at"
@@ -56,21 +64,51 @@ export async function FeaturedListings() {
     .eq("status", "active")
     .not("media", "is", null)
     .order("updated_at", { ascending: false })
-    .limit(8);
+    .limit(region ? 16 : 8);
 
-  const listings = (data ?? [])
+  if (region) {
+    // Prefix-Match deckt "Paphos", "Paphos District", "Paphos – Universal" etc. ab.
+    query = query.ilike("location_city", `${region.cityPrefix}%`);
+  }
+
+  const { data } = await query;
+
+  let listings = (data ?? [])
     .filter(
       (l): l is FeaturedListing & { status: string; updated_at: string } =>
         Array.isArray(l.media) && l.media.length > 0
     )
     .slice(0, 4);
 
+  // Wenn Region-Filter zu wenig liefert (< 2), greift Fallback auf Mix.
+  if (region && listings.length < 2) {
+    const { data: fallback } = await supabase
+      .from("listings")
+      .select(
+        "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, updated_at"
+      )
+      .eq("status", "active")
+      .not("media", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(8);
+    listings = (fallback ?? [])
+      .filter(
+        (l): l is FeaturedListing & { status: string; updated_at: string } =>
+          Array.isArray(l.media) && l.media.length > 0
+      )
+      .slice(0, 4);
+  }
+
   if (listings.length === 0) return null;
+
+  const heading = region
+    ? `Ausgewählte Immobilien in ${region.label}`
+    : "Ausgewählte Immobilien für dich";
 
   return (
     <section className="mx-auto max-w-6xl px-6 pb-12 sm:pb-20">
       <h2 className="font-display text-3xl sm:text-4xl text-center text-[var(--brand-navy)] mb-10">
-        Ausgewählte Immobilien für dich
+        {heading}
       </h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

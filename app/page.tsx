@@ -11,7 +11,12 @@ import { BrandLockup } from "@/components/brand/Logo";
 import { LanguageFlagPicker } from "@/components/lang/LanguageFlagPicker";
 import { getPreferredLanguage } from "@/lib/lang/preferred-language";
 
-export default async function LandingPage() {
+export default async function LandingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ region?: string }>;
+}) {
+  const sp = (await searchParams) ?? {};
   const lang = await getPreferredLanguage();
   return (
     <main className="flex-1">
@@ -155,7 +160,7 @@ export default async function LandingPage() {
 
       {/* Ausgewählte Immobilien — echte Daten */}
       <Suspense fallback={null}>
-        <FeaturedListings />
+        <FeaturedListings regionSlug={sp.region ?? null} />
       </Suspense>
 
       {/* Drei Wege */}
