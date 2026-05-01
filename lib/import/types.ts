@@ -42,7 +42,7 @@ export type NormalizedListing = {
   contact_channel: string | null;
   external_id: string | null;
   media: string[];
-  language: "de" | "en" | "ru" | "el" | null;
+  language: "de" | "en" | "ru" | "el" | "zh" | null;
   dedup_hash: string;
 };
 

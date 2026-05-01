@@ -8,12 +8,15 @@ import { findMatchesForSession } from "@/lib/repo/listings";
 import { loadActiveSearchProfile } from "@/lib/repo/search-profiles";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { getOrCreateAnonymousSession } from "@/lib/session";
+import { getT } from "@/lib/i18n/server";
+import { tFormat } from "@/lib/i18n/dict";
 
 export const dynamic = "force-dynamic";
 
 export default async function MatchesPage() {
   const user = await getAuthUser();
   const session = user ? null : await getOrCreateAnonymousSession();
+  const { t } = await getT();
 
   const ownerKey = {
     userId: user?.id ?? null,
@@ -43,7 +46,7 @@ export default async function MatchesPage() {
           href="/dashboard"
           className="text-sm text-[var(--muted-foreground)] hover:underline"
         >
-          ← Dashboard
+          ← {t("common.dashboard")}
         </Link>
         <AuthMenu hideDashboard />
       </header>
@@ -52,17 +55,17 @@ export default async function MatchesPage() {
         <div className="shrink-0 mb-2">
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <Search className="size-5" />
-            Deine Treffer
+            {t("matches.heading")}
           </h1>
           <p className="text-xs text-[var(--muted-foreground)]">
             {matches.length === 0
-              ? "Keine passenden Inserate aktuell — Sophie sucht weiter."
-              : `${matches.length} Inserate sortiert nach Passung.`}
+              ? t("matches.empty.short")
+              : tFormat(t("matches.count"), { n: matches.length })}
           </p>
         </div>
 
         {matches.length === 0 ? (
-          <EmptyState />
+          <EmptyState text={t("matches.empty.long")} cta={t("matches.cta")} />
         ) : (
           <MatchBrowser
             matches={matches}
@@ -74,16 +77,13 @@ export default async function MatchesPage() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ text, cta }: { text: string; cta: string }) {
   return (
     <div className="rounded-xl border border-dashed p-8 text-center space-y-4">
-      <p className="text-sm text-[var(--muted-foreground)]">
-        Wir haben noch keine Treffer für dein Profil. Erzähl Sophie ein
-        bisschen mehr — Lage, Budget, Wohnform — dann finden wir dir was.
-      </p>
+      <p className="text-sm text-[var(--muted-foreground)]">{text}</p>
       <Button asChild>
         <Link href="/chat">
-          <MessageCircle className="size-4" /> Mit Sophie chatten
+          <MessageCircle className="size-4" /> {cta}
         </Link>
       </Button>
     </div>

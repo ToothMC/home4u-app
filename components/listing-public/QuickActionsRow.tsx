@@ -22,53 +22,75 @@ type Action = {
   href?: string;
 };
 
-export function QuickActionsRow({ listing }: { listing: PublicListingData }) {
+export type QuickActionsLabels = {
+  heading: string;
+  floorplan: string;
+  floorplanSub: string;
+  tour: string;
+  tourSub: string;
+  video: string;
+  videoSub: string;
+  neighborhood: string;
+  neighborhoodSub: string;
+  costs: string;
+  costsSub: string;
+  furnishing: string;
+  furnishingSub: string;
+};
+
+export function QuickActionsRow({
+  listing,
+  labels,
+}: {
+  listing: PublicListingData;
+  labels: QuickActionsLabels;
+}) {
   const isDesktop = useIsDesktop();
   const actions: Action[] = [
     {
       key: "floorplan",
-      label: "Grundriss",
-      sub: "2D-Grundriss",
+      label: labels.floorplan,
+      sub: labels.floorplanSub,
       icon: <SquareDashed className="size-5" />,
       enabled: Boolean(listing.floorplan_url),
       href: listing.floorplan_url ?? undefined,
     },
     {
       key: "tour",
-      label: "3D-Tour",
-      sub: "Interaktiv erleben",
+      label: labels.tour,
+      sub: labels.tourSub,
       icon: <Box className="size-5" />,
       enabled: Boolean(listing.tour_3d_url),
       href: listing.tour_3d_url ?? undefined,
     },
     {
       key: "video",
-      label: "Video",
-      sub: "Wohnung im Video",
+      label: labels.video,
+      sub: labels.videoSub,
       icon: <Play className="size-5" />,
       enabled: Boolean(listing.video_url),
       href: listing.video_url ?? undefined,
     },
     {
       key: "neighborhood",
-      label: "Umgebung",
-      sub: "Alles in der Nähe",
+      label: labels.neighborhood,
+      sub: labels.neighborhoodSub,
       icon: <Map className="size-5" />,
       enabled: listing.nearby_pois.length > 0,
       href: "#nearby",
     },
     {
       key: "costs",
-      label: "Kosten",
-      sub: "Alle Details",
+      label: labels.costs,
+      sub: labels.costsSub,
       icon: <Euro className="size-5" />,
       enabled: Boolean(listing.deposit || listing.price_warm),
       href: "#costs",
     },
     {
       key: "furnishing",
-      label: "Möblierung",
-      sub: "Ausstattungsliste",
+      label: labels.furnishing,
+      sub: labels.furnishingSub,
       icon: <Sofa className="size-5" />,
       enabled: listing.features.length > 0 || Boolean(listing.furnishing),
       href: "#features",
@@ -80,7 +102,7 @@ export function QuickActionsRow({ listing }: { listing: PublicListingData }) {
 
   return (
     <section>
-      <h2 className="text-base font-semibold mb-3">Was man sofort sehen will</h2>
+      <h2 className="text-base font-semibold mb-3">{labels.heading}</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {visible.map((a) => {
           const inner = (

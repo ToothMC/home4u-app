@@ -12,7 +12,8 @@ import {
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { BrandLockup } from "@/components/brand/Logo";
 import { LanguageFlagPicker } from "@/components/lang/LanguageFlagPicker";
-import { getPreferredLanguage } from "@/lib/lang/preferred-language";
+import { getT } from "@/lib/i18n/server";
+import { tFormat } from "@/lib/i18n/dict";
 import { ListingRow } from "@/components/dashboard/ListingRow";
 import { SearchRow } from "@/components/dashboard/SearchRow";
 import { SwipeToDeleteRow } from "@/components/dashboard/SwipeToDeleteRow";
@@ -36,7 +37,7 @@ export default async function DashboardPage({
   if (!user) {
     redirect("/?auth=required");
   }
-  const lang = await getPreferredLanguage();
+  const { t, lang } = await getT();
 
   const supabase = createSupabaseServiceClient();
 
@@ -124,7 +125,10 @@ export default async function DashboardPage({
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-3">
           <BrandLockup />
           <div className="flex items-center gap-3">
-            <LanguageFlagPicker initial={lang} />
+            <LanguageFlagPicker
+              initial={lang}
+              labels={{ title: t("lang.label"), choose: t("lang.choose") }}
+            />
             <AuthMenu />
           </div>
         </div>
@@ -132,19 +136,19 @@ export default async function DashboardPage({
 
       <section className="mx-auto max-w-5xl px-4 pt-8 pb-10">
         <h1 className="text-2xl sm:text-3xl font-semibold mb-2 text-[var(--brand-navy)]">
-          Dein Dashboard
+          {t("dashboard.heading")}
         </h1>
         <p className="text-sm text-[var(--muted-foreground)] mb-6 flex items-center gap-3 flex-wrap">
           <span>
             {user.email ? (
               <>
-                Angemeldet als{" "}
+                {t("dashboard.signedInAs")}{" "}
                 <strong title={user.email}>
                   {user.email.split("@")[0]}
                 </strong>
               </>
             ) : (
-              <>Angemeldet</>
+              <>{t("dashboard.signedIn")}</>
             )}
           </span>
           {user.role === "admin" && (
@@ -152,7 +156,7 @@ export default async function DashboardPage({
               href="/dashboard/admin"
               className="text-xs underline text-purple-700 hover:text-purple-900"
             >
-              Admin-Panel
+              {t("dashboard.adminPanel")}
             </Link>
           )}
         </p>
@@ -160,13 +164,14 @@ export default async function DashboardPage({
         <DashboardViewTabs current={view} />
 
         {view === "seeker" ? (
-          <SeekerView profiles={profiles} matchCounts={profileMatchCounts} />
+          <SeekerView profiles={profiles} matchCounts={profileMatchCounts} t={t} />
         ) : (
           <ProviderView
             listings={listings}
             newCounts={listingRequestCounts}
             handledCounts={listingHandledCounts}
             canBulkImport={user.role === "agent" || user.role === "admin"}
+            t={t}
           />
         )}
 
@@ -177,10 +182,10 @@ export default async function DashboardPage({
         <div className="mt-10 rounded-lg border p-4 bg-[var(--accent)] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <MessageCircle className="size-5" />
-            <p className="text-sm">Brauchst du noch etwas? Frag Sophie.</p>
+            <p className="text-sm">{t("dashboard.askSophie")}</p>
           </div>
           <Button asChild size="sm">
-            <Link href="/chat">Chat öffnen</Link>
+            <Link href="/chat">{t("dashboard.openChat")}</Link>
           </Button>
         </div>
       </section>
@@ -191,9 +196,11 @@ export default async function DashboardPage({
 function SeekerView({
   profiles,
   matchCounts,
+  t,
 }: {
   profiles: SearchProfile[];
   matchCounts: Record<string, number>;
+  t: import("@/lib/i18n/dict").T;
 }) {
   const limitReached = profiles.length >= MAX_SEARCH_PROFILES;
   return (
@@ -201,23 +208,27 @@ function SeekerView({
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <SearchIcon className="size-4" />
-          Meine Suchen ({profiles.length}/{MAX_SEARCH_PROFILES})
+          {t("dashboard.mySearches")} ({profiles.length}/{MAX_SEARCH_PROFILES})
         </h2>
         {limitReached ? (
-          <Button size="sm" variant="outline" disabled title={`Limit ${MAX_SEARCH_PROFILES} erreicht — bitte erst eine Suche löschen`}>
-            + Suche
+          <Button
+            size="sm"
+            variant="outline"
+            disabled
+            title={tFormat(t("dashboard.searchLimitTooltip"), { n: MAX_SEARCH_PROFILES })}
+          >
+            {t("dashboard.addSearch")}
           </Button>
         ) : (
           <Button asChild size="sm" variant="outline">
-            <Link href="/chat?flow=seeker">+ Suche</Link>
+            <Link href="/chat?flow=seeker">{t("dashboard.addSearch")}</Link>
           </Button>
         )}
       </div>
       {profiles.length === 0 ? (
         <Card>
           <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
-            Noch keine Suchprofile. Klick oben auf <strong>+ Suche</strong> und
-            erzähl Sophie, wonach du suchst.
+            {t("dashboard.noProfiles")}
           </CardContent>
         </Card>
       ) : (
@@ -226,7 +237,7 @@ function SeekerView({
             <SwipeToDeleteRow
               key={p.id}
               endpoint={`/api/searches/${p.id}`}
-              what="Diese Suche"
+              what={t("dashboard.searchAria")}
             >
               <SearchRow profile={p} matchCount={matchCounts[p.id] ?? 0} />
             </SwipeToDeleteRow>
@@ -235,7 +246,7 @@ function SeekerView({
       )}
       {limitReached && (
         <p className="mt-2 text-xs text-[var(--muted-foreground)]">
-          Limit von {MAX_SEARCH_PROFILES} aktiven Suchen erreicht. Lösche eine Suche, um eine neue anzulegen.
+          {tFormat(t("dashboard.searchLimit"), { n: MAX_SEARCH_PROFILES })}
         </p>
       )}
     </section>
@@ -247,40 +258,41 @@ function ProviderView({
   newCounts,
   handledCounts,
   canBulkImport,
+  t,
 }: {
   listings: Listing[];
   newCounts: Record<string, number>;
   handledCounts: Record<string, number>;
   canBulkImport: boolean;
+  t: import("@/lib/i18n/dict").T;
 }) {
   return (
     <section className="mt-6">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <KeyRound className="size-4" />
-          Meine Inserate ({listings.length})
+          {t("dashboard.myListings")} ({listings.length})
         </h2>
         <div className="flex gap-2">
           {canBulkImport && (
             <Button asChild size="sm" variant="outline">
               <Link href="/dashboard/import">
-                <Upload className="size-3" /> Bulk-Import
+                <Upload className="size-3" /> {t("dashboard.bulkImport")}
               </Link>
             </Button>
           )}
-          <Button asChild size="sm" variant="outline" title="Stöbern in Such-Inseraten — Vermieter können dort gezielt eine Wohnung anbieten">
-            <Link href="/gesuche">Such-Inserate</Link>
+          <Button asChild size="sm" variant="outline" title={t("dashboard.wantedAdsTooltip")}>
+            <Link href="/gesuche">{t("dashboard.wantedAdsBtn")}</Link>
           </Button>
           <Button asChild size="sm" variant="outline">
-            <Link href="/chat?flow=owner">+ Inserat</Link>
+            <Link href="/chat?flow=owner">{t("dashboard.addListing")}</Link>
           </Button>
         </div>
       </div>
       {listings.length === 0 ? (
         <Card>
           <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
-            Noch keine Inserate angelegt. Klick oben auf{" "}
-            <strong>+ Inserat</strong> — Sophie führt dich durch.
+            {t("dashboard.noListings")}
           </CardContent>
         </Card>
       ) : (

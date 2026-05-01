@@ -159,7 +159,7 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
         },
         language: {
           type: "string",
-          enum: ["de", "en", "ru", "el"],
+          enum: ["de", "en", "ru", "el", "zh"],
           description: "Sprache, in der der Anbieter bevorzugt antwortet",
         },
         notes: {

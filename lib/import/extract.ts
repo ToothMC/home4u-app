@@ -91,7 +91,7 @@ const EXTRACTION_TOOL: Anthropic.Tool = {
             },
             language: {
               type: "string",
-              enum: ["de", "en", "ru", "el"],
+              enum: ["de", "en", "ru", "el", "zh"],
               description: "Sprache des Inserats falls erkennbar.",
             },
             confidence: {
@@ -343,7 +343,7 @@ function buildItem(
     )
     .slice(0, 12);
   const language =
-    raw.language && ["de", "en", "ru", "el"].includes(raw.language)
+    raw.language && ["de", "en", "ru", "el", "zh"].includes(raw.language)
       ? (raw.language as NormalizedListing["language"])
       : null;
 

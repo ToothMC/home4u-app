@@ -12,10 +12,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { appendRegionParam } from "@/components/landing/RegionPicker";
+import { useT } from "@/lib/i18n/client";
 
 export function PathCards() {
   const searchParams = useSearchParams();
   const region = searchParams.get("region");
+  const { t } = useT();
 
   const href = (flow: string) =>
     appendRegionParam(`/chat?flow=${flow}`, region);
@@ -24,30 +26,30 @@ export function PathCards() {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <PathCard
         icon={<MessageCircle className="size-6" />}
-        title="Ich suche"
-        description="Erzähl Sophie in fünf Minuten, was du brauchst. Sie meldet sich, sobald sie passende Wohnungen findet."
-        cta="Suche starten"
+        title={t("paths.seeker.title")}
+        description={t("paths.seeker.text")}
+        cta={t("paths.seeker.cta")}
         href={href("seeker")}
       />
       <PathCard
         icon={<Megaphone className="size-6" />}
-        title="Gefunden werden"
-        description="Gib dein Such-Profil frei, damit Makler dich finden und dir passende Objekte anbieten können."
-        cta="Such-Inserate ansehen"
+        title={t("paths.found.title")}
+        description={t("paths.found.text")}
+        cta={t("paths.found.cta")}
         href="/gesuche"
       />
       <PathCard
         icon={<KeyRound className="size-6" />}
-        title="Ich biete (privat)"
-        description="Dein Inserat in 3 Minuten. KI-Preisempfehlung, mehrsprachige Texte, Vorschau-Modus uvm."
-        cta="Inserat erstellen"
+        title={t("paths.owner.title")}
+        description={t("paths.owner.text")}
+        cta={t("paths.owner.cta")}
         href={href("owner")}
       />
       <PathCard
         icon={<Building2 className="size-6" />}
-        title="Ich bin Makler"
-        description="Beta-Zugang für die ersten 50 Partner — Bulk-Import, Such-Inserate, 4-sprachig uvm."
-        cta="Makler-Beirat"
+        title={t("paths.agent.title")}
+        description={t("paths.agent.text")}
+        cta={t("paths.agent.cta")}
         href={href("agent")}
       />
     </div>
@@ -78,9 +80,6 @@ function PathCard({
           {description}
         </CardDescription>
       </CardHeader>
-      {/* mt-auto pinnt den Button-Block ans Card-Bottom — alle Karten in
-          derselben Row haben dann denselben Button-Abstand vom unteren Rand,
-          unabhängig davon wie lang die Description ist. */}
       <CardContent className="mt-auto">
         <Button asChild className="w-full" variant="outline">
           <Link href={href}>{cta}</Link>

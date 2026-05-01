@@ -1,9 +1,8 @@
 /**
  * Sophie-Check-Anzeige in drei Größen-Varianten.
  *
- *   <ScoreLight size="lg" verdict="warn" score={0.55} />   — Detail-Page
- *   <ScoreLight size="md" verdict="clean" score={0.10} /> — Result-Card auf /scam-check
- *   <ScamCheckBadge score={0.10} flags={[]} />            — Listing-Karte (separater Component)
+ *   <ScoreLight size="lg" verdict="warn" score={0.55} labels={...} />   — Detail-Page
+ *   <ScoreLight size="md" verdict="clean" score={0.10} labels={...} /> — Result-Card auf /scam-check
  *
  * Wording-Convention (Spec §6.4 Ehrlichkeits-Klausel):
  *   • Score = Risiko-Indikator, nie Urteil
@@ -11,15 +10,10 @@
  *   • warn  = "Sophie-Check: prüfen"
  *   • high  = "Sophie-Check: hoher Verdacht"
  *
- * Edge-Case: scam_checked_at IS NULL → noch nicht geprüft
- *   (Aktuell sind alle 559 indexierten Listings via SQL-Bootstrap geprüft;
- *   relevant für künftig neu-gecrawlte vor dem nächsten Worker-Lauf.)
- *
- * KEIN "use client" — pure Render-Logik ohne State/Effects. Damit darf
- * verdictFromScore aus Server Components (z.B. ScamCheckBlock auf
- * /listings/[id]) importiert werden. Darüber bin ich zuvor gefallen:
- * Next.js verbietet, aus "use client"-Modulen Funktionen (vs. Components)
- * in Server Components zu rufen → 500 zur Render-Zeit.
+ * KEIN "use client" — pure Render-Logik. Wird sowohl aus Server Components
+ * (ScamCheckBlock) als auch aus Client Components (ScamCheckClient) genutzt.
+ * Daher kommt die Übersetzung als optionale `labels`-Prop rein, statt direkt
+ * an `t()` zu hängen.
  */
 
 import { cn } from "@/lib/utils";
@@ -27,6 +21,21 @@ import { cn } from "@/lib/utils";
 export type Verdict3 = "clean" | "warn" | "high";
 
 export type ScoreLightSize = "lg" | "md" | "sm";
+
+export type ScoreLightLabels = {
+  clean: string;
+  warn: string;
+  high: string;
+  /** Template mit {score} */
+  scoreLine: string;
+};
+
+const DEFAULT_LABELS: ScoreLightLabels = {
+  clean: "Kein Scam",
+  warn: "Nicht sicher",
+  high: "Hoher Verdacht",
+  scoreLine: "Score: {score} / 1.00 — Risiko-Indikator, kein Urteil.",
+};
 
 export function verdictFromScore(score: number | null | undefined): Verdict3 {
   if (score == null) return "clean";
@@ -37,28 +46,12 @@ export function verdictFromScore(score: number | null | undefined): Verdict3 {
 
 const STAGES: Array<{
   key: Verdict3;
-  label: string;
   activeColor: string;
   activeRing: string;
 }> = [
-  {
-    key: "clean",
-    label: "Kein Scam",
-    activeColor: "bg-emerald-500",
-    activeRing: "ring-emerald-200",
-  },
-  {
-    key: "warn",
-    label: "Nicht sicher",
-    activeColor: "bg-orange-500",
-    activeRing: "ring-orange-200",
-  },
-  {
-    key: "high",
-    label: "Hoher Verdacht",
-    activeColor: "bg-red-500",
-    activeRing: "ring-red-200",
-  },
+  { key: "clean", activeColor: "bg-emerald-500", activeRing: "ring-emerald-200" },
+  { key: "warn", activeColor: "bg-orange-500", activeRing: "ring-orange-200" },
+  { key: "high", activeColor: "bg-red-500", activeRing: "ring-red-200" },
 ];
 
 const SIZES = {
@@ -72,13 +65,16 @@ export function ScoreLight({
   score,
   size = "lg",
   showScoreLine = true,
+  labels,
 }: {
   verdict: Verdict3;
   score: number;
   size?: ScoreLightSize;
   showScoreLine?: boolean;
+  labels?: ScoreLightLabels;
 }) {
   const sz = SIZES[size];
+  const L = labels ?? DEFAULT_LABELS;
 
   return (
     <div className="space-y-3">
@@ -106,7 +102,7 @@ export function ScoreLight({
                   isActive ? "opacity-100" : "opacity-40",
                 )}
               >
-                {stage.label}
+                {L[stage.key]}
               </span>
             </div>
           );
@@ -114,7 +110,7 @@ export function ScoreLight({
       </div>
       {showScoreLine && (
         <p className="text-center text-xs opacity-60">
-          Score: {score.toFixed(2)} / 1.00 — Risiko-Indikator, kein Urteil.
+          {L.scoreLine.replace("{score}", score.toFixed(2))}
         </p>
       )}
     </div>

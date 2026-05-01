@@ -23,7 +23,7 @@ const patchSchema = z
       .optional()
       .transform((v) => (v === "" ? null : v)),
     preferred_language: z
-      .enum(["de", "en", "ru", "el"])
+      .enum(["de", "en", "ru", "el", "zh"])
       .nullable()
       .optional(),
     contact_channel: z

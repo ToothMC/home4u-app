@@ -2,9 +2,9 @@ import { cookies } from "next/headers";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
 
-export type SupportedLang = "de" | "en" | "ru" | "el";
+export type SupportedLang = "de" | "en" | "ru" | "el" | "zh";
 
-const SUPPORTED: SupportedLang[] = ["de", "en", "ru", "el"];
+const SUPPORTED: SupportedLang[] = ["de", "en", "ru", "el", "zh"];
 
 /**
  * Liefert die bevorzugte Sprache des aktuellen Besuchers.

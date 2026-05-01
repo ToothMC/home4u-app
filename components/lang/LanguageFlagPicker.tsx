@@ -14,13 +14,14 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
  * - Anon: speichert in Cookie home4u_lang (1 Jahr)
  */
 
-type Lang = "de" | "en" | "ru" | "el";
+type Lang = "de" | "en" | "ru" | "el" | "zh";
 
 const LANGS: { code: Lang; flag: string; label: string }[] = [
   { code: "de", flag: "🇩🇪", label: "Deutsch" },
   { code: "en", flag: "🇬🇧", label: "English" },
   { code: "ru", flag: "🇷🇺", label: "Русский" },
   { code: "el", flag: "🇬🇷", label: "Ελληνικά" },
+  { code: "zh", flag: "🇨🇳", label: "中文" },
 ];
 
 const COOKIE_NAME = "home4u_lang";

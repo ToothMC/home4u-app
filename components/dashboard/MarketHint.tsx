@@ -2,6 +2,8 @@
 
 import { TrendingUp, TrendingDown, CheckCircle2, MinusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import { tFormat } from "@/lib/i18n/dict";
 
 type Position =
   | "very_good"
@@ -11,6 +13,14 @@ type Position =
   | "expensive"
   | "unknown"
   | null;
+
+const NUMBER_LOCALE: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 export function MarketHint({
   position,
@@ -27,14 +37,15 @@ export function MarketHint({
   p75: number | null;
   compsetSize: number;
 }) {
+  const { t, lang } = useT();
+  const fmt = (n: number) =>
+    `${n.toLocaleString(NUMBER_LOCALE[lang], { maximumFractionDigits: 0 })} €/m²`;
+
   if (!position || position === "unknown" || pricePerSqm == null || median == null) {
     return (
       <div className="rounded-md border border-dashed bg-[var(--accent)]/40 p-3 text-xs text-[var(--muted-foreground)] flex items-start gap-2">
         <MinusCircle className="size-3 mt-0.5 shrink-0" />
-        <span>
-          Noch zu wenig vergleichbare Inserate für eine Preis-Einschätzung
-          ({compsetSize} im Datensatz). Wir aktualisieren das automatisch.
-        </span>
+        <span>{tFormat(t("marketHint.notEnoughDataset"), { n: compsetSize })}</span>
       </div>
     );
   }
@@ -47,14 +58,13 @@ export function MarketHint({
   const tone = isGood ? "emerald" : isFair ? "blue" : "amber";
   const Icon = isGood ? CheckCircle2 : isHigh ? TrendingUp : TrendingDown;
 
-  const fmt = (n: number) => `${n.toLocaleString("de-DE", { maximumFractionDigits: 0 })} €/m²`;
-
   const message = (() => {
-    if (position === "very_good") return "Sehr günstig — top für Suchende, schnelle Anfragen wahrscheinlich.";
-    if (position === "good") return "Günstig — wird viele Anfragen bekommen.";
-    if (position === "fair") return "Fairer Preis — entspricht dem lokalen Markt.";
-    if (position === "above") return `Etwas über Markt — überlege ob ${fmt(p75 ?? median)} oder weniger realistischer ist.`;
-    return `Deutlich über Markt — bekommt voraussichtlich wenig Anfragen. Median liegt bei ${fmt(median)}.`;
+    if (position === "very_good") return t("marketHint.veryLow");
+    if (position === "good") return t("marketHint.low");
+    if (position === "fair") return t("marketHint.fair");
+    if (position === "above")
+      return tFormat(t("marketHint.aboveMarket"), { p75: fmt(p75 ?? median) });
+    return tFormat(t("marketHint.farAbove"), { median: fmt(median) });
   })();
 
   return (
@@ -69,16 +79,17 @@ export function MarketHint({
       <Icon className="size-4 mt-0.5 shrink-0" />
       <div className="space-y-1 min-w-0">
         <div>
-          Dein Preis: <strong>{fmt(pricePerSqm)}</strong>
-          {" · "}Markt-Median: <strong>{fmt(median)}</strong>
+          {t("marketHint.yourPrice")}: <strong>{fmt(pricePerSqm)}</strong>
+          {" · "}
+          {t("marketHint.median")}: <strong>{fmt(median)}</strong>
           {" · "}
           {deltaPct > 0 ? `+${deltaPct}` : deltaPct} %
         </div>
         <div className="opacity-90">{message}</div>
         <div className="text-[10px] opacity-75">
-          Vergleich: {compsetSize} aktive Inserate
+          {t("marketHint.compset")}: {compsetSize} {t("marketHint.activeListings")}
           {p25 != null && p75 != null
-            ? ` · Markt-Spanne ${fmt(p25)} – ${fmt(p75)}`
+            ? ` · ${t("marketHint.range")} ${fmt(p25)} – ${fmt(p75)}`
             : ""}
         </div>
       </div>

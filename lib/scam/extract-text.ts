@@ -34,7 +34,7 @@ export type ScamExtractResult = {
   rooms?: number;
   size_sqm?: number;
   contact_phone?: string;
-  language?: "de" | "en" | "ru" | "el" | "other";
+  language?: "de" | "en" | "ru" | "el" | "zh" | "other";
   /** 0..1 — wie sicher ist die Extraktion */
   confidence: number;
   /** 0..0.30 — Beitrag der Text-Heuristiken zum Gesamtscore (Score-Engine §6.2) */
@@ -59,7 +59,7 @@ const EXTRACT_TOOL: Anthropic.Tool = {
       rooms: { type: "integer", description: "Anzahl Schlafzimmer (Studio = 0)." },
       size_sqm: { type: "integer" },
       contact_phone: { type: "string", description: "E.164-Format, +357 für Zypern." },
-      language: { type: "string", enum: ["de", "en", "ru", "el", "other"] },
+      language: { type: "string", enum: ["de", "en", "ru", "el", "zh", "other"] },
       confidence: { type: "number", description: "0..1" },
       quality_signals: {
         type: "array",
@@ -124,7 +124,7 @@ export async function extractTextListing(text: string): Promise<ScamExtractResul
     contact_phone: typeof raw.contact_phone === "string" ? raw.contact_phone : undefined,
     language:
       typeof raw.language === "string" &&
-      ["de", "en", "ru", "el", "other"].includes(raw.language as string)
+      ["de", "en", "ru", "el", "zh", "other"].includes(raw.language as string)
         ? (raw.language as ScamExtractResult["language"])
         : undefined,
     confidence: Math.max(0, Math.min(1, Number(raw.confidence) || 0)),

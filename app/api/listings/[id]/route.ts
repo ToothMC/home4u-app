@@ -32,7 +32,7 @@ const patchSchema = z
     pets_allowed: z.boolean().nullable().optional(),
     available_from: z.string().nullable().optional(), // ISO date
     contact_channel: z.string().max(40).nullable().optional(),
-    language: z.enum(["de", "en", "ru", "el"]).nullable().optional(),
+    language: z.enum(["de", "en", "ru", "el", "zh"]).nullable().optional(),
     media: z.array(z.string().url().max(1024)).max(40).optional(),
     // Vollständige Statusliste — der Editor bietet im Dropdown alle 7 Werte
     // an (aktiv/reserviert/vermietet/verkauft/fraglich/archiviert/deaktiviert).

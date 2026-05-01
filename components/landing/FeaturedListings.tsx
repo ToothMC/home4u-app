@@ -3,6 +3,17 @@ import { ArrowRight, MapPin, Bed, Bath, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { detectRegion } from "@/lib/geo/detect-region";
+import { getT } from "@/lib/i18n/server";
+import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
+import type { SupportedLang } from "@/lib/lang/preferred-language";
+
+const NUMBER_LOCALE: Record<SupportedLang, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 type FeaturedListing = {
   id: string;
@@ -18,28 +29,25 @@ type FeaturedListing = {
   media: string[] | null;
 };
 
-const TYPE_LABEL: Record<string, string> = {
-  apartment: "Wohnung",
-  house: "Haus",
-  villa: "Villa",
-  studio: "Studio",
-  townhouse: "Townhouse",
-  penthouse: "Penthouse",
-};
-
-function fmt(price: number, currency: string) {
-  return new Intl.NumberFormat("de-DE", {
+function fmt(price: number, currency: string, lang: SupportedLang) {
+  return new Intl.NumberFormat(NUMBER_LOCALE[lang], {
     style: "currency",
     currency: currency || "EUR",
     maximumFractionDigits: 0,
   }).format(price);
 }
 
-function roomsTitle(rooms: number | null, propertyType: string | null) {
-  const t = propertyType ? TYPE_LABEL[propertyType] ?? "Immobilie" : "Immobilie";
-  if (rooms === 0) return `Studio ${t}`;
-  if (!rooms) return t;
-  return `${rooms} Schlafzimmer ${t}`;
+function roomsTitle(
+  rooms: number | null,
+  propertyType: string | null,
+  t: T,
+): string {
+  const typeLabel = propertyType
+    ? t((`property.${propertyType}`) as TKey) || t("property.fallback")
+    : t("property.fallback");
+  if (rooms === 0) return `${t("listing.fallbackTitle.studio")} ${typeLabel}`;
+  if (!rooms) return typeLabel;
+  return `${rooms}${t("listing.fallbackTitle.roomsSuffix")} ${typeLabel}`.trim();
 }
 
 export async function FeaturedListings({
@@ -101,9 +109,10 @@ export async function FeaturedListings({
 
   if (listings.length === 0) return null;
 
+  const { t, lang } = await getT();
   const heading = region
-    ? `Ausgewählte Immobilien in ${region.label}`
-    : "Ausgewählte Immobilien für dich";
+    ? tFormat(t("featured.headingIn"), { region: region.label })
+    : t("featured.headingFor");
 
   return (
     <section className="mx-auto max-w-6xl px-6 pb-12 sm:pb-20">
@@ -113,14 +122,14 @@ export async function FeaturedListings({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {listings.map((l) => (
-          <ListingCard key={l.id} listing={l} />
+          <ListingCard key={l.id} listing={l} t={t} lang={lang} />
         ))}
       </div>
 
       <div className="flex justify-center mt-10">
         <Button asChild variant="outline" size="lg" className="rounded-full">
           <Link href="/matches">
-            Alle Immobilien ansehen
+            {t("featured.viewAll")}
             <ArrowRight />
           </Link>
         </Button>
@@ -129,7 +138,15 @@ export async function FeaturedListings({
   );
 }
 
-function ListingCard({ listing }: { listing: FeaturedListing }) {
+function ListingCard({
+  listing,
+  t,
+  lang,
+}: {
+  listing: FeaturedListing;
+  t: T;
+  lang: SupportedLang;
+}) {
   const cover = listing.media?.[0];
   return (
     <Link
@@ -149,7 +166,7 @@ function ListingCard({ listing }: { listing: FeaturedListing }) {
       </div>
       <div className="p-4 flex flex-col gap-2 flex-1">
         <h3 className="font-medium text-[var(--brand-navy)] leading-snug">
-          {roomsTitle(listing.rooms, listing.property_type)}
+          {roomsTitle(listing.rooms, listing.property_type, t)}
         </h3>
         <div className="flex items-center gap-1 text-xs text-[var(--warm-bark)]">
           <MapPin className="size-3 text-[var(--brand-gold)]" />
@@ -160,9 +177,9 @@ function ListingCard({ listing }: { listing: FeaturedListing }) {
           </span>
         </div>
         <div className="text-lg font-semibold text-[var(--brand-navy)] mt-auto">
-          {fmt(listing.price, listing.currency)}
+          {fmt(listing.price, listing.currency, lang)}
           {listing.type === "rent" && (
-            <span className="text-xs font-normal text-[var(--warm-bark)]"> / Monat</span>
+            <span className="text-xs font-normal text-[var(--warm-bark)]"> {t("listing.price.perMonth")}</span>
           )}
         </div>
         <div className="flex items-center gap-3 text-[11px] text-[var(--warm-bark)] pt-2 border-t border-[var(--border)]">

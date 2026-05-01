@@ -4,29 +4,28 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Loader2 } from "lucide-react";
 import { emitMatchesUpdated } from "@/lib/events/match-events";
+import { useT } from "@/lib/i18n/client";
+import type { TKey } from "@/lib/i18n/dict";
 
-// Inserat-Status, bei denen die Anfrage keinen Sinn mehr macht — Button wird
-// dann disabled und zeigt den Status direkt als Label. Farben gleich wie im
-// ListingStatusBadge, damit der User den Status auf einen Blick erkennt.
-const NON_INQUIRABLE: Record<string, { label: string; cls: string }> = {
+const NON_INQUIRABLE_KEYS: Record<string, { key: TKey; cls: string }> = {
   reserved: {
-    label: "Reserviert",
+    key: "status.reserved",
     cls: "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40",
   },
   rented: {
-    label: "Vermietet",
+    key: "status.rented",
     cls: "bg-[var(--destructive)]/15 text-[var(--destructive)] border border-[var(--destructive)]/30 font-semibold",
   },
   sold: {
-    label: "Verkauft",
+    key: "status.sold",
     cls: "bg-[var(--destructive)]/15 text-[var(--destructive)] border border-[var(--destructive)]/30 font-semibold",
   },
   opted_out: {
-    label: "Nicht verfügbar",
+    key: "status.notAvailable",
     cls: "bg-[var(--muted)] text-[var(--muted-foreground)]",
   },
   archived: {
-    label: "Archiviert",
+    key: "status.archived",
     cls: "bg-[var(--muted)] text-[var(--muted-foreground)]",
   },
 };
@@ -41,6 +40,7 @@ export function RequestVisitButton({
   listingStatus?: string;
 }) {
   const router = useRouter();
+  const { t } = useT();
   const [state, setState] = React.useState<"idle" | "submitting" | "done" | "error">("idle");
   const [error, setError] = React.useState<string | null>(null);
   const [matchId, setMatchId] = React.useState<string | null>(null);
@@ -56,11 +56,9 @@ export function RequestVisitButton({
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        const reason = detail.detail ?? detail.error ?? `Fehler ${res.status}`;
+        const reason = detail.detail ?? detail.error ?? `Error ${res.status}`;
         if (reason === "no_active_profile") {
-          setError(
-            "Bitte erstelle erst eine Suche bei Sophie — dann kannst du anfragen."
-          );
+          setError(t("request.error.noProfile"));
         } else {
           setError(reason);
         }
@@ -73,7 +71,7 @@ export function RequestVisitButton({
       emitMatchesUpdated();
       setTimeout(() => router.push(`/matches/${json.match_id}`), 1200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setError(err instanceof Error ? err.message : t("btn.networkError"));
       setState("error");
     }
   }
@@ -81,13 +79,13 @@ export function RequestVisitButton({
   if (state === "done" && matchId) {
     return (
       <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800 flex items-center gap-2">
-        <Check className="size-4" /> Anfrage raus — wir leiten dich weiter…
+        <Check className="size-4" /> {t("request.sentRedirecting")}
       </div>
     );
   }
 
-  if (listingStatus && NON_INQUIRABLE[listingStatus]) {
-    const s = NON_INQUIRABLE[listingStatus];
+  if (listingStatus && NON_INQUIRABLE_KEYS[listingStatus]) {
+    const s = NON_INQUIRABLE_KEYS[listingStatus];
     return (
       <button
         type="button"
@@ -99,7 +97,7 @@ export function RequestVisitButton({
           s.cls
         }
       >
-        {s.label}
+        {t(s.key)}
       </button>
     );
   }
@@ -120,7 +118,7 @@ export function RequestVisitButton({
         ) : (
           <ArrowRight className="size-4" />
         )}
-        Besichtigung anfragen
+        {t("btn.requestVisit")}
       </button>
       {error && (
         <p className="text-xs text-red-700 px-1">{error}</p>
@@ -128,7 +126,7 @@ export function RequestVisitButton({
       {state !== "submitting" && state !== "error" && (
         <p className="text-xs text-[var(--muted-foreground)] flex items-center gap-1 justify-center">
           <Check className="size-3 text-emerald-700" />
-          Schnell, unverbindlich & kostenlos
+          {t("request.fastFree")}
         </p>
       )}
     </div>

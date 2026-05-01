@@ -1,4 +1,16 @@
+"use client";
+
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
+
+const NUMBER_LOCALE: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 export type MarketPosition =
   | "very_good"
@@ -22,26 +34,26 @@ export type MarketData = {
 
 export const MARKET_POSITION_CONFIG: Record<
   Exclude<MarketPosition, "unknown">,
-  { bars: number; label: string; tone: "green" | "orange" }
+  { bars: number; key: TKey; tone: "green" | "orange" }
 > = {
-  very_good: { bars: 5, label: "Sehr guter Preis", tone: "green" },
-  good: { bars: 4, label: "Guter Preis", tone: "green" },
-  fair: { bars: 3, label: "Fairer Preis", tone: "green" },
-  above: { bars: 2, label: "Erhöhter Preis", tone: "orange" },
-  expensive: { bars: 1, label: "Hoher Preis", tone: "orange" },
+  very_good: { bars: 5, key: "matchCard.priceVeryGood", tone: "green" },
+  good: { bars: 4, key: "matchCard.priceGood", tone: "green" },
+  fair: { bars: 3, key: "matchCard.priceFair", tone: "green" },
+  above: { bars: 2, key: "matchCard.priceElevated", tone: "orange" },
+  expensive: { bars: 1, key: "matchCard.priceHigh", tone: "orange" },
 };
 
 const CONFIG = MARKET_POSITION_CONFIG;
 
 export function MarketPriceBlock({ data }: { data: MarketData }) {
+  const { t, lang } = useT();
+
   if (data.position === "unknown") {
     return (
       <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-2">
-        <h3 className="text-sm font-semibold">Preis-Einschätzung</h3>
+        <h3 className="text-sm font-semibold">{t("marketPrice.heading")}</h3>
         <p className="text-xs text-[var(--muted-foreground)]">
-          Noch zu wenig vergleichbare Inserate für eine faire Einschätzung
-          {data.compset_size > 0 ? ` (${data.compset_size} gefunden)` : ""}.
-          Wir aktualisieren das automatisch sobald genug Daten da sind.
+          {t("marketPrice.notEnough")}
         </p>
       </section>
     );
@@ -49,38 +61,48 @@ export function MarketPriceBlock({ data }: { data: MarketData }) {
 
   const cfg = CONFIG[data.position];
   const fmt = (n: number) =>
-    `${n.toLocaleString("de-DE", { maximumFractionDigits: 0 })} €/m²`;
+    `${n.toLocaleString(NUMBER_LOCALE[lang] ?? "en-GB", { maximumFractionDigits: 0 })} €/m²`;
+
+  const place = data.district ? `${data.district}, ${data.city}` : data.city;
+  const roomsClause =
+    data.rooms == null
+      ? ""
+      : `, ${
+          data.rooms === 0
+            ? t("marketPrice.studios")
+            : tFormat(t("marketPrice.roomsApt"), { n: data.rooms })
+        }`;
 
   return (
     <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-3">
       <div>
-        <h3 className="text-sm font-semibold">Preis-Einschätzung</h3>
+        <h3 className="text-sm font-semibold">{t("marketPrice.heading")}</h3>
         <p className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider mt-0.5">
-          €/m² verglichen mit ähnlichen Inseraten
+          {t("marketPrice.subheading")}
         </p>
       </div>
 
       <div className="flex items-center gap-3">
-        <MarketBars bars={cfg.bars} tone={cfg.tone} />
+        <MarketBars bars={cfg.bars} tone={cfg.tone} t={t} />
         <div
           className={cn(
             "text-sm font-semibold",
             cfg.tone === "green" ? "text-emerald-700" : "text-amber-700"
           )}
         >
-          {cfg.label}
+          {t(cfg.key)}
         </div>
       </div>
 
       {data.price_per_sqm != null && (
         <div className="text-xs grid grid-cols-3 gap-2 pt-1">
-          <Stat label="Diese Wohnung" value={fmt(data.price_per_sqm)} highlight />
+          <Stat label={t("marketPrice.thisOne")} value={fmt(data.price_per_sqm)} highlight />
           {data.median_eur_sqm != null && (
-            <Stat label="Markt-Median" value={fmt(data.median_eur_sqm)} />
+            <Stat label={t("marketHint.median")} value={fmt(data.median_eur_sqm)} />
           )}
           {data.p25_eur_sqm != null && data.p75_eur_sqm != null && (
             <Stat
-              label="Markt-Spanne (50 %)"
+              label={t("marketPrice.range50")}
               value={`${fmt(data.p25_eur_sqm)} – ${fmt(data.p75_eur_sqm)}`}
             />
           )}
@@ -88,24 +110,31 @@ export function MarketPriceBlock({ data }: { data: MarketData }) {
       )}
 
       <p className="text-[11px] text-[var(--muted-foreground)] border-t pt-2">
-        Basierend auf <strong>{data.compset_size}</strong> aktiven Inseraten
-        {" in "}
-        {data.district ? `${data.district}, ${data.city}` : data.city}
-        {data.rooms != null
-          ? `, ${data.rooms === 0 ? "Studios" : `${data.rooms}-Zi-Wohnungen`}`
-          : ""}
-        . Statistische Einschätzung — kein endgültiges Urteil.
+        {tFormat(t("marketPrice.basedOn"), {
+          n: data.compset_size,
+          place,
+          rooms: roomsClause,
+        })}
       </p>
     </section>
   );
 }
 
-export function MarketBars({ bars, tone }: { bars: number; tone: "green" | "orange" }) {
+export function MarketBars({
+  bars,
+  tone,
+  t,
+}: {
+  bars: number;
+  tone: "green" | "orange";
+  t?: T;
+}) {
+  const aria = t ? tFormat(t("marketPrice.bars5"), { bars }) : `${bars} / 5`;
   return (
-    <div className="flex items-end gap-1" role="img" aria-label={`${bars} von 5 Balken`}>
+    <div className="flex items-end gap-1" role="img" aria-label={aria}>
       {[1, 2, 3, 4, 5].map((i) => {
         const active = i <= bars;
-        const height = 8 + i * 4; // 12, 16, 20, 24, 28 px
+        const height = 8 + i * 4;
         return (
           <span
             key={i}

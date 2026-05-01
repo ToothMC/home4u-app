@@ -2,6 +2,7 @@
 
 import { Phone, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useT } from "@/lib/i18n/client";
 
 type RevealedContact = { phone: string | null; email: string | null };
 
@@ -18,6 +19,7 @@ export function RevealPhoneButton({
   sourceUrl: string | null;
   full?: boolean;
 }) {
+  const { t } = useT();
   const [contact, setContact] = useState<RevealedContact | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,11 +41,10 @@ export function RevealPhoneButton({
           }
         >
           <Phone className="size-4" />
-          Anmelden für Telefon-Nr.
+          {t("phone.reveal.signin")}
         </a>
         <p className="text-xs text-[var(--muted-foreground)] text-center px-2">
-          Wir zeigen Telefonnummern nur eingeloggten Nutzern — schützt vor
-          Bot-Scraping und respektiert die Anbieter.
+          {t("phone.reveal.signinHint")}
         </p>
       </div>
     );
@@ -117,10 +118,10 @@ export function RevealPhoneButton({
           }
         >
           <Phone className="size-4" />
-          Telefonnummer beim Anbieter abrufen
+          {t("phone.reveal.atSource")}
         </a>
         <p className="text-xs text-[var(--muted-foreground)] text-center px-2">
-          Diese Nummer steht nur direkt beim Anbieter zur Verfügung.
+          {t("phone.reveal.atSourceHint")}
         </p>
       </div>
     );
@@ -142,15 +143,15 @@ export function RevealPhoneButton({
         ) : (
           <Phone className="size-4" />
         )}
-        {loading ? "Lade …" : "Telefonnummer anzeigen"}
+        {loading ? t("phone.reveal.loading") : t("phone.reveal.locked")}
       </button>
       {error && error !== "no_phone" && (
         <p className="text-xs text-[var(--destructive)] text-center px-2">
-          Fehler: {error}
+          {t("phone.reveal.errorPrefix")}: {error}
         </p>
       )}
       <p className="text-xs text-[var(--muted-foreground)] text-center px-2">
-        Quelle: {sourceLabel(source)}
+        {t("phone.reveal.sourceLabel")}: {sourceLabel(source)}
       </p>
     </div>
   );
@@ -170,7 +171,7 @@ const SOURCE_LABELS: Record<string, string> = {
   cyprus_real_estate: "Cyprus-Real.Estate",
   fb: "Facebook",
   direct: "Home4U",
-  other: "externe Quelle",
+  other: "—",
 };
 
 function sourceLabel(source: string): string {

@@ -1,15 +1,10 @@
-/**
- * Inline-Badge für die Preis-Einschätzung — neben dem Preis platziert.
- * Klick öffnet Modal mit dem vollen MarketPriceBlock (Stats + Compset).
- *
- * User-Wunsch: nur das kleine 5-Bar-Indikator-Chip oben rechts neben
- * dem Preis. Standalone-Block ist zu viel Bildschirm-Real-Estate.
- */
 "use client";
 
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import { tFormat } from "@/lib/i18n/dict";
 
 import {
   MARKET_POSITION_CONFIG,
@@ -19,11 +14,13 @@ import {
 } from "./MarketPriceBlock";
 
 export function MarketPriceBadge({ data }: { data: MarketData }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
 
   if (data.position === "unknown") return null;
 
   const cfg = MARKET_POSITION_CONFIG[data.position];
+  const label = t(cfg.key);
 
   return (
     <>
@@ -35,16 +32,16 @@ export function MarketPriceBadge({ data }: { data: MarketData }) {
           "hover:bg-[var(--brand-gold-50)]",
           "border border-transparent hover:border-[var(--border)]",
         )}
-        aria-label={`${cfg.label} — Details anzeigen`}
+        aria-label={tFormat(t("marketPrice.detailsAria"), { label })}
       >
-        <MarketBars bars={cfg.bars} tone={cfg.tone} />
+        <MarketBars bars={cfg.bars} tone={cfg.tone} t={t} />
         <span
           className={cn(
             "text-xs font-semibold",
             cfg.tone === "green" ? "text-emerald-700" : "text-amber-700",
           )}
         >
-          {cfg.label}
+          {label}
         </span>
       </button>
 
@@ -64,7 +61,7 @@ export function MarketPriceBadge({ data }: { data: MarketData }) {
                 onClick={() => setOpen(false)}
                 className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline hover:no-underline px-2 py-1"
               >
-                Schließen
+                {t("marketPrice.close")}
               </button>
             </div>
           </div>

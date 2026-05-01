@@ -1,20 +1,24 @@
 import { Sparkles, KeyRound, ShieldCheck, TrendingUp } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import type { T } from "@/lib/i18n/dict";
+import type { SupportedLang } from "@/lib/lang/preferred-language";
 
-/**
- * StatsStrip — Vier Live-KPIs als Trust-Anker auf der Landingpage.
- * Daten werden zur Build- bzw. Request-Zeit aus Supabase gezogen.
- * Bei fehlendem Service-Client fällt der Component still aus (renders nichts).
- */
-
-const NUMBER_FMT = new Intl.NumberFormat("de-DE");
+const NUMBER_LOCALE: Record<SupportedLang, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 type Stat = { icon: LucideIcon; value: string; label: string };
 
-async function fetchStats(): Promise<Stat[] | null> {
+async function fetchStats(t: T, lang: SupportedLang): Promise<Stat[] | null> {
   const supabase = createSupabaseServiceClient();
   if (!supabase) return null;
+  const fmt = new Intl.NumberFormat(NUMBER_LOCALE[lang]);
 
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
@@ -57,15 +61,16 @@ async function fetchStats(): Promise<Stat[] | null> {
   const priceRated = priceRes.count ?? 0;
 
   return [
-    { icon: Sparkles, value: NUMBER_FMT.format(new24h), label: "Täglich neue Inserate" },
-    { icon: KeyRound, value: NUMBER_FMT.format(active), label: "Verfügbare Immobilien" },
-    { icon: ShieldCheck, value: NUMBER_FMT.format(scamChecked), label: "Geprüfte Inserate" },
-    { icon: TrendingUp, value: NUMBER_FMT.format(priceRated), label: "Preisbewertung" },
+    { icon: Sparkles, value: fmt.format(new24h), label: t("stats.dailyNew") },
+    { icon: KeyRound, value: fmt.format(active), label: t("stats.available") },
+    { icon: ShieldCheck, value: fmt.format(scamChecked), label: t("stats.verified") },
+    { icon: TrendingUp, value: fmt.format(priceRated), label: t("stats.priceRating") },
   ];
 }
 
 export async function StatsStrip() {
-  const stats = await fetchStats();
+  const { t, lang } = await getT();
+  const stats = await fetchStats(t, lang);
   if (!stats) return null;
 
   return (

@@ -6,6 +6,7 @@ import { Loader2, Mail, LogIn, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/client";
 
 type Mode = "email" | "code" | "success";
 
@@ -21,6 +22,7 @@ export function SignInDialog({
   /** Wenn gesetzt: nach Login dorthin navigieren statt window.location.reload(). */
   redirectAfter?: string;
 }) {
+  const { t } = useT();
   const [mode, setMode] = useState<Mode>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -132,7 +134,7 @@ export function SignInDialog({
           }}
         >
           <Dialog.Close
-            aria-label="Schließen"
+            aria-label={t("common.back")}
             className="absolute right-3 top-3 p-1 hover:bg-[var(--accent)] rounded-md"
           >
             <X className="size-4" />
@@ -141,10 +143,10 @@ export function SignInDialog({
           {mode === "email" && (
             <div>
               <Dialog.Title className="text-lg font-semibold flex items-center gap-2">
-                <LogIn className="size-4" /> Anmelden
+                <LogIn className="size-4" /> {t("auth.signin.title")}
               </Dialog.Title>
               <Dialog.Description className="text-sm text-[var(--muted-foreground)] mt-1 mb-4">
-                Wir schicken dir einen Code per E-Mail.
+                {t("auth.signin.subtitle")}
               </Dialog.Description>
               <form
                 onSubmit={(e) => {
@@ -157,7 +159,7 @@ export function SignInDialog({
                   type="email"
                   inputMode="email"
                   autoComplete="email"
-                  placeholder="du@beispiel.de"
+                  placeholder={t("auth.signin.emailPlaceholder")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={busy}
@@ -170,7 +172,7 @@ export function SignInDialog({
                   ) : (
                     <Mail className="size-4" />
                   )}
-                  Code senden
+                  {busy ? t("auth.signin.sending") : t("auth.signin.send")}
                 </Button>
               </form>
               {error && (
@@ -182,11 +184,10 @@ export function SignInDialog({
           {mode === "code" && (
             <div>
               <Dialog.Title className="text-lg font-semibold">
-                Code eingeben
+                {t("auth.signin.codePlaceholder")}
               </Dialog.Title>
               <Dialog.Description className="text-sm text-[var(--muted-foreground)] mt-1 mb-4">
-                Wir haben einen Code an <strong>{email}</strong> geschickt.
-                Schau in deinem Posteingang nach.
+                <strong>{email}</strong> · {t("auth.signin.codeHint")}
               </Dialog.Description>
               <form
                 onSubmit={(e) => {
@@ -216,7 +217,7 @@ export function SignInDialog({
                   disabled={busy || code.length < 6}
                 >
                   {busy ? <Loader2 className="animate-spin" /> : null}
-                  Anmelden
+                  {busy ? t("auth.signin.verifying") : t("auth.signin.verify")}
                 </Button>
                 <div className="flex items-center justify-between text-sm">
                   <button
@@ -228,12 +229,13 @@ export function SignInDialog({
                     }}
                     className="text-[var(--muted-foreground)] hover:underline"
                   >
-                    ← andere E-Mail
+                    ← {t("auth.signin.tryAgain")}
                   </button>
                   <ResendButton
                     cooldownEnd={cooldownEnd}
                     onResend={() => sendOtp({ resend: true })}
                     disabled={busy}
+                    label={t("auth.signin.send")}
                   />
                 </div>
               </form>
@@ -246,10 +248,10 @@ export function SignInDialog({
           {mode === "success" && (
             <div className="py-8 text-center">
               <Dialog.Title className="text-lg font-semibold">
-                Eingeloggt ✓
+                {t("dashboard.signedIn")} ✓
               </Dialog.Title>
               <Dialog.Description className="text-sm text-[var(--muted-foreground)] mt-1">
-                Moment …
+                {t("common.loading")}
               </Dialog.Description>
             </div>
           )}
@@ -263,10 +265,12 @@ function ResendButton({
   cooldownEnd,
   onResend,
   disabled,
+  label,
 }: {
   cooldownEnd: number | null;
   onResend: () => void;
   disabled?: boolean;
+  label: string;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -278,7 +282,7 @@ function ResendButton({
   if (remaining > 0) {
     return (
       <span className="text-[var(--muted-foreground)]">
-        erneut in {secs}s
+        {secs}s
       </span>
     );
   }
@@ -289,7 +293,7 @@ function ResendButton({
       disabled={disabled}
       className="text-[var(--primary)] hover:underline disabled:opacity-50"
     >
-      Code erneut senden
+      {label}
     </button>
   );
 }

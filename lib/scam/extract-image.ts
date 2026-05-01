@@ -51,7 +51,7 @@ const EXTRACT_TOOL: Anthropic.Tool = {
       rooms: { type: "integer", description: "Anzahl Schlafzimmer (Studio = 0)." },
       size_sqm: { type: "integer" },
       contact_phone: { type: "string", description: "E.164." },
-      language: { type: "string", enum: ["de", "en", "ru", "el", "other"] },
+      language: { type: "string", enum: ["de", "en", "ru", "el", "zh", "other"] },
       confidence: { type: "number", description: "0..1" },
       text_excerpt: {
         type: "string",
@@ -159,7 +159,7 @@ export async function extractImageListing(
     contact_phone: typeof raw.contact_phone === "string" ? raw.contact_phone : undefined,
     language:
       typeof raw.language === "string" &&
-      ["de", "en", "ru", "el", "other"].includes(raw.language as string)
+      ["de", "en", "ru", "el", "zh", "other"].includes(raw.language as string)
         ? (raw.language as ScamExtractResult["language"])
         : undefined,
     confidence: Math.max(0, Math.min(1, Number(raw.confidence) || 0)),

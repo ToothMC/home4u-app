@@ -22,8 +22,19 @@ import {
 } from "@/components/listing-public/SourceLinkButton";
 import { ClusterOffersBlock } from "@/components/listing-public/ClusterOffersBlock";
 import { loadPublicListing } from "@/lib/repo/public-listing";
+import { getT } from "@/lib/i18n/server";
+import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
+import type { SupportedLang } from "@/lib/lang/preferred-language";
 
 export const dynamic = "force-dynamic";
+
+const NUMBER_LOCALE: Record<SupportedLang, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 export default async function PublicListingPage({
   params,
@@ -40,15 +51,11 @@ export default async function PublicListingPage({
     notFound();
   }
 
-  // Bookmark-Status parallel zur Listing-Auflösung wäre netter, aber load
-  // ist schon über. Schnell genug — ein simpler indexierter Lookup.
-  // Favoriten sind auth-only: Anon-User sehen den Save-Button immer "leer"
-  // und werden beim Klick in den Login-Dialog geschickt.
   const user = await getAuthUser();
+  const { t, lang } = await getT();
 
   // opted_out / archived: hart 404 (Inserent will nicht mehr gezeigt werden) —
-  // ABER: der Eigentümer selbst muss die Vorschau weiter sehen können, sonst
-  // bricht der Vorschau-Link im Editor sobald jemand das Inserat deaktiviert.
+  // ABER: der Eigentümer selbst muss die Vorschau weiter sehen können
   const isOwner = !!user && listing.owner_user_id === user.id;
   if (
     !isOwner &&
@@ -61,38 +68,31 @@ export default async function PublicListingPage({
     ? await isListingBookmarked(id, { userId: user.id })
     : false;
 
-  // Kontext-abhängiger Back-Link: aus Editor zurück zur Bearbeitung,
-  // sonst Default „zur Suche". Andere Quellen können denselben Mechanismus
-  // nutzen (?from=matches, ?from=dashboard etc.).
   const back =
     from === "edit"
-      ? { href: `/dashboard/listings/${id}`, label: "Zurück zur Bearbeitung" }
-      : { href: "/matches", label: "Zurück zur Suche" };
+      ? { href: `/dashboard/listings/${id}`, label: t("listing.back.edit") }
+      : { href: "/matches", label: t("listing.back.search") };
 
-  // Kontakt-Strategie pro Listing (Regel: keine Anzeige ohne Kontaktmöglichkeit):
-  //   1. eigene Kontakte (source='direct' + owner_user_id) → Home4U-Outreach
-  //   2. importierte Kontakte (encrypted phone/email) → Broker-Outreach
-  //   3. fallback → Link zur Original-Quelle
-  //   4. degeneriert → "Kontakt aktuell nicht verfügbar" (sollte nicht auftreten,
-  //      Crawler liefern entweder Kontakte oder source_url)
   const hasOwnerContact =
     listing.source === "direct" && !!listing.owner_user_id;
   const hasImportedContact =
     listing.has_phone_contact || listing.has_email_contact;
   const hasInternalContact = hasOwnerContact || hasImportedContact;
-  // Phone-Reveal-CTA gewinnt wenn das Listing Phone hat, aber keine Email
-  // (typischer INDEX.cy-Fall: 100% Phone, 0% Email — Email-Outreach würde
-  // hart skippen, manueller Anruf ist die einzige Anbieter-Verbindung).
   const showRevealPhone =
     !hasOwnerContact && listing.has_phone_contact && !listing.has_email_contact;
 
   const heroImages = listing.photos.map((p) => p.url);
   const formattedPrice = formatPrice(
     listing.price_warm ?? listing.price,
-    listing.currency
+    listing.currency,
+    lang,
   );
-  const priceLabel = listing.type === "rent" ? "/ Monat" : "";
-  const priceTitle = listing.price_warm ? "Warmmiete" : listing.type === "rent" ? "Miete" : "Kaufpreis";
+  const priceLabel = listing.type === "rent" ? t("listing.price.perMonth") : "";
+  const priceTitle = listing.price_warm
+    ? t("listing.price.warm")
+    : listing.type === "rent"
+      ? t("listing.price.rent")
+      : t("listing.price.sale");
 
   const marketData: MarketData | null = listing.market_position
     ? {
@@ -108,6 +108,19 @@ export default async function PublicListingPage({
       }
     : null;
 
+  const fallbackTitleStr = fallbackTitle(
+    listing.rooms,
+    listing.property_type,
+    listing.location_district,
+    listing.location_city,
+    t,
+  );
+
+  const shareTitle = listing.title ?? t("listing.shareTitle");
+  const shareText = listing.title
+    ? tFormat(t("listing.shareTextOf"), { title: listing.title })
+    : tFormat(t("listing.shareTextIn"), { city: listing.location_city });
+
   return (
     <main className="bg-[var(--background)]">
       {unavailable && (
@@ -115,36 +128,29 @@ export default async function PublicListingPage({
           {listing.status === "reserved" ? (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
               <span className="font-semibold text-amber-700 dark:text-amber-300">
-                Reserviert
+                {t("listing.status.reserved")}
               </span>
               <span className="text-[var(--muted-foreground)]">
-                {" "}
-                — der Inserent hat eine mündliche Zusage und das Inserat
-                vorübergehend reserviert. Falls die Zusage platzt, ist das
-                Inserat in den nächsten Tagen wieder regulär in den Treffern.
+                {t("listing.status.reservedText")}
               </span>
             </div>
           ) : (
             <div className="rounded-md border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm">
               <span className="font-semibold text-[var(--destructive)]">
                 {listing.status === "rented"
-                  ? "Inserat ist als vermietet markiert"
+                  ? t("listing.status.rented")
                   : listing.status === "sold"
-                    ? "Inserat ist als verkauft markiert"
-                    : "Verfügbarkeit unklar"}
+                    ? t("listing.status.sold")
+                    : t("listing.status.unknown")}
               </span>
               <span className="text-[var(--muted-foreground)]">
-                {" "}
-                — der Inserent hat dieses Inserat als nicht mehr verfügbar
-                gemeldet. Falls die Vermietung platzt und das Original-Inserat
-                noch online ist, reaktivieren wir es nach 7 Tagen automatisch.
+                {t("listing.status.unavailableText")}
               </span>
             </div>
           )}
         </div>
       )}
 
-      {/* Top bar */}
       <header className="mx-auto max-w-7xl w-full px-4 pt-4 pb-2 flex items-center justify-between">
         <Link
           href={back.href}
@@ -157,29 +163,18 @@ export default async function PublicListingPage({
             listingId={id}
             initialSaved={initialSaved}
             isAuthenticated={!!user}
-            shareTitle={listing.title ?? "Inserat auf Home4U"}
-            shareText={
-              listing.title
-                ? `${listing.title} — auf Home4U`
-                : `Inserat in ${listing.location_city} auf Home4U`
-            }
+            shareTitle={shareTitle}
+            shareText={shareText}
           />
           <AuthMenu />
         </div>
       </header>
 
       <div className="mx-auto max-w-7xl w-full px-4 pb-10 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8">
-        {/* Main column */}
         <div className="space-y-6 min-w-0">
           <div>
             <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
-              {listing.title ??
-                fallbackTitle(
-                  listing.rooms,
-                  listing.property_type,
-                  listing.location_district,
-                  listing.location_city
-                )}
+              {listing.title ?? fallbackTitleStr}
             </h1>
             <p className="text-sm text-[var(--muted-foreground)] flex items-center gap-1 mt-1">
               <MapPin className="size-3" />
@@ -196,11 +191,28 @@ export default async function PublicListingPage({
 
           <QuickFactsBar listing={listing} />
 
-          <QuickActionsRow listing={listing} />
+          <QuickActionsRow
+            listing={listing}
+            labels={{
+              heading: t("listing.actions.heading"),
+              floorplan: t("listing.actions.floorplan"),
+              floorplanSub: t("listing.actions.floorplanSub"),
+              tour: t("listing.actions.tour"),
+              tourSub: t("listing.actions.tourSub"),
+              video: t("listing.actions.video"),
+              videoSub: t("listing.actions.videoSub"),
+              neighborhood: t("listing.actions.neighborhood"),
+              neighborhoodSub: t("listing.actions.neighborhoodSub"),
+              costs: t("listing.actions.costs"),
+              costsSub: t("listing.actions.costsSub"),
+              furnishing: t("listing.actions.furnishing"),
+              furnishingSub: t("listing.actions.furnishingSub"),
+            }}
+          />
 
           {listing.description && (
             <section className="space-y-2">
-              <h2 className="text-base font-semibold">Beschreibung</h2>
+              <h2 className="text-base font-semibold">{t("listing.description")}</h2>
               <p className="text-sm whitespace-pre-wrap leading-relaxed text-[var(--foreground)]/90">
                 {listing.description}
               </p>
@@ -211,21 +223,20 @@ export default async function PublicListingPage({
 
           {listing.features.length > 0 && (
             <section id="features" className="space-y-2">
-              <h2 className="text-base font-semibold">Ausstattung</h2>
+              <h2 className="text-base font-semibold">{t("listing.features")}</h2>
               <div className="flex flex-wrap gap-2">
                 {listing.features.map((f) => (
                   <span
                     key={f}
                     className="rounded-full border bg-[var(--card)] px-3 py-1 text-xs"
                   >
-                    {featureLabel(f)}
+                    {featureLabel(f, t)}
                   </span>
                 ))}
               </div>
             </section>
           )}
 
-          {/* Mobile: Sidebar elements rein in den Flow */}
           <div className="lg:hidden space-y-4">
             <PriceBox
               priceLabel={priceLabel}
@@ -261,10 +272,11 @@ export default async function PublicListingPage({
             createdAt={listing.created_at}
             source={listing.source}
             sourceUrl={listing.source_url}
+            t={t}
+            lang={lang}
           />
         </div>
 
-        {/* Right Sidebar (desktop) */}
         <aside className="hidden lg:block space-y-4">
           <div className="sticky top-4 space-y-4">
             <PriceBox
@@ -369,7 +381,7 @@ const SOURCE_LABELS: Record<string, string> = {
   cyprus_real_estate: "Cyprus-Real.Estate",
   fb: "Facebook",
   direct: "Home4U",
-  other: "externer Quelle",
+  other: "—",
 };
 
 function FooterMeta({
@@ -377,18 +389,22 @@ function FooterMeta({
   createdAt,
   source,
   sourceUrl,
+  t,
+  lang,
 }: {
   externalId: string | null;
   createdAt: string;
   source: string;
   sourceUrl: string | null;
+  t: T;
+  lang: SupportedLang;
 }) {
   const sourceLabel = SOURCE_LABELS[source] ?? source;
   return (
     <div className="text-xs text-[var(--muted-foreground)] flex flex-wrap items-center justify-between gap-2 border-t pt-4">
       <span>
-        Inserat online seit{" "}
-        {new Date(createdAt).toLocaleDateString("de-DE")}
+        {t("listing.onlineSince")}{" "}
+        {new Date(createdAt).toLocaleDateString(NUMBER_LOCALE[lang])}
       </span>
       <div className="flex items-center gap-3">
         {sourceUrl ? (
@@ -398,21 +414,25 @@ function FooterMeta({
             rel="noopener noreferrer"
             className="hover:underline"
           >
-            Original auf {sourceLabel} ↗
+            {tFormat(t("listing.originalAt"), { source: sourceLabel })}
           </a>
         ) : source !== "direct" ? (
-          <span>Quelle: {sourceLabel}</span>
+          <span>
+            {t("listing.source")}: {sourceLabel}
+          </span>
         ) : null}
         {externalId && (
-          <span className="font-mono">Objekt-ID {externalId.slice(0, 30)}</span>
+          <span className="font-mono">
+            {t("listing.objectId")} {externalId.slice(0, 30)}
+          </span>
         )}
       </div>
     </div>
   );
 }
 
-function formatPrice(amount: number, currency: string) {
-  return new Intl.NumberFormat("de-DE", {
+function formatPrice(amount: number, currency: string, lang: SupportedLang) {
+  return new Intl.NumberFormat(NUMBER_LOCALE[lang], {
     style: "currency",
     currency: currency || "EUR",
     maximumFractionDigits: 0,
@@ -423,49 +443,23 @@ function fallbackTitle(
   rooms: number | null,
   propertyType: string | null,
   district: string | null,
-  city: string
+  city: string,
+  t: T,
 ): string {
-  const roomsLabel = rooms === 0 ? "Studio" : rooms ? `${rooms}-Zimmer-` : "";
+  const roomsLabel =
+    rooms === 0
+      ? t("listing.fallbackTitle.studio")
+      : rooms
+        ? `${rooms}${t("listing.fallbackTitle.roomsSuffix")} `
+        : "";
   const typeLabel = propertyType
-    ? PROPERTY_LABEL[propertyType] ?? "Wohnung"
-    : "Wohnung";
+    ? t((`property.${propertyType}`) as TKey) || t("property.fallback")
+    : t("property.fallback");
   const place = district ? `${district}, ${city}` : city;
-  return `${roomsLabel}${typeLabel} in ${place}`.trim();
+  return `${roomsLabel}${typeLabel} ${t("listing.fallbackTitle.in")} ${place}`.trim();
 }
 
-const PROPERTY_LABEL: Record<string, string> = {
-  apartment: "Wohnung",
-  house: "Haus",
-  villa: "Villa",
-  maisonette: "Maisonette",
-  studio: "Studio",
-  townhouse: "Stadthaus",
-  penthouse: "Penthouse",
-  bungalow: "Bungalow",
-  land: "Grundstück",
-  commercial: "Gewerbe",
-};
-
-function featureLabel(value: string): string {
-  return (
-    {
-      parking: "Parkplatz",
-      covered_parking: "Garage",
-      pool: "Pool",
-      garden: "Garten",
-      balcony: "Balkon",
-      terrace: "Terrasse",
-      elevator: "Aufzug",
-      air_conditioning: "Klimaanlage",
-      solar: "Solar",
-      sea_view: "Meerblick",
-      mountain_view: "Bergblick",
-      storage: "Abstellraum",
-      fireplace: "Kamin",
-      jacuzzi: "Jacuzzi",
-      gym: "Fitnessraum",
-      smart_home: "Smart Home",
-      accessible: "Barrierefrei",
-    }[value] ?? value
-  );
+function featureLabel(value: string, t: T): string {
+  const key = (`feature.${value}`) as TKey;
+  return t(key) || value;
 }

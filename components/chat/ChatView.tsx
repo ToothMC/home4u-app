@@ -33,15 +33,14 @@ type ChatMessage = {
   toolCalls?: ToolCall[];
 };
 
-const SEED_MESSAGE: Record<string, string> = {
-  seeker:
-    "Hi, ich bin Sophie — Dein KI-Agent von Home4U. In welcher Stadt oder Region darf ich dich beim Suchen unterstützen?",
-  owner:
-    "Hi, ich bin Sophie — Dein KI-Agent von Home4U. Lass uns dein Inserat anlegen. In welcher Stadt und welchem Viertel liegt die Immobilie?",
-  agent:
-    "Hi, ich bin Sophie — Dein KI-Agent von Home4U. Schön, dass du dich für den Makler-Beirat interessierst. In welcher Stadt oder Region arbeitest du aktuell?",
-  default:
-    "Hi, ich bin Sophie — Dein KI-Agent von Home4U. In welcher Stadt oder Region darf ich dich unterstützen?",
+import { useT } from "@/lib/i18n/client";
+import { tFormat, type TKey } from "@/lib/i18n/dict";
+
+const SEED_KEY: Record<string, TKey> = {
+  seeker: "chat.seed.seeker",
+  owner: "chat.seed.owner",
+  agent: "chat.seed.agent",
+  default: "chat.seed.default",
 };
 
 export function ChatView({
@@ -51,12 +50,14 @@ export function ChatView({
   flow?: string;
   region?: Region;
 }) {
-  const baseSeed = SEED_MESSAGE[flow ?? "default"] ?? SEED_MESSAGE.default;
+  const { t } = useT();
+  const seedKey = SEED_KEY[flow ?? "default"] ?? SEED_KEY.default;
+  const baseSeed = t(seedKey);
   // Für seeker/default bekommt der Region-Seed Vorrang (macht Sophie konkreter).
   // Für owner/agent bleibt der Flow-Seed erhalten, Region wird nur im Header angezeigt.
   const useRegionSeed = region && (flow === "seeker" || !flow || flow === "default");
   const seed = useRegionSeed
-    ? `Hi, ich bin Sophie — Dein KI-Agent von Home4U. Ich arbeite gerade für dich in ${region!.label}. Was kann ich tun?`
+    ? tFormat(t("chat.seed.regional"), { region: region!.label })
     : baseSeed;
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: seed },

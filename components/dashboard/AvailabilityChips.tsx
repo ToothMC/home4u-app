@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Loader2, PhoneOff, Ban } from "lucide-react";
+import { useT } from "@/lib/i18n/client";
 
 type Kind = "responded" | "rented" | "no_answer";
 
@@ -23,6 +24,7 @@ export function AvailabilityChips({
   matchId: string;
   listingId: string;
 }) {
+  const { t } = useT();
   const [sent, setSent] = useState<Set<Kind>>(new Set());
   const [busy, setBusy] = useState<Kind | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,12 +43,12 @@ export function AvailabilityChips({
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        setError(d.error ?? `Fehler ${res.status}`);
+        setError(d.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
       } else {
         setSent((s) => new Set(s).add(kind));
       }
     } catch {
-      setError("Netzwerkfehler");
+      setError(t("btn.networkError"));
     } finally {
       setBusy(null);
     }
@@ -56,7 +58,8 @@ export function AvailabilityChips({
     <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
       <Chip
         kind="responded"
-        label="Antwort bekommen"
+        label={t("availability.gotReply")}
+        thanks={t("availability.thanks")}
         Icon={Check}
         sent={sent.has("responded")}
         busy={busy === "responded"}
@@ -64,7 +67,8 @@ export function AvailabilityChips({
       />
       <Chip
         kind="rented"
-        label="Schon weg"
+        label={t("availability.alreadyGone")}
+        thanks={t("availability.thanks")}
         Icon={Ban}
         sent={sent.has("rented")}
         busy={busy === "rented"}
@@ -73,7 +77,8 @@ export function AvailabilityChips({
       />
       <Chip
         kind="no_answer"
-        label="Niemand da"
+        label={t("availability.nobody")}
+        thanks={t("availability.thanks")}
         Icon={PhoneOff}
         sent={sent.has("no_answer")}
         busy={busy === "no_answer"}
@@ -86,6 +91,7 @@ export function AvailabilityChips({
 
 function Chip({
   label,
+  thanks,
   Icon,
   sent,
   busy,
@@ -94,6 +100,7 @@ function Chip({
 }: {
   kind: Kind;
   label: string;
+  thanks: string;
   Icon: typeof Check;
   sent: boolean;
   busy: boolean;
@@ -116,7 +123,7 @@ function Chip({
       onClick={onClick}
       disabled={sent || busy}
       className={cls}
-      title={sent ? "Danke, gemeldet." : label}
+      title={sent ? thanks : label}
     >
       {busy ? (
         <Loader2 className="size-3 animate-spin" />

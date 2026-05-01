@@ -15,6 +15,16 @@ import { verdictFromScore } from "@/components/scam-shield/ScoreLight";
 import { cn } from "@/lib/utils";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import type { MarketPosition } from "@/lib/repo/listings";
+import { useT } from "@/lib/i18n/client";
+import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
+
+const NUMBER_LOCALE: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 // Vertikaler Scroll-Indicator rechts vom Bild — die Bilder werden vertikal
 // gewischt (snap-y), darum vertikale Pagination, nicht horizontal.
@@ -47,22 +57,25 @@ function dotWindow(active: number, total: number, max: number): DotInfo[] {
   return out;
 }
 
-const SCAM_PILL = {
-  clean: { dot: "bg-emerald-500", border: "border-emerald-300", text: "text-emerald-700", label: "Kein Scam" },
-  warn: { dot: "bg-orange-500", border: "border-orange-300", text: "text-orange-700", label: "Verdächtig" },
-  high: { dot: "bg-red-500", border: "border-red-300", text: "text-red-700", label: "Scam-Verdacht" },
-  none: { dot: "bg-black/30", border: "border-black/15", text: "text-[var(--muted-foreground)]", label: "Nicht geprüft" },
-} as const;
+const SCAM_PILL: Record<
+  "clean" | "warn" | "high" | "none",
+  { dot: string; border: string; text: string; key: TKey }
+> = {
+  clean: { dot: "bg-emerald-500", border: "border-emerald-300", text: "text-emerald-700", key: "matchCard.scam.clean" },
+  warn: { dot: "bg-orange-500", border: "border-orange-300", text: "text-orange-700", key: "matchCard.scam.warn" },
+  high: { dot: "bg-red-500", border: "border-red-300", text: "text-red-700", key: "matchCard.scam.high" },
+  none: { dot: "bg-black/30", border: "border-black/15", text: "text-[var(--muted-foreground)]", key: "matchCard.scam.notChecked" },
+};
 
 const MARKET_PILL: Record<
   Exclude<MarketPosition, "unknown">,
-  { bars: number; label: string; tone: "green" | "orange" }
+  { bars: number; key: TKey; tone: "green" | "orange" }
 > = {
-  very_good: { bars: 5, label: "Sehr guter Preis", tone: "green" },
-  good: { bars: 4, label: "Guter Preis", tone: "green" },
-  fair: { bars: 3, label: "Fairer Preis", tone: "green" },
-  above: { bars: 2, label: "Erhöhter Preis", tone: "orange" },
-  expensive: { bars: 1, label: "Hoher Preis", tone: "orange" },
+  very_good: { bars: 5, key: "matchCard.priceVeryGood", tone: "green" },
+  good: { bars: 4, key: "matchCard.priceGood", tone: "green" },
+  fair: { bars: 3, key: "matchCard.priceFair", tone: "green" },
+  above: { bars: 2, key: "matchCard.priceElevated", tone: "orange" },
+  expensive: { bars: 1, key: "matchCard.priceHigh", tone: "orange" },
 };
 
 export type MatchCardData = {
@@ -106,6 +119,7 @@ export function MatchCard({
   isTop?: boolean;
 }) {
   const isDesktop = useIsDesktop();
+  const { t, lang } = useT();
   const images = data.media && data.media.length > 0 ? data.media : [];
   const total = images.length;
   const [imgIdx, setImgIdx] = React.useState(0);
@@ -248,14 +262,16 @@ export function MatchCard({
   }, [isTop]);
 
   const formatPrice = (n: number) =>
-    new Intl.NumberFormat("de-DE", {
+    new Intl.NumberFormat(NUMBER_LOCALE[lang] ?? "en-GB", {
       style: "currency",
       currency: data.currency || "EUR",
       maximumFractionDigits: 0,
     }).format(n);
 
   const roomsLabel =
-    data.rooms === 0 ? "Studio" : data.rooms === 1 ? "1 Zi" : `${data.rooms ?? "?"} Zi`;
+    data.rooms === 0
+      ? t("listing.fallbackTitle.studio")
+      : `${data.rooms ?? "?"} ${t("matchCard.roomsShort")}`;
 
   // Drag-Visualisierung
   const rotation =
@@ -304,7 +320,7 @@ export function MatchCard({
         >
           {total === 0 ? (
             <div className="h-full flex items-center justify-center text-sm text-[var(--muted-foreground)]">
-              Kein Bild
+              {t("matchCard.noImage")}
             </div>
           ) : (
             images.map((src, i) => (
@@ -330,7 +346,7 @@ export function MatchCard({
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted-foreground)]">
-                    Bild nicht ladbar
+                    {t("matchCard.brokenImage")}
                   </div>
                 )}
               </div>
@@ -351,7 +367,7 @@ export function MatchCard({
           {/* Score badge — nur ab 60 % */}
           {data.score >= 0.6 && (
             <div className="absolute top-3 right-12 rounded-full bg-white/90 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-              {Math.round(data.score * 100)} % Match
+              {Math.round(data.score * 100)} % {t("matchCard.match")}
             </div>
           )}
 
@@ -359,7 +375,7 @@ export function MatchCard({
               Re-Listing oder Broker-Branded-Default. UI macht's transparent. */}
           {data.clusterSize && data.clusterSize > 1 && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-amber-500/90 backdrop-blur px-2.5 py-0.5 text-[10px] font-medium text-white shadow">
-              +{data.clusterSize - 1} ähnliche
+              {tFormat(t("matchCard.similar"), { n: data.clusterSize - 1 })}
             </div>
           )}
 
@@ -369,7 +385,7 @@ export function MatchCard({
           <button
             type="button"
             onClick={() => onSwipe?.("skip")}
-            aria-label="Kein Interesse"
+            aria-label={t("matchCard.skip")}
             className="absolute left-2 top-1/2 flex flex-col items-center gap-1 transition-all pointer-events-auto"
             style={{
               opacity: 0.45 + opacityHorizontal * 0.55,
@@ -380,13 +396,13 @@ export function MatchCard({
               <ArrowLeft className="size-6" />
             </span>
             <span className="text-[10px] font-medium text-white bg-rose-600/85 backdrop-blur px-1.5 py-0.5 rounded">
-              Kein Interesse
+              {t("matchCard.skip")}
             </span>
           </button>
           <button
             type="button"
             onClick={() => onSwipe?.("like")}
-            aria-label="Interesse"
+            aria-label={t("matchCard.like")}
             className="absolute right-2 top-1/2 flex flex-col items-center gap-1 transition-all pointer-events-auto"
             style={{
               opacity: 0.45 + opacityHorizontal * 0.55,
@@ -397,7 +413,7 @@ export function MatchCard({
               <ArrowRight className="size-6" />
             </span>
             <span className="text-[10px] font-medium text-white bg-emerald-600/85 backdrop-blur px-1.5 py-0.5 rounded">
-              Interesse
+              {t("matchCard.like")}
             </span>
           </button>
 
@@ -408,7 +424,7 @@ export function MatchCard({
               style={{ opacity: opacityHorizontal }}
             >
               <div className="rounded-2xl border-4 border-white text-white px-6 py-3 -rotate-12 flex items-center gap-2 text-2xl font-bold tracking-wide">
-                <Heart className="size-7 fill-white" /> INTERESSE
+                <Heart className="size-7 fill-white" /> {t("matchCard.likeBig")}
               </div>
             </div>
           )}
@@ -419,7 +435,7 @@ export function MatchCard({
               style={{ opacity: opacityHorizontal }}
             >
               <div className="rounded-2xl border-4 border-white text-white px-6 py-3 rotate-12 flex items-center gap-2 text-2xl font-bold tracking-wide">
-                <XIcon className="size-7" /> KEIN INTERESSE
+                <XIcon className="size-7" /> {t("matchCard.skipBig")}
               </div>
             </div>
           )}
@@ -436,15 +452,15 @@ export function MatchCard({
                 <div className="text-2xl font-semibold leading-none">
                   {data.minClusterPrice != null &&
                   data.minClusterPrice < data.price
-                    ? `ab ${formatPrice(data.minClusterPrice)}`
+                    ? `${t("matchCard.fromPrice")} ${formatPrice(data.minClusterPrice)}`
                     : formatPrice(data.price)}
                   {data.type === "rent" && (
-                    <span className="text-sm font-normal opacity-80"> / Monat</span>
+                    <span className="text-sm font-normal opacity-80"> {t("listing.price.perMonth")}</span>
                   )}
                 </div>
                 {data.clusterOffersCount && data.clusterOffersCount > 1 && (
                   <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-500/90 text-amber-950 text-[10px] font-medium px-2 py-0.5">
-                    {data.clusterOffersCount} Anbieter
+                    {tFormat(t("matchCard.providers"), { n: data.clusterOffersCount })}
                   </div>
                 )}
                 <div className="mt-1 flex items-center gap-1 text-sm opacity-95">
@@ -455,8 +471,8 @@ export function MatchCard({
                 </div>
               </div>
               <div className="shrink-0 flex flex-col items-end gap-1">
-                <MarketPill position={data.marketPosition ?? null} />
-                <ScamPill score={data.scamScore} flags={data.scamFlags} />
+                <MarketPill position={data.marketPosition ?? null} t={t} />
+                <ScamPill score={data.scamScore} flags={data.scamFlags} t={t} />
               </div>
             </div>
           </div>
@@ -505,7 +521,7 @@ export function MatchCard({
                     ? "border-rose-500 ring-2 ring-rose-200"
                     : "border-transparent opacity-70 hover:opacity-100"
                 )}
-                aria-label={`Bild ${i + 1} anzeigen`}
+                aria-label={tFormat(t("matchCard.imageAria"), { n: i + 1 })}
               >
                 {!brokenIdx.has(i) ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
@@ -534,7 +550,7 @@ export function MatchCard({
         className="shrink-0 flex items-center justify-center gap-2 border-t bg-slate-900 hover:bg-slate-800 text-white text-base font-semibold py-3 transition-colors"
       >
         <ExternalLink className="size-5" />
-        Zum Inserat
+        {t("matchCard.toListing")}
       </Link>
 
       {/* Facts row */}
@@ -542,7 +558,7 @@ export function MatchCard({
         <div>
           <div className="font-semibold">{roomsLabel}</div>
           <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-            Zimmer
+            {t("matchCard.rooms")}
           </div>
         </div>
         <div>
@@ -550,13 +566,13 @@ export function MatchCard({
             {data.size_sqm ? `${data.size_sqm} m²` : "—"}
           </div>
           <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-            Fläche
+            {t("matchCard.area")}
           </div>
         </div>
         <div>
           <div className="font-semibold">{total || "—"}</div>
           <div className="text-[10px] uppercase tracking-wide text-[var(--muted-foreground)]">
-            Bilder
+            {t("matchCard.images")}
           </div>
         </div>
       </div>
@@ -564,13 +580,14 @@ export function MatchCard({
   );
 }
 
-/** Kompakte Pille für den Sophie-Scam-Check, weiß mit dünnem Verdict-Rahmen. */
 function ScamPill({
   score,
   flags,
+  t,
 }: {
   score?: number | null;
   flags?: string[] | null;
+  t: T;
 }) {
   const checked =
     score != null && (score > 0 || (Array.isArray(flags) && flags.length > 0));
@@ -587,15 +604,15 @@ function ScamPill({
       )}
     >
       <span className={cn("inline-block size-1.5 rounded-full", c.dot)} aria-hidden />
-      {c.label}
+      {t(c.key)}
     </span>
   );
 }
 
-/** Kompakte Pille für die Preis-Einschätzung — bars + Kurz-Label. */
-function MarketPill({ position }: { position: MarketPosition | null }) {
+function MarketPill({ position, t }: { position: MarketPosition | null; t: T }) {
   if (!position || position === "unknown") return null;
   const cfg = MARKET_PILL[position];
+  const label = t(cfg.key);
   return (
     <span
       className={cn(
@@ -604,7 +621,7 @@ function MarketPill({ position }: { position: MarketPosition | null }) {
           ? "border-emerald-300 text-emerald-700"
           : "border-amber-300 text-amber-700",
       )}
-      aria-label={cfg.label}
+      aria-label={label}
     >
       <span
         className="inline-flex items-end gap-[1px]"
@@ -625,7 +642,7 @@ function MarketPill({ position }: { position: MarketPosition | null }) {
           />
         ))}
       </span>
-      {cfg.label}
+      {label}
     </span>
   );
 }

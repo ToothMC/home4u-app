@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 export type ProfileForm = {
   display_name: string | null;
   phone: string | null;
-  preferred_language: "de" | "en" | "ru" | "el" | null;
+  preferred_language: "de" | "en" | "ru" | "el" | "zh" | null;
   contact_channel: "email" | "whatsapp" | "telegram" | "phone" | "chat" | null;
   notification_email: string | null;
 };
@@ -18,6 +18,7 @@ const LANGS: { value: ProfileForm["preferred_language"]; label: string }[] = [
   { value: "en", label: "English" },
   { value: "ru", label: "Русский" },
   { value: "el", label: "Ελληνικά" },
+  { value: "zh", label: "中文" },
 ];
 
 const CHANNELS: { value: ProfileForm["contact_channel"]; label: string }[] = [

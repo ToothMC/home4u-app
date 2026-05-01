@@ -1,23 +1,13 @@
-/**
- * Inline-Badge für Listing-Karten (klein, einzeiler).
- *
- * Variante der ScoreLight: nur der aktive Status, kein Drei-Kreis-Layout.
- *
- *   <ScamCheckBadge score={0.10} flags={["no_phone"]} />
- *   → 🟢 Sophie-Check: unauffällig
- *
- *   <ScamCheckBadge score={null} flags={null} />
- *   → ⚪ Noch nicht geprüft
- *
- * Wording bleibt konsistent zu ScoreLight.tsx (Spec §6.4 Ehrlichkeits-Klausel).
- */
+"use client";
+
 import { cn } from "@/lib/utils";
 import { verdictFromScore } from "./ScoreLight";
+import { useT } from "@/lib/i18n/client";
+import type { TKey } from "@/lib/i18n/dict";
 
 type BadgeProps = {
   score: number | null | undefined;
   flags?: string[] | null;
-  /** Visual-Varianten — "compact" reduziert auf Punkt + Wort. "row" mit Border. */
   variant?: "compact" | "row";
   className?: string;
 };
@@ -29,19 +19,13 @@ const COLORS = {
   none: { dot: "bg-black/20", text: "text-[var(--muted-foreground)]", bg: "bg-transparent", border: "border-[var(--border)]" },
 } as const;
 
-const LABELS = {
-  clean: "Sophie-Check: unauffällig",
-  warn: "Sophie-Check: prüfen",
-  high: "Sophie-Check: hoher Verdacht",
-  none: "Noch nicht geprüft",
-} as const;
+const KEYS: Record<keyof typeof COLORS, TKey> = {
+  clean: "scamBadge.clean",
+  warn: "scamBadge.warn",
+  high: "scamBadge.high",
+  none: "scamBadge.none",
+};
 
-/**
- * Heuristik für "wirklich geprüft": Score > 0 ODER mindestens ein Flag.
- * Default-Zeile (score=0, flags=[]) bedeutet: Worker hat das Listing
- * noch nicht angefasst. Alle bestehenden 559 Listings sind via Bootstrap
- * geprüft, daher ist hier mind. ein Flag (`no_phone` oder ähnlich).
- */
 function isActuallyChecked(score: number | null | undefined, flags?: string[] | null): boolean {
   if (score == null) return false;
   if (score > 0) return true;
@@ -49,9 +33,11 @@ function isActuallyChecked(score: number | null | undefined, flags?: string[] | 
 }
 
 export function ScamCheckBadge({ score, flags, variant = "compact", className }: BadgeProps) {
+  const { t } = useT();
   const checked = isActuallyChecked(score, flags);
   const verdict = checked ? verdictFromScore(score) : "none";
   const c = COLORS[verdict];
+  const label = t(KEYS[verdict]);
 
   if (variant === "compact") {
     return (
@@ -63,12 +49,11 @@ export function ScamCheckBadge({ score, flags, variant = "compact", className }:
         )}
       >
         <span className={cn("inline-block w-2 h-2 rounded-full", c.dot)} aria-hidden />
-        {LABELS[verdict]}
+        {label}
       </span>
     );
   }
 
-  // variant === "row"
   return (
     <div
       className={cn(
@@ -80,7 +65,7 @@ export function ScamCheckBadge({ score, flags, variant = "compact", className }:
       )}
     >
       <span className={cn("inline-block w-2 h-2 rounded-full", c.dot)} aria-hidden />
-      {LABELS[verdict]}
+      {label}
     </div>
   );
 }
