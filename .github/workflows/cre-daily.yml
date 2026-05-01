@@ -8,10 +8,9 @@ name: Daily cyprus-real.estate Crawl
 
 on:
   schedule:
-    # 23:00 UTC = 1h nach INDEX.cy (22:00 UTC). Reihenfolge spielt für c-r-e
-    # keine Rolle — pHash-Match läuft eh gegen alle Sources die bis dahin
-    # in der DB sind.
-    - cron: "0 23 * * *"
+    # 4× täglich versetzt: Bazaraki=0,6,12,18 / INDEX=1,7,13,19 / CRE=2,8,14,20
+    # → CRE matcht gegen die jeweils frischen Bazaraki+INDEX-Updates.
+    - cron: "0 2,8,14,20 * * *"
   workflow_dispatch:
     inputs:
       max_listings:
@@ -22,6 +21,10 @@ on:
         description: "Sekunden Pause pro Detail-Fetch"
         required: false
         default: "1.0"
+      max_runtime_s:
+        description: "Wall-Clock-Budget in Sekunden (default 5400 = 90min)"
+        required: false
+        default: "5400"
       dry_run:
         description: "Nur loggen, kein DB-Write"
         type: boolean
@@ -45,11 +48,10 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    # Erstlauf indexiert ~20k Listings × ~1s/Listing = ~5.5h theoretisch.
-    # Idempotent via fetch_already_indexed → mehrere Runs decken alles ab.
-    # Daily-Folgelauf ist inkrementell (~50-200 neue/Tag = 2-5min).
-    # 350 min = GitHub-Actions Free-Tier Job-Limit (max 360).
-    timeout-minutes: 350
+    # Hard-Cap = MAX_RUNTIME_S/60 + 10min Headroom für SIGTERM-freien exit 0.
+    # 4× täglich à 90min Watchdog → ~6h Crawl-Budget pro Tag → Backfill ~20k
+    # Listings in 1-2 Tagen.
+    timeout-minutes: 100
     defaults:
       run:
         working-directory: ./cre-crawler
@@ -72,6 +74,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           MAX_LISTINGS: ${{ inputs.max_listings || '0' }}
           RATE_LIMIT_S: ${{ inputs.rate_limit_s || '1.0' }}
+          MAX_RUNTIME_S: ${{ inputs.max_runtime_s || '5400' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           SKIP_PHASH: ${{ inputs.skip_phash && '1' || '' }}
           FORCE_REFETCH: ${{ inputs.force_refetch && '1' || '' }}

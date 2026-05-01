@@ -2,8 +2,11 @@ name: Daily Bazaraki Crawl
 
 on:
   schedule:
-    # 21:00 UTC = 00:00 EEST (Sommer) / 23:00 EET (Winter) — Cron kennt keine DST
-    - cron: "0 21 * * *"
+    # 4× täglich alle 6h (00, 06, 12, 18 UTC). Pro Lauf max 90min Wall-Clock
+    # via MAX_RUNTIME_S; Streaming-Architektur persistiert nach jedem Subtype.
+    # Mehrere kürzere Läufe statt ein 5h-Marathon: jeder grün, Daten landen
+    # inkrementell, kein Datenverlust bei Job-Cancel.
+    - cron: "0 0,6,12,18 * * *"
   workflow_dispatch:
     inputs:
       cities:
@@ -18,6 +21,10 @@ on:
         description: "Max Pages pro City+Type"
         required: false
         default: "60"
+      max_runtime_s:
+        description: "Wall-Clock-Budget in Sekunden (default 5400 = 90min)"
+        required: false
+        default: "5400"
       dry_run:
         description: "Nur loggen, kein DB-Write"
         type: boolean
@@ -41,14 +48,11 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    # Inkrementelles Drill-Verhalten (siehe main.py): bereits in der DB
-    # enriched-te Listings werden nicht nochmal gedrillt. Daily-Lauf =
-    # List-Scrape (~30 min) + nur NEUE Listings drillen (~10 min für ~200
-    # neue/Tag) — also weit unter 1h.
-    # 350 min = GH-Actions Free-Tier Job-Max (cap 360). Der hohe Wert
-    # erlaubt FORCE_FULL_DRILL=1-Reparaturläufe (~5-7h für 27k Listings)
-    # in einem Lauf statt mehreren idempotenten Re-Runs.
-    timeout-minutes: 350
+    # Hard-Cap = MAX_RUNTIME_S/60 + 10min Headroom für SIGTERM-freien exit 0.
+    # Default MAX_RUNTIME_S=5400 (90min) → timeout 100min. Backfill-Läufe via
+    # workflow_dispatch können MAX_RUNTIME_S=20000 (~5h) setzen, dann hier
+    # entsprechend höher. 350 ist GH-Free-Cap.
+    timeout-minutes: 100
     defaults:
       run:
         working-directory: ./bazaraki-crawler
@@ -75,6 +79,7 @@ jobs:
           CITIES: ${{ inputs.cities }}
           TYPES: ${{ inputs.types }}
           MAX_PAGES_PER_CITY: ${{ inputs.max_pages || '60' }}
+          MAX_RUNTIME_S: ${{ inputs.max_runtime_s || '5400' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           SKIP_DETAILS: ${{ inputs.skip_details && '1' || '' }}
           FORCE_FULL_DRILL: ${{ inputs.force_full_drill && '1' || '' }}
