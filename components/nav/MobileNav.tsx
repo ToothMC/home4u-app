@@ -3,19 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
-import { ChatLink } from "@/components/landing/PathCards";
 import { cn } from "@/lib/utils";
 
-type Item = {
-  label: string;
-  href: string;
-  /** Wenn true: ChatLink wird genutzt (preserved Anonymous-Session beim
-   *  Sprung in den Chat-Flow). */
-  chat?: "seeker" | null;
-};
+// Plain Link statt ChatLink (das useSearchParams() nutzt) — sonst muss
+// jede Page die AuthMenu rendert in Suspense gewrapped werden, sonst
+// schlägt der Production-Build mit "missing-suspense-with-csr-bailout"
+// fehl. Region-Param-Preservation ist beim Burger-Entry nicht kritisch.
+type Item = { label: string; href: string };
 
 const ITEMS: Item[] = [
-  { label: "Suchen", href: "/chat?flow=seeker", chat: "seeker" },
+  { label: "Suchen", href: "/chat?flow=seeker" },
   { label: "Vermieten", href: "/chat?flow=owner" },
   { label: "Verkaufen", href: "/chat?flow=owner&intent=sale" },
   { label: "Such-Inserate", href: "/gesuche" },
@@ -93,23 +90,13 @@ export function MobileNav() {
           <ul className="flex-1 overflow-y-auto py-2">
             {ITEMS.map((it) => (
               <li key={it.label}>
-                {it.chat === "seeker" ? (
-                  <ChatLink
-                    flow="seeker"
-                    onClick={() => setOpen(false)}
-                    className="block w-full px-5 py-3 text-base text-[var(--brand-navy)] hover:bg-[var(--brand-gold-50)] hover:text-[var(--brand-gold)] transition-colors"
-                  >
-                    {it.label}
-                  </ChatLink>
-                ) : (
-                  <Link
-                    href={it.href}
-                    onClick={() => setOpen(false)}
-                    className="block w-full px-5 py-3 text-base text-[var(--brand-navy)] hover:bg-[var(--brand-gold-50)] hover:text-[var(--brand-gold)] transition-colors"
-                  >
-                    {it.label}
-                  </Link>
-                )}
+                <Link
+                  href={it.href}
+                  onClick={() => setOpen(false)}
+                  className="block w-full px-5 py-3 text-base text-[var(--brand-navy)] hover:bg-[var(--brand-gold-50)] hover:text-[var(--brand-gold)] transition-colors"
+                >
+                  {it.label}
+                </Link>
               </li>
             ))}
           </ul>
