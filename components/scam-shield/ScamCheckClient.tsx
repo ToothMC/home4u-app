@@ -8,6 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ScoreLight } from "@/components/scam-shield/ScoreLight";
+import { useT } from "@/lib/i18n/client";
+import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
+
+const NUMBER_LOCALE: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 type Verdict = "clean" | "warn" | "high";
 type Kind = "text" | "url" | "image";
@@ -26,41 +36,51 @@ type ScamCheckResponse = {
 
 type ErrorResponse = { error: string; reason?: string; reset_at?: string; phase?: string };
 
-const TABS: { kind: Kind; label: string; icon: string; available: boolean; hint?: string }[] = [
-  { kind: "text", label: "Text einfügen", icon: "✍️", available: true },
-  { kind: "url", label: "URL einkippen", icon: "🔗", available: true },
-  { kind: "image", label: "Screenshot", icon: "📷", available: true },
+const TABS: { kind: Kind; key: TKey; icon: string }[] = [
+  { kind: "text", key: "scc.tab.text", icon: "✍️" },
+  { kind: "url", key: "scc.tab.url", icon: "🔗" },
+  { kind: "image", key: "scc.tab.image", icon: "📷" },
 ];
 
-const FLAG_LABELS: Record<string, string> = {
-  price_anomaly_low: "Preis ungewöhnlich niedrig",
-  price_implausible: "Preis unplausibel",
-  no_phone: "Keine Telefonnummer",
-  known_scam_phone: "Bekannte Scam-Nummer",
-  duplicate_images: "Bilder mehrfach verwendet",
-  text_scam_markers: "Verdächtige Formulierungen",
-  low_evidence: "Wenig Vergleichsdaten",
+const FLAG_KEY: Record<string, TKey> = {
+  price_anomaly_low: "scamFlag.price_anomaly_low",
+  price_implausible: "scamFlag.price_implausible",
+  no_phone: "scamFlag.no_phone",
+  known_scam_phone: "scamFlag.known_scam_phone",
+  duplicate_images: "scamFlag.duplicate_images",
+  text_scam_markers: "scamFlag.text_scam_markers",
+  low_evidence: "scamFlag.low_evidence",
 };
 
-const SIGNAL_LABELS: Record<string, string> = {
-  urgent_pressure: "Druck zur schnellen Zahlung",
-  deposit_before_viewing: "Anzahlung vor Besichtigung",
-  cash_only: "Nur Barzahlung",
-  remote_landlord: "Eigentümer im Ausland",
-  no_viewing: "Besichtigung nicht möglich",
-  excessive_emojis: "Übermäßig viele Emojis",
-  broken_grammar: "Auffällige Grammatik",
-  stock_phrases: "Standard-Floskeln",
-  watermark_visible: "Wasserzeichen anderer Plattform sichtbar",
-  branding_visible: "Hotel-/Vermietungs-Branding sichtbar",
-  cropped_to_hide_watermark: "Bild verdächtig zugeschnitten",
-  image_blurry: "Bild unscharf/komprimiert",
+const SIGNAL_KEY: Record<string, TKey> = {
+  urgent_pressure: "scc.signal.urgent_pressure",
+  deposit_before_viewing: "scc.signal.deposit_before_viewing",
+  cash_only: "scc.signal.cash_only",
+  remote_landlord: "scc.signal.remote_landlord",
+  no_viewing: "scc.signal.no_viewing",
+  excessive_emojis: "scc.signal.excessive_emojis",
+  broken_grammar: "scc.signal.broken_grammar",
+  stock_phrases: "scc.signal.stock_phrases",
+  watermark_visible: "scc.signal.watermark_visible",
+  branding_visible: "scc.signal.branding_visible",
+  cropped_to_hide_watermark: "scc.signal.cropped_to_hide_watermark",
+  image_blurry: "scc.signal.image_blurry",
 };
+
+const REPORT_REASONS: Array<{ id: string; key: TKey }> = [
+  { id: "fake_address", key: "scc.report.reason.fake_address" },
+  { id: "unreliable_provider", key: "scc.report.reason.unreliable_provider" },
+  { id: "stolen_images", key: "scc.report.reason.stolen_images" },
+  { id: "money_before_viewing", key: "scc.report.reason.money_before_viewing" },
+  { id: "fake_id_papers", key: "scc.report.reason.fake_id_papers" },
+  { id: "other", key: "scc.report.reason.other" },
+];
 
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const IMAGE_ALLOWED = ["image/jpeg", "image/png", "image/webp"];
 
 export function ScamCheckClient() {
+  const { t } = useT();
   const [kind, setKind] = useState<Kind>("text");
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
@@ -110,13 +130,11 @@ export function ScamCheckClient() {
       return;
     }
     if (file.size > IMAGE_MAX_BYTES) {
-      setError({ error: "file_too_large", reason: "Maximal 10 MB pro Bild." });
+      setError({ error: "file_too_large", reason: t("scc.image.tooLarge") });
       return;
     }
     setError(null);
 
-    // iPhone-Fotos kommen als HEIC — Anthropic-Vision unterstützt das nicht.
-    // Konvertieren wir clientseitig zu JPEG mit heic2any (~1MB Lib, lazy load).
     const isHeic =
       file.type === "image/heic" ||
       file.type === "image/heif" ||
@@ -126,7 +144,6 @@ export function ScamCheckClient() {
       try {
         const { default: heic2any } = await import("heic2any");
         const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.85 });
-        // heic2any returns Blob | Blob[]; bei multi-frame nehmen wir das erste
         const jpegBlob = Array.isArray(converted) ? converted[0] : converted;
         const jpegFile = new File(
           [jpegBlob],
@@ -134,20 +151,14 @@ export function ScamCheckClient() {
           { type: "image/jpeg" },
         );
         if (jpegFile.size > IMAGE_MAX_BYTES) {
-          setError({
-            error: "file_too_large",
-            reason: "Konvertiertes JPEG ist über 10 MB. Wähle ein kleineres Bild.",
-          });
+          setError({ error: "file_too_large", reason: t("scc.image.heicTooLarge") });
           setImageFile(null);
         } else {
           setImageFile(jpegFile);
         }
       } catch (err) {
         console.error("[scam-shield] heic conversion failed", err);
-        setError({
-          error: "heic_conversion_failed",
-          reason: "Konnte das HEIC-Bild nicht konvertieren. Speichere es vorher als JPEG.",
-        });
+        setError({ error: "heic_conversion_failed", reason: t("scc.image.heicFailed") });
         setImageFile(null);
       } finally {
         setImageConverting(false);
@@ -156,7 +167,7 @@ export function ScamCheckClient() {
     }
 
     if (!IMAGE_ALLOWED.includes(file.type)) {
-      setError({ error: "unsupported_mime", reason: "JPEG, PNG oder WebP (HEIC wird automatisch konvertiert)." });
+      setError({ error: "unsupported_mime", reason: t("scc.image.unsupported") });
       return;
     }
     setImageFile(file);
@@ -183,19 +194,16 @@ export function ScamCheckClient() {
                 <button
                   key={tab.kind}
                   type="button"
-                  onClick={() => tab.available && setKind(tab.kind)}
-                  disabled={!tab.available}
+                  onClick={() => setKind(tab.kind)}
                   className={cn(
                     "px-3 py-2 text-sm rounded-md transition-colors",
-                    kind === tab.kind && tab.available
+                    kind === tab.kind
                       ? "bg-[var(--brand-navy)] text-white"
                       : "hover:bg-[var(--brand-gold-50)] text-[var(--foreground)]",
-                    !tab.available && "opacity-50 cursor-not-allowed",
                   )}
-                  title={tab.hint}
                 >
                   <span className="mr-1.5">{tab.icon}</span>
-                  {tab.label}
+                  {t(tab.key)}
                 </button>
               ))}
             </div>
@@ -204,17 +212,17 @@ export function ScamCheckClient() {
               {kind === "text" && (
                 <>
                   <label className="text-sm text-[var(--muted-foreground)]">
-                    Inseratstext einfügen — z.B. aus WhatsApp, Telegram oder einer FB-Gruppe.
+                    {t("scc.text.label")}
                   </label>
                   <Textarea
                     value={text}
                     onChange={(e) => setText(e.target.value)}
-                    placeholder="🔥 Schöne 2-Zimmer-Wohnung in Limassol, 600€/Monat..."
+                    placeholder={t("scc.text.placeholder")}
                     className="min-h-[200px]"
                     maxLength={10_000}
                   />
                   <p className="text-xs text-[var(--muted-foreground)]">
-                    {text.length}/10.000 Zeichen · mindestens 30 zum Prüfen
+                    {tFormat(t("scc.text.charCount"), { n: text.length })}
                   </p>
                 </>
               )}
@@ -222,26 +230,22 @@ export function ScamCheckClient() {
               {kind === "url" && (
                 <>
                   <label className="text-sm text-[var(--muted-foreground)]">
-                    Link zum Inserat — Bazaraki oder Facebook-Permalink.
+                    {t("scc.url.label")}
                   </label>
                   <Input
                     type="url"
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://www.bazaraki.com/adv/123456_..."
+                    placeholder={t("scc.url.placeholder")}
                   />
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    Wir prüfen zuerst unseren eigenen Index — dort stehen schon{" "}
-                    <strong>500+</strong> Inserate aus Zypern. Wenn dein Inserat dort ist, bekommst
-                    du sofort einen Score.
-                  </p>
+                  <p className="text-xs text-[var(--muted-foreground)]">{t("scc.url.hint")}</p>
                 </>
               )}
 
               {kind === "image" && (
                 <>
                   <label className="text-sm text-[var(--muted-foreground)]">
-                    Screenshot des Inserats hochladen — JPEG, PNG oder WebP, max. 10 MB.
+                    {t("scc.image.label")}
                   </label>
                   <div
                     onDragOver={(e) => {
@@ -265,7 +269,7 @@ export function ScamCheckClient() {
                   >
                     {imageConverting ? (
                       <p className="text-sm text-[var(--muted-foreground)]">
-                        🔄 HEIC wird zu JPEG konvertiert…
+                        {t("scc.image.heicConverting")}
                       </p>
                     ) : imageFile ? (
                       <div className="space-y-2">
@@ -278,15 +282,15 @@ export function ScamCheckClient() {
                           onClick={() => handleFileChosen(null)}
                           className="text-xs underline text-[var(--muted-foreground)]"
                         >
-                          Anderes Bild wählen
+                          {t("scc.image.chooseOther")}
                         </button>
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <p className="text-sm">📷 Bild hier reinziehen</p>
-                        <p className="text-xs text-[var(--muted-foreground)]">oder</p>
+                        <p className="text-sm">{t("scc.image.dragHere")}</p>
+                        <p className="text-xs text-[var(--muted-foreground)]">{t("scc.image.or")}</p>
                         <label className="inline-block px-3 py-1.5 text-sm rounded-md border border-[var(--border)] hover:bg-[var(--brand-gold-50)] cursor-pointer">
-                          Datei auswählen
+                          {t("scc.image.selectFile")}
                           <input
                             type="file"
                             accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
@@ -298,26 +302,23 @@ export function ScamCheckClient() {
                     )}
                   </div>
                   <p className="text-xs text-[var(--muted-foreground)]">
-                    Funktioniert auch mit Mobile-Screenshots aus FB-Groups oder Telegram. Nach der
-                    Prüfung wird das Bild verworfen — nur ein Bild-Hash bleibt für künftige
-                    Cross-Matches.
+                    {t("scc.image.afterText")}
                   </p>
                 </>
               )}
 
               <div className="flex items-center justify-between pt-2">
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Wir verarbeiten dein Inserat nur für die Prüfung. Verschlüsselt 30 Tage
-                  gespeichert, dann gelöscht. {" "}
+                  {t("scc.privacy")}{" "}
                   <a
                     href="/datenschutz#scam-shield"
                     className="underline hover:no-underline"
                   >
-                    Mehr erfahren
+                    {t("scc.privacy.more")}
                   </a>
                 </p>
                 <Button type="submit" disabled={!canSubmit}>
-                  {loading ? "Sophie schaut sich das an…" : "Sophie prüfen lassen"}
+                  {loading ? t("scc.submit.busy") : t("scc.submit.go")}
                 </Button>
               </div>
             </form>
@@ -325,21 +326,21 @@ export function ScamCheckClient() {
         </Card>
       )}
 
-      {error && <ErrorCard error={error} onRetry={reset} />}
+      {error && <ErrorCard error={error} onRetry={reset} t={t} />}
 
-      {result && <ResultCard result={result} onRetry={reset} />}
+      {result && <ResultCard result={result} onRetry={reset} t={t} />}
     </div>
   );
 }
 
-// ---------- Result-Card ------------------------------------------------------
-
 function ResultCard({
   result,
   onRetry,
+  t,
 }: {
   result: ScamCheckResponse;
   onRetry: () => void;
+  t: T;
 }) {
   const v = result.verdict;
   const flagCount = result.flags.length;
@@ -354,23 +355,22 @@ function ResultCard({
 
   const heading =
     v === "high"
-      ? "Hoher Scam-Verdacht"
+      ? t("scc.result.high")
       : v === "warn"
-      ? "Verdächtig"
+      ? t("scc.result.warn")
       : flagCount === 0
-      ? "Alles OK — keine Hinweise"
-      : "Insgesamt unauffällig";
+      ? t("scc.result.cleanNoFlags")
+      : t("scc.result.cleanWithFlags");
 
   const subline =
     v === "high"
-      ? "Mehrere Signale deuten auf Scam hin — Vorsicht."
+      ? t("scc.result.subHigh")
       : v === "warn"
-      ? "Sophie würde hier zweimal hinschauen."
+      ? t("scc.result.subWarn")
       : flagCount === 0
-      ? "Sophie hat nichts Auffälliges gefunden."
-      : "Kleine Hinweise, aber kein Scam-Verdacht.";
+      ? t("scc.result.subCleanNoFlags")
+      : t("scc.result.subCleanWithFlags");
 
-  // Quality-Signals aus extracted für die Detail-Anzeige unter "Verdächtige Formulierungen"
   const qualitySignals = Array.isArray(
     (result.extracted as Record<string, unknown>)?.quality_signals,
   )
@@ -389,7 +389,16 @@ function ResultCard({
             </div>
           </div>
 
-          <ScoreLight verdict={v} score={result.score} />
+          <ScoreLight
+            verdict={v}
+            score={result.score}
+            labels={{
+              clean: t("scoreLight.clean"),
+              warn: t("scoreLight.warn"),
+              high: t("scoreLight.high"),
+              scoreLine: t("scoreLight.line"),
+            }}
+          />
 
           {flagCount > 0 && (
             <ul className="space-y-2">
@@ -397,14 +406,14 @@ function ResultCard({
                 <li key={f} className={cn("text-sm", colors.text)}>
                   <div className="flex items-start gap-2">
                     <span className="opacity-60 mt-0.5">•</span>
-                    <span className="font-medium">{FLAG_LABELS[f] ?? f}</span>
+                    <span className="font-medium">{FLAG_KEY[f] ? t(FLAG_KEY[f]) : f}</span>
                   </div>
                   {f === "text_scam_markers" && qualitySignals.length > 0 && (
                     <ul className="mt-1 ml-5 space-y-0.5 text-xs opacity-80">
                       {qualitySignals.map((s) => (
                         <li key={s} className="flex items-start gap-1.5">
                           <span>›</span>
-                          <span>{SIGNAL_LABELS[s] ?? s}</span>
+                          <span>{SIGNAL_KEY[s] ? t(SIGNAL_KEY[s]) : s}</span>
                         </li>
                       ))}
                     </ul>
@@ -416,7 +425,7 @@ function ResultCard({
 
           <details className="text-sm">
             <summary className={cn("cursor-pointer font-medium select-none", colors.text)}>
-              Sophies Erklärung anzeigen
+              {t("scc.result.explanation")}
             </summary>
             <div className={cn("mt-2 space-y-1.5 text-sm", colors.text)}>
               {renderExplanation(result.explanation_md)}
@@ -426,7 +435,7 @@ function ResultCard({
           {result.similar_listing_ids.length > 0 && (
             <div className="pt-2 border-t border-current/10">
               <p className={cn("text-sm font-medium mb-2", colors.text)}>
-                Ähnliche Inserate gefunden:
+                {t("scc.result.similar")}
               </p>
               <ul className="space-y-1">
                 {result.similar_listing_ids.slice(0, 3).map((id) => (
@@ -435,7 +444,7 @@ function ResultCard({
                       href={`/listings/${id}`}
                       className={cn("underline hover:no-underline", colors.text)}
                     >
-                      → Inserat {id.slice(0, 8)}…
+                      → {t("scc.result.listingShort")} {id.slice(0, 8)}…
                     </a>
                   </li>
                 ))}
@@ -445,7 +454,7 @@ function ResultCard({
 
           {result.id && (v === "warn" || v === "high") && (
             <div className="pt-2 border-t border-current/10">
-              <ReportButton checkId={result.id} colorText={colors.text} />
+              <ReportButton checkId={result.id} colorText={colors.text} t={t} />
             </div>
           )}
         </CardContent>
@@ -454,19 +463,17 @@ function ResultCard({
       <Card>
         <CardContent className="p-5 flex items-center justify-between gap-4">
           <p className="text-sm">
-            {v === "clean"
-              ? "Suchst du selbst eine Wohnung?"
-              : "Sophie hilft dir, ein echtes Inserat zu finden."}
+            {v === "clean" ? t("scc.result.cta.searchOwn") : t("scc.result.cta.helpReal")}
             <br />
             <span className="text-[var(--muted-foreground)]">
-              Im Chat erstellt sie dir ein Suchprofil und durchsucht 500+ Inserate.
+              {t("scc.result.cta.subline")}
             </span>
           </p>
           <a
             href="/chat"
             className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--brand-navy)] text-white text-sm font-medium px-4 py-2 hover:bg-[var(--brand-navy-700)]"
           >
-            Mit Sophie chatten →
+            {t("scc.result.cta.go")}
           </a>
         </CardContent>
       </Card>
@@ -474,33 +481,24 @@ function ResultCard({
       <div className="flex items-center justify-between text-xs text-[var(--muted-foreground)] px-2">
         <span>
           {result.remaining_quota != null
-            ? `Du hast diesen Monat noch ${result.remaining_quota} ${result.remaining_quota === 1 ? "kostenlosen Check" : "kostenlose Checks"}.`
-            : "Premium · unbegrenzt"}
+            ? result.remaining_quota === 1
+              ? t("scc.result.quotaRemainingOne")
+              : tFormat(t("scc.result.quotaRemaining"), { n: result.remaining_quota })
+            : t("scc.result.quotaPremium")}
         </span>
         <button onClick={onRetry} className="underline hover:no-underline">
-          Noch ein Inserat prüfen
+          {t("scc.result.again")}
         </button>
       </div>
     </div>
   );
 }
 
-// ScoreLight + Verdict3 wurden nach components/scam-shield/ScoreLight.tsx
-// extrahiert — wird auch in ScamCheckBlock + ScamCheckBadge wiederverwendet.
-
-// ---------- Markdown-Renderer (klein) ---------------------------------------
-//
-// Sophies Erklärung kommt als Markdown-lite vom Server (lib/scam/score.ts).
-// Wir handhaben **bold** und Listen-Bullets korrekt — keine ungelöschten
-// Sterne mehr in der UI.
-
 function renderExplanation(md: string): ReactNode[] {
   const lines = md.split("\n").filter((l) => l.trim().length > 0);
   return lines.map((line, i) => {
-    // Listen-Bullet: führendes "- " oder "* " (aber NICHT "**...")
     let body = line.replace(/^([-*])\s+/, "• ");
     body = body.trim();
-    // **bold** → mit Markern für die Render-Phase
     const parts = body.split(/(\*\*[^*]+\*\*)/g);
     return (
       <p key={i}>
@@ -514,25 +512,22 @@ function renderExplanation(md: string): ReactNode[] {
   });
 }
 
-// ---------- Report-Flow (Spec B §9.3) ---------------------------------------
-
-const REPORT_REASONS: Array<{ id: string; label: string }> = [
-  { id: "fake_address", label: "Adresse stimmt nicht" },
-  { id: "unreliable_provider", label: "Anbieter unzuverlässig / nicht erreichbar" },
-  { id: "stolen_images", label: "Bilder gestohlen / aus anderer Quelle" },
-  { id: "money_before_viewing", label: "Geld verlangt vor Besichtigung" },
-  { id: "fake_id_papers", label: "Verdächtige Dokumente / Identität" },
-  { id: "other", label: "Sonstiges" },
-];
-
-function ReportButton({ checkId, colorText }: { checkId: string; colorText: string }) {
+function ReportButton({
+  checkId,
+  colorText,
+  t,
+}: {
+  checkId: string;
+  colorText: string;
+  t: T;
+}) {
   const [open, setOpen] = useState(false);
   const [reported, setReported] = useState(false);
 
   if (reported) {
     return (
       <p className={cn("text-sm font-medium", colorText)}>
-        ✓ Danke, dein Hinweis hilft anderen Nutzern.
+        {t("scc.report.thanks")}
       </p>
     );
   }
@@ -546,7 +541,7 @@ function ReportButton({ checkId, colorText }: { checkId: string; colorText: stri
           colorText,
         )}
       >
-        ⚠ Inserat als Scam melden
+        {t("scc.report.cta")}
       </button>
       {open && (
         <ReportModal
@@ -556,6 +551,7 @@ function ReportButton({ checkId, colorText }: { checkId: string; colorText: stri
             setReported(true);
             setOpen(false);
           }}
+          t={t}
         />
       )}
     </>
@@ -566,10 +562,12 @@ function ReportModal({
   checkId,
   onClose,
   onReported,
+  t,
 }: {
   checkId: string;
   onClose: () => void;
   onReported: () => void;
+  t: T;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
@@ -586,7 +584,7 @@ function ReportModal({
 
   async function submit() {
     if (selected.size === 0) {
-      setErr("Bitte mindestens einen Grund auswählen.");
+      setErr(t("scc.report.atLeastOne"));
       return;
     }
     setSubmitting(true);
@@ -601,7 +599,7 @@ function ReportModal({
         onReported();
       } else {
         const data = await resp.json().catch(() => null);
-        setErr(data?.reason ?? data?.error ?? "Konnte nicht melden.");
+        setErr(data?.reason ?? data?.error ?? t("scc.report.couldNot"));
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -620,10 +618,9 @@ function ReportModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div>
-          <h3 className="text-lg font-semibold">Was war auffällig?</h3>
+          <h3 className="text-lg font-semibold">{t("scc.report.title")}</h3>
           <p className="text-sm text-[var(--muted-foreground)] mt-1">
-            Mehrere Antworten möglich. Dein Hinweis hilft, dasselbe Inserat oder dieselbe
-            Telefonnummer in Zukunft schneller zu erkennen.
+            {t("scc.report.subtitle")}
           </p>
         </div>
 
@@ -639,7 +636,7 @@ function ReportModal({
                 onChange={() => toggle(r.id)}
                 className="mt-0.5"
               />
-              <span className="text-sm">{r.label}</span>
+              <span className="text-sm">{t(r.key)}</span>
             </label>
           ))}
         </div>
@@ -648,10 +645,10 @@ function ReportModal({
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose} disabled={submitting}>
-            Abbrechen
+            {t("scc.report.cancel")}
           </Button>
           <Button onClick={submit} disabled={submitting || selected.size === 0}>
-            {submitting ? "Wird gemeldet…" : "Als Scam melden"}
+            {submitting ? t("scc.report.submitting") : t("scc.report.submit")}
           </Button>
         </div>
       </div>
@@ -659,40 +656,50 @@ function ReportModal({
   );
 }
 
-// ---------- Error-Card -------------------------------------------------------
-
-function ErrorCard({ error, onRetry }: { error: ErrorResponse; onRetry: () => void }) {
+function ErrorCard({
+  error,
+  onRetry,
+  t,
+}: {
+  error: ErrorResponse;
+  onRetry: () => void;
+  t: T;
+}) {
   const headline =
     error.error === "quota_exhausted"
-      ? "Free-Quota erschöpft"
+      ? t("scc.err.quota_exhausted")
       : error.error === "input_too_short"
-      ? "Text zu kurz"
+      ? t("scc.err.input_too_short")
       : error.error === "input_unparseable"
-      ? "Konnte kein Inserat erkennen"
+      ? t("scc.err.input_unparseable")
       : error.error === "url_not_whitelisted"
-      ? "Quelle nicht unterstützt"
+      ? t("scc.err.url_not_whitelisted")
       : error.error === "url_not_in_index"
-      ? "Inserat noch nicht im Index"
+      ? t("scc.err.url_not_in_index")
       : error.error === "not_implemented"
-      ? "Noch nicht verfügbar"
-      : "Sophie konnte das nicht prüfen";
+      ? t("scc.err.not_implemented")
+      : t("scc.err.fallback");
 
-  const detail =
-    error.error === "quota_exhausted"
-      ? `Du hast deine 3 kostenlosen Checks für diesen Monat genutzt. Premium für 9,90 €/M → unbegrenzt.${
-          error.reset_at ? ` Dein nächster freier Check: ${new Date(error.reset_at).toLocaleDateString("de-DE")}.` : ""
-        }`
-      : error.error === "input_too_short"
-      ? "Bitte mindestens 30 Zeichen eingeben."
-      : error.error === "input_unparseable"
-      ? "Sophie konnte keinen Immobilien-Inseratstext darin finden."
-      : error.error === "url_not_in_index"
-      ? "Wir haben das Inserat noch nicht in unserem Index. Lade einen Screenshot hoch oder paste den Text rein."
-      : error.error === "url_not_whitelisted"
-      ? "Wir prüfen aktuell nur Bazaraki- und Facebook-Permalinks."
-      : error.error === "not_implemented"
-      ? `Diese Option kommt in Phase ${error.phase ?? "B-folgend"}. Probier solange einen anderen Tab.`
-      : (error.reason ?? "Unbekannter Fehler.");
+  let detail: string;
+  if (error.error === "quota_exhausted") {
+    let s = t("scc.errd.quota_exhausted");
+    if (error.reset_at) {
+      s += ` ${tFormat(t("scc.errd.quota_resetAt"), { date: new Date(error.reset_at).toLocaleDateString() })}`;
+    }
+    detail = s;
+  } else if (error.error === "input_too_short") {
+    detail = t("scc.errd.input_too_short");
+  } else if (error.error === "input_unparseable") {
+    detail = t("scc.errd.input_unparseable");
+  } else if (error.error === "url_not_in_index") {
+    detail = t("scc.errd.url_not_in_index");
+  } else if (error.error === "url_not_whitelisted") {
+    detail = t("scc.errd.url_not_whitelisted");
+  } else if (error.error === "not_implemented") {
+    detail = tFormat(t("scc.errd.not_implemented"), { phase: error.phase ?? "B" });
+  } else {
+    detail = error.reason ?? t("scc.errd.unknown");
+  }
 
   return (
     <Card className="border-amber-200">
@@ -700,7 +707,7 @@ function ErrorCard({ error, onRetry }: { error: ErrorResponse; onRetry: () => vo
         <h2 className="font-semibold">{headline}</h2>
         <p className="text-sm text-[var(--muted-foreground)]">{detail}</p>
         <Button variant="outline" onClick={onRetry}>
-          Nochmal versuchen
+          {t("scc.err.tryAgain")}
         </Button>
       </CardContent>
     </Card>
