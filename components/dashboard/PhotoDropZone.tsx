@@ -5,6 +5,8 @@ import { AlertCircle, Check, Loader2, Upload, Wand2, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/upload/compress";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import { tFormat, type T } from "@/lib/i18n/dict";
 
 const BUCKET = "listing-media";
 const MAX_IMAGE_INPUT_BYTES = 50 * 1024 * 1024; // 50 MB Original (vor Compression)
@@ -32,6 +34,7 @@ export function PhotoDropZone({
   onUploaded: (m: { url: string; name: string; isVideo: boolean }) => void;
   disabled?: boolean;
 }) {
+  const { t } = useT();
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [tracks, setTracks] = React.useState<Track[]>([]);
   const [dragOver, setDragOver] = React.useState(false);
@@ -53,13 +56,13 @@ export function PhotoDropZone({
     try {
       supabase = createSupabaseBrowserClient();
     } catch {
-      setGlobalError("Supabase nicht konfiguriert.");
+      setGlobalError(t("photo.notConfigured"));
       return;
     }
     const { data } = await supabase.auth.getUser();
     const user = data.user;
     if (!user) {
-      setGlobalError("Bitte zuerst anmelden, um Bilder hochzuladen.");
+      setGlobalError(t("photo.signinFirst"));
       return;
     }
 
@@ -195,12 +198,8 @@ export function PhotoDropZone({
         )}
       >
         <Upload className="size-7 text-[var(--muted-foreground)]" />
-        <div className="text-sm font-medium">
-          Bilder oder Videos hier ablegen — oder klicken
-        </div>
-        <div className="text-xs text-[var(--muted-foreground)]">
-          Beliebig viele gleichzeitig · iPhone-HEIC wird automatisch konvertiert · große Bilder werden komprimiert
-        </div>
+        <div className="text-sm font-medium">{t("photo.dropHere")}</div>
+        <div className="text-xs text-[var(--muted-foreground)]">{t("photo.subline")}</div>
         <input
           ref={inputRef}
           type="file"
@@ -223,29 +222,32 @@ export function PhotoDropZone({
           <div className="flex items-center justify-between px-3 py-2 text-xs">
             <span className="text-[var(--muted-foreground)]">
               {inFlight > 0
-                ? `${inFlight} laufen · ${tracks.filter((t) => t.status === "done").length} fertig`
-                : `${tracks.filter((t) => t.status === "done").length} fertig${
-                    tracks.filter((t) => t.status === "error").length
-                      ? ` · ${tracks.filter((t) => t.status === "error").length} Fehler`
+                ? tFormat(t("photo.running"), {
+                    a: inFlight,
+                    b: tracks.filter((tr) => tr.status === "done").length,
+                  })
+                : `${tFormat(t("photo.doneCount"), { n: tracks.filter((tr) => tr.status === "done").length })}${
+                    tracks.filter((tr) => tr.status === "error").length
+                      ? ` · ${tFormat(t("photo.errorsCount"), { n: tracks.filter((tr) => tr.status === "error").length })}`
                       : ""
                   }`}
             </span>
-            {inFlight === 0 && tracks.some((t) => t.status === "done") && (
+            {inFlight === 0 && tracks.some((tr) => tr.status === "done") && (
               <button
                 type="button"
                 onClick={clearDone}
                 className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               >
-                Liste leeren
+                {t("photo.clearList")}
               </button>
             )}
           </div>
-          {tracks.slice(-12).map((t) => (
-            <TrackRow key={t.id} track={t} onDismiss={() => dismissTrack(t.id)} />
+          {tracks.slice(-12).map((tr) => (
+            <TrackRow key={tr.id} track={tr} onDismiss={() => dismissTrack(tr.id)} t={t} />
           ))}
           {tracks.length > 12 && (
             <div className="px-3 py-2 text-[10px] text-[var(--muted-foreground)]">
-              +{tracks.length - 12} weitere
+              {tFormat(t("photo.more"), { n: tracks.length - 12 })}
             </div>
           )}
         </div>
@@ -254,7 +256,7 @@ export function PhotoDropZone({
   );
 }
 
-function TrackRow({ track, onDismiss }: { track: Track; onDismiss: () => void }) {
+function TrackRow({ track, onDismiss, t }: { track: Track; onDismiss: () => void; t: T }) {
   const formatSize = (b: number) =>
     b >= 1024 * 1024
       ? `${(b / 1024 / 1024).toFixed(1)} MB`
@@ -286,7 +288,7 @@ function TrackRow({ track, onDismiss }: { track: Track; onDismiss: () => void })
           {track.error}
         </span>
       ) : track.status === "compressing" ? (
-        <span className="text-purple-700">komprimiere…</span>
+        <span className="text-purple-700">{t("photo.compressing")}</span>
       ) : compressed && track.finalSize ? (
         <span className="text-[var(--muted-foreground)] tabular-nums">
           {formatSize(track.size)} →{" "}
@@ -304,7 +306,7 @@ function TrackRow({ track, onDismiss }: { track: Track; onDismiss: () => void })
           type="button"
           onClick={onDismiss}
           className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-          aria-label="Eintrag entfernen"
+          aria-label={t("photo.removeAria")}
         >
           <X className="size-3" />
         </button>

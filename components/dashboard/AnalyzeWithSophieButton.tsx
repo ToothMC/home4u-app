@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Loader2, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/client";
 
 export function AnalyzeWithSophieButton({
   listingId,
@@ -15,6 +16,7 @@ export function AnalyzeWithSophieButton({
   alreadyAnalyzed: boolean;
 }) {
   const router = useRouter();
+  const { t } = useT();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [done, setDone] = React.useState(false);
@@ -28,15 +30,14 @@ export function AnalyzeWithSophieButton({
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
+        setError(detail.detail ?? detail.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
         return;
       }
       setDone(true);
-      // Server-Component refresh holt die neuen Werte
       router.refresh();
       setTimeout(() => setDone(false), 4000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setError(err instanceof Error ? err.message : t("btn.networkError"));
     } finally {
       setBusy(false);
     }
@@ -50,12 +51,10 @@ export function AnalyzeWithSophieButton({
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold">
-            {alreadyAnalyzed ? "Sophie hat das bereits analysiert" : "Sophie analysiert dein Inserat"}
+            {alreadyAnalyzed ? t("analyze.alreadyAnalyzed") : t("analyze.willAnalyze")}
           </div>
           <div className="text-xs text-[var(--muted-foreground)] mt-0.5">
-            {alreadyAnalyzed
-              ? "Du kannst nochmal laufen lassen — überschreibt Title, Beschreibung, Features, Honest-Assessment und tagged jedes Foto nach Raum."
-              : "Sie liest alle Fotos und füllt Titel, Beschreibung, Ausstattung, Honest-Assessment und Raum-Tags automatisch."}
+            {alreadyAnalyzed ? t("analyze.alreadySub") : t("analyze.willSub")}
           </div>
         </div>
       </div>
@@ -70,7 +69,7 @@ export function AnalyzeWithSophieButton({
       {done && (
         <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 rounded-md p-2">
           <Check className="size-3" />
-          Fertig — alle Felder befüllt. Vorschau oben prüfen.
+          {t("analyze.done")}
         </div>
       )}
 
@@ -82,19 +81,19 @@ export function AnalyzeWithSophieButton({
       >
         {busy ? (
           <>
-            <Loader2 className="size-4 animate-spin" /> Sophie liest die Fotos…
+            <Loader2 className="size-4 animate-spin" /> {t("analyze.busy")}
           </>
         ) : (
           <>
             <Sparkles className="size-4" />
-            {alreadyAnalyzed ? "Erneut analysieren" : "Sophie analysieren lassen"}
+            {alreadyAnalyzed ? t("analyze.again") : t("analyze.start")}
           </>
         )}
       </Button>
 
       {!hasMedia && (
         <div className="text-[11px] text-[var(--muted-foreground)] text-center">
-          Lade zuerst Bilder hoch — Sophie braucht sie für die Analyse.
+          {t("analyze.noMedia")}
         </div>
       )}
     </div>

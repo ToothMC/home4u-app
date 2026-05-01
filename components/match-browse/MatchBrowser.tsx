@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { MatchCard, type MatchCardData, type SwipeDirection } from "./MatchCard";
+import { useT } from "@/lib/i18n/client";
 
 type Status = "browsing" | "submitting" | "done";
 type ToastState = {
@@ -63,6 +64,7 @@ export function MatchBrowser({
    *  Fallback (kein aktives Profil gefunden), nutzt dann globalen Key. */
   searchProfileId?: string | null;
 }) {
+  const { t } = useT();
   const [skipped, setSkipped] = React.useState<Set<string>>(() => new Set());
   const [skipReady, setSkipReady] = React.useState(false);
   const [idx, setIdx] = React.useState(0);
@@ -154,13 +156,13 @@ export function MatchBrowser({
         }),
       });
       if (res.status === 401) {
-        setError("Bitte einloggen, um Favoriten zu speichern.");
+        setError(t("matchBrowse.signInForFavs"));
         setStatus("browsing");
         return;
       }
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
+        setError(detail.detail ?? detail.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
         setStatus("browsing");
         return;
       }
@@ -181,7 +183,7 @@ export function MatchBrowser({
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setError(err instanceof Error ? err.message : t("btn.networkError"));
       setStatus("browsing");
     }
   }

@@ -7,6 +7,16 @@ import { AlertCircle, CheckCircle2, FileText, Loader2, Upload, X } from "lucide-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import { tFormat, type T } from "@/lib/i18n/dict";
+
+const NUMBER_LOCALE: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 type FieldError = { field: string; value: string | null; reason: string };
 
@@ -80,6 +90,7 @@ const ACCEPT = ".csv,.tsv,.xlsx,.xlsm,.pdf,.txt,.md,.text";
 
 export function ImportDropzone() {
   const router = useRouter();
+  const { t, lang } = useT();
   const [state, setState] = React.useState<State>({ kind: "idle" });
   const [dragActive, setDragActive] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -97,7 +108,7 @@ export function ImportDropzone() {
         const detail = await res.json().catch(() => ({}));
         setState({
           kind: "error",
-          message: detail.detail ?? detail.error ?? `Upload fehlgeschlagen (${res.status})`,
+          message: detail.detail ?? detail.error ?? tFormat(t("import.uploadFailed"), { code: res.status }),
         });
         return;
       }
@@ -106,7 +117,7 @@ export function ImportDropzone() {
     } catch (err) {
       setState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Netzwerkfehler",
+        message: err instanceof Error ? err.message : t("btn.networkError"),
       });
     }
   }
@@ -126,7 +137,7 @@ export function ImportDropzone() {
         const detail = await res.json().catch(() => ({}));
         setState({
           kind: "error",
-          message: detail.detail ?? detail.error ?? `Import fehlgeschlagen (${res.status})`,
+          message: detail.detail ?? detail.error ?? tFormat(t("import.failed"), { code: res.status }),
         });
         return;
       }
@@ -136,7 +147,7 @@ export function ImportDropzone() {
     } catch (err) {
       setState({
         kind: "error",
-        message: err instanceof Error ? err.message : "Netzwerkfehler",
+        message: err instanceof Error ? err.message : t("btn.networkError"),
       });
     }
   }
@@ -152,20 +163,20 @@ export function ImportDropzone() {
         <CardContent className="py-8 text-center space-y-4">
           <CheckCircle2 className="size-12 text-green-600 mx-auto" />
           <div>
-            <h2 className="text-lg font-semibold">Import abgeschlossen</h2>
+            <h2 className="text-lg font-semibold">{t("import.done")}</h2>
             <p className="text-sm text-[var(--muted-foreground)] mt-1">
-              {state.result.inserted} neu angelegt · {state.result.updated} aktualisiert
+              {tFormat(t("import.doneSummary"), { a: state.result.inserted, b: state.result.updated })}
               {state.result.failed.length > 0
-                ? ` · ${state.result.failed.length} Fehler`
+                ? tFormat(t("import.doneErrors"), { n: state.result.failed.length })
                 : ""}
             </p>
           </div>
           <div className="flex gap-2 justify-center">
             <Button asChild>
-              <Link href="/dashboard?view=provider">Zum Dashboard</Link>
+              <Link href="/dashboard?view=provider">{t("import.toDashboard")}</Link>
             </Button>
             <Button variant="outline" onClick={reset}>
-              Weitere Datei hochladen
+              {t("import.uploadAnother")}
             </Button>
           </div>
         </CardContent>
@@ -180,11 +191,11 @@ export function ImportDropzone() {
           <div className="flex items-start gap-2 text-red-600">
             <AlertCircle className="size-5 mt-0.5 shrink-0" />
             <div>
-              <strong>Fehler:</strong> {state.message}
+              <strong>{t("import.errorPrefix")}:</strong> {state.message}
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={reset}>
-            Erneut versuchen
+            {t("import.tryAgain")}
           </Button>
         </CardContent>
       </Card>
@@ -198,6 +209,8 @@ export function ImportDropzone() {
         onCommit={commit}
         onCancel={reset}
         onDownloadErrors={() => downloadErrorFile(state.data)}
+        t={t}
+        lang={lang}
       />
     );
   }
@@ -209,8 +222,8 @@ export function ImportDropzone() {
           <Loader2 className="size-10 mx-auto animate-spin text-[var(--muted-foreground)]" />
           <p className="text-sm text-[var(--muted-foreground)]">
             {state.kind === "uploading"
-              ? "Sophie liest deine Datei…"
-              : "Inserate werden importiert…"}
+              ? t("import.uploadingFile")
+              : t("import.committing")}
           </p>
         </CardContent>
       </Card>
@@ -241,9 +254,9 @@ export function ImportDropzone() {
       >
         <Upload className="size-10 mx-auto text-[var(--muted-foreground)]" />
         <div>
-          <p className="font-medium">Datei hier ablegen oder klicken</p>
+          <p className="font-medium">{t("import.dropHere")}</p>
           <p className="text-xs text-[var(--muted-foreground)] mt-1">
-            CSV · Excel · PDF · TXT — bis 10 MB
+            {t("import.dropHint")}
           </p>
         </div>
         <input
@@ -266,11 +279,15 @@ function PreviewView({
   onCommit,
   onCancel,
   onDownloadErrors,
+  t,
+  lang,
 }: {
   data: PreviewResponse;
   onCommit: () => void;
   onCancel: () => void;
   onDownloadErrors: () => void;
+  t: T;
+  lang: string;
 }) {
   return (
     <div className="space-y-4">
@@ -281,25 +298,25 @@ function PreviewView({
             <div>
               <div className="font-medium">{data.fileName}</div>
               <div className="text-xs text-[var(--muted-foreground)]">
-                {data.summary.total} Zeile(n) · Format {data.inputFormat.toUpperCase()}
+                {tFormat(t("import.rowsFormat"), { n: data.summary.total, format: data.inputFormat.toUpperCase() })}
               </div>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={onCancel}>
-            <X className="size-4" /> Abbrechen
+            <X className="size-4" /> {t("import.cancel")}
           </Button>
         </CardContent>
       </Card>
 
       <div className="grid grid-cols-3 gap-2 text-sm">
-        <SummaryTile label="Gültig" value={data.summary.valid} tone="ok" />
+        <SummaryTile label={t("import.summary.valid")} value={data.summary.valid} tone="ok" />
         <SummaryTile
-          label="Fehler"
+          label={t("import.summary.errors")}
           value={data.summary.errors}
           tone={data.summary.errors > 0 ? "warn" : "muted"}
         />
         <SummaryTile
-          label="Duplikate (in Datei)"
+          label={t("import.summary.duplicates")}
           value={data.summary.duplicatesInFile}
           tone="muted"
         />
@@ -307,11 +324,11 @@ function PreviewView({
 
       <div className="border rounded-lg overflow-hidden">
         <div className="bg-[var(--accent)] px-3 py-2 text-xs font-medium text-[var(--muted-foreground)]">
-          Vorschau (erste {Math.min(data.items.length, 50)} Zeilen)
+          {tFormat(t("import.previewHeading"), { n: Math.min(data.items.length, 50) })}
         </div>
         <div className="divide-y max-h-[420px] overflow-y-auto">
           {data.items.slice(0, 50).map((item) => (
-            <ItemRow key={item.sourceIndex} item={item} />
+            <ItemRow key={item.sourceIndex} item={item} t={t} lang={lang} />
           ))}
         </div>
       </div>
@@ -319,16 +336,18 @@ function PreviewView({
       <div className="flex flex-wrap gap-2 justify-end">
         {data.summary.errors > 0 && (
           <Button variant="outline" size="sm" onClick={onDownloadErrors}>
-            Fehlerdatei herunterladen
+            {t("import.downloadErrors")}
           </Button>
         )}
         <Button
           onClick={onCommit}
           disabled={!data.previewToken || data.summary.valid === 0}
         >
-          {data.summary.valid > 0
-            ? `${data.summary.valid} Inserat${data.summary.valid === 1 ? "" : "e"} importieren`
-            : "Nichts zu importieren"}
+          {data.summary.valid === 0
+            ? t("import.commit.none")
+            : data.summary.valid === 1
+              ? t("import.commit.one")
+              : tFormat(t("import.commit.many"), { n: data.summary.valid })}
         </Button>
       </div>
     </div>
@@ -359,7 +378,7 @@ function SummaryTile({
   );
 }
 
-function ItemRow({ item }: { item: Item }) {
+function ItemRow({ item, t, lang }: { item: Item; t: T; lang: string }) {
   if (item.status === "valid" || item.status === "duplicate-in-file") {
     const n = item.normalized;
     return (
@@ -372,20 +391,20 @@ function ItemRow({ item }: { item: Item }) {
         />
         <div className="flex-1 min-w-0">
           <div className="font-medium truncate">
-            {n.type === "rent" ? "Miete" : "Kauf"} · {n.location_city}
+            {n.type === "rent" ? t("import.rentLabel") : t("import.saleLabel")} · {n.location_city}
             {n.location_district ? ` · ${n.location_district}` : ""} · {n.rooms}{" "}
-            Zi · {n.price.toLocaleString("de-DE")} {n.currency}
+            {t("matchCard.roomsShort")} · {n.price.toLocaleString(NUMBER_LOCALE[lang] ?? "en-GB")} {n.currency}
             {n.size_sqm ? ` · ${n.size_sqm} m²` : ""}
           </div>
           <div className="text-xs text-[var(--muted-foreground)] truncate">
             {item.status === "duplicate-in-file" && (
-              <span className="text-amber-700">Duplikat in Datei · </span>
+              <span className="text-amber-700">{t("import.dupLabel")} · </span>
             )}
             {n.contact_name ?? ""}
             {n.contact_phone ? ` · ${n.contact_phone}` : ""}
             {n.external_id ? ` · #${n.external_id}` : ""}
-            {n.media.length > 0 ? ` · ${n.media.length} Bilder` : ""}
-            {item.confidence < 0.9 ? ` · KI-Sicherheit ${Math.round(item.confidence * 100)}%` : ""}
+            {n.media.length > 0 ? ` · ${tFormat(t("import.imagesCount"), { n: n.media.length })}` : ""}
+            {item.confidence < 0.9 ? ` · ${tFormat(t("import.confidence"), { pct: Math.round(item.confidence * 100) })}` : ""}
             {item.note ? ` · ${item.note}` : ""}
           </div>
         </div>
@@ -396,7 +415,7 @@ function ItemRow({ item }: { item: Item }) {
     <div className="px-3 py-2 text-sm flex items-start gap-2 bg-red-50/40">
       <AlertCircle className="size-4 text-red-600 mt-0.5 shrink-0" />
       <div className="flex-1 min-w-0">
-        <div className="font-medium text-red-900">Zeile {item.sourceIndex + 1} — Fehler</div>
+        <div className="font-medium text-red-900">{tFormat(t("import.rowError"), { n: item.sourceIndex + 1 })}</div>
         <ul className="text-xs text-red-800 mt-0.5 space-y-0.5">
           {item.errors.map((e, idx) => (
             <li key={idx}>

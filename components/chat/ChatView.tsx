@@ -259,7 +259,7 @@ export function ChatView({
   return (
     <div className="flex flex-col flex-1 h-[100dvh] max-h-[100dvh]">
       <header className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--warm-cream)]/85 backdrop-blur px-4 py-3">
-        <Button asChild size="icon" variant="ghost" aria-label="Zurück">
+        <Button asChild size="icon" variant="ghost" aria-label={t("chatView.backAria")}>
           <Link href="/">
             <ArrowLeft />
           </Link>
@@ -275,14 +275,14 @@ export function ChatView({
         <div className="flex-1 min-w-0">
           <p className="font-semibold leading-tight text-[var(--brand-navy)]">Sophie</p>
           <p className="text-xs text-[var(--warm-bark)] leading-tight">
-            Home<span className="text-[var(--brand-gold)] font-semibold">4</span>U · KI-Assistentin
+            Home<span className="text-[var(--brand-gold)] font-semibold">4</span>U · {t("chatView.brandSubtitle")}
           </p>
         </div>
         {region && (
           <Link
             href="/#region"
             className="flex items-center gap-1 text-xs text-[var(--muted-foreground)] rounded-full border px-3 py-1.5 hover:bg-[var(--accent)]"
-            aria-label="Region wechseln"
+            aria-label={t("chatView.regionAria")}
           >
             <MapPin className="size-3" />
             {region.city}
@@ -303,12 +303,12 @@ export function ChatView({
           {streaming && (
             <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)] px-2">
               <Loader2 className="size-3 animate-spin" />
-              Sophie tippt…
+              {t("chatView.typing")}
             </div>
           )}
           {error && (
             <div className="text-sm text-[var(--destructive)] border border-[var(--destructive)] rounded-md px-3 py-2">
-              Fehler: {error}
+              {t("chatView.errorPrefix")}: {error}
             </div>
           )}
           <div ref={endRef} />
@@ -341,7 +341,7 @@ export function ChatView({
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
               rows={1}
-              placeholder="Schreib Sophie…"
+              placeholder={t("chatView.placeholder")}
               className="resize-none min-h-[44px] max-h-40"
               disabled={streaming}
             />

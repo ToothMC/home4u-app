@@ -3,37 +3,35 @@
 import * as React from "react";
 import { Loader2, Play, MapPin, Sparkles, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/client";
+import { tFormat, type TKey } from "@/lib/i18n/dict";
 
 type JobConfig = {
   key: string;
-  label: string;
+  labelKey: TKey;
+  descKey: TKey;
   endpoint: string;
   icon: React.ReactNode;
-  description: string;
-  /** Default-Limit pro Run */
   limit: number;
-  /** Max Iteration für Schutz */
   maxRuns: number;
 };
 
 const JOBS: JobConfig[] = [
   {
     key: "geocode",
-    label: "Geocoding (Nominatim)",
+    labelKey: "admin.jobs.geocode.label",
+    descKey: "admin.jobs.geocode.desc",
     endpoint: "/api/admin/geocode-backfill",
     icon: <MapPin className="size-4" />,
-    description:
-      "Listings ohne lat/lng bekommen Koordinaten zugewiesen. Dauert ~33 Sek pro 30 Listings (Nominatim-Rate-Limit).",
     limit: 30,
     maxRuns: 20,
   },
   {
     key: "embed",
-    label: "Embeddings (OpenAI)",
+    labelKey: "admin.jobs.embed.label",
+    descKey: "admin.jobs.embed.desc",
     endpoint: "/api/admin/embed-backfill",
     icon: <Sparkles className="size-4" />,
-    description:
-      "Listings + Suchprofile ohne Embedding werden via text-embedding-3-small vektorisiert (für Cosine-Match).",
     limit: 200,
     maxRuns: 5,
   },
@@ -50,6 +48,7 @@ type RunResult = {
 };
 
 export function AdminJobsPanel() {
+  const { t } = useT();
   const [runs, setRuns] = React.useState<Record<string, RunResult>>(() => {
     const m: Record<string, RunResult> = {};
     JOBS.forEach((j) => (m[j.key] = init()));
@@ -85,8 +84,6 @@ export function AdminJobsPanel() {
           return;
         }
 
-        // Geocoding-Format: { processed, hits, misses }
-        // Embed-Format:     { listings: { processed, embedded }, profiles: { ... } }
         let processed = 0;
         let hits = 0;
         if (typeof data.processed === "number") {
@@ -99,7 +96,7 @@ export function AdminJobsPanel() {
         totalProcessed += processed;
         totalHits += hits;
 
-        const line = `Run ${i + 1}: ${processed} verarbeitet, ${hits} erfolgreich`;
+        const line = tFormat(t("admin.jobs.runLine"), { n: i + 1, processed, hits });
         setRuns((p) => ({
           ...p,
           [job.key]: {
@@ -111,7 +108,6 @@ export function AdminJobsPanel() {
           },
         }));
 
-        // Stop-Condition: nichts mehr zu tun
         if (processed === 0) break;
       } catch (err) {
         setRuns((p) => ({
@@ -135,10 +131,8 @@ export function AdminJobsPanel() {
   return (
     <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-4">
       <div>
-        <h2 className="text-sm font-semibold">Admin-Jobs</h2>
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Hintergrund-Wartungsjobs. Nur sichtbar mit profile.role = admin.
-        </p>
+        <h2 className="text-sm font-semibold">{t("admin.jobs.heading")}</h2>
+        <p className="text-xs text-[var(--muted-foreground)]">{t("admin.jobs.subtitle")}</p>
       </div>
       <div className="space-y-3">
         {JOBS.map((job) => {
@@ -152,9 +146,9 @@ export function AdminJobsPanel() {
                     {job.icon}
                   </span>
                   <div className="min-w-0">
-                    <div className="text-sm font-medium">{job.label}</div>
+                    <div className="text-sm font-medium">{t(job.labelKey)}</div>
                     <div className="text-[11px] text-[var(--muted-foreground)]">
-                      {job.description}
+                      {t(job.descKey)}
                     </div>
                   </div>
                 </div>
@@ -169,7 +163,7 @@ export function AdminJobsPanel() {
                   ) : (
                     <Play className="size-3" />
                   )}
-                  Starten
+                  {t("admin.jobs.start")}
                 </Button>
               </div>
 
@@ -182,13 +176,14 @@ export function AdminJobsPanel() {
                   ))}
                   {run.state === "done" && (
                     <div className="flex items-center gap-1 text-emerald-700 font-medium">
-                      <Check className="size-3" /> Fertig — total {run.totalHits} /{" "}
-                      {run.totalProcessed}
+                      <Check className="size-3" />{" "}
+                      {tFormat(t("admin.jobs.done"), { hits: run.totalHits, processed: run.totalProcessed })}
                     </div>
                   )}
                   {run.state === "error" && (
                     <div className="flex items-center gap-1 text-red-700 font-medium">
-                      <AlertCircle className="size-3" /> Fehler: {run.error}
+                      <AlertCircle className="size-3" />{" "}
+                      {tFormat(t("admin.jobs.error"), { msg: run.error ?? "" })}
                     </div>
                   )}
                 </div>
