@@ -6,8 +6,10 @@ import { cn } from "@/lib/utils";
 import { PhotoLightbox } from "./PhotoLightbox";
 import type { ListingPhoto } from "./types";
 import { isVideoUrl } from "./types";
+import { useT } from "@/lib/i18n/client";
 
 export function HeroGallery({ images }: { images: string[] }) {
+  const { t } = useT();
   const [idx, setIdx] = React.useState(0);
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const [broken, setBroken] = React.useState<Set<number>>(new Set());
@@ -17,7 +19,7 @@ export function HeroGallery({ images }: { images: string[] }) {
   if (total === 0) {
     return (
       <div className="aspect-[16/9] sm:aspect-[2/1] bg-[var(--muted)] rounded-2xl flex items-center justify-center text-sm text-[var(--muted-foreground)]">
-        Keine Bilder
+        {t("matchCard.noImage")}
       </div>
     );
   }
@@ -185,7 +187,7 @@ export function HeroGallery({ images }: { images: string[] }) {
         <PhotoLightbox
           photos={lightboxPhotos}
           startIndex={lightboxStart}
-          roomLabel="Alle Bilder"
+          roomLabel={t("hero.allImages")}
           onClose={() => setLightboxStart(null)}
         />
       )}

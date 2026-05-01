@@ -3,10 +3,30 @@
 import * as React from "react";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ROOM_LABEL, isVideoUrl, type ListingPhoto } from "./types";
+import { isVideoUrl, type ListingPhoto } from "./types";
 import { PhotoLightbox } from "./PhotoLightbox";
+import { useT } from "@/lib/i18n/client";
+import { tFormat, type TKey } from "@/lib/i18n/dict";
+
+const ROOM_KEY: Record<string, TKey> = {
+  living: "room.living",
+  kitchen: "room.kitchen",
+  bedroom: "room.bedroom",
+  bathroom: "room.bathroom",
+  balcony: "room.balcony",
+  terrace: "room.terrace",
+  exterior: "room.exterior",
+  view: "room.view",
+  garden: "room.garden",
+  pool: "room.pool",
+  parking: "room.parking",
+  hallway: "room.hallway",
+  utility: "room.utility",
+  other: "room.other",
+};
 
 export function RoomGalleryGrid({ photos }: { photos: ListingPhoto[] }) {
+  const { t } = useT();
   const grouped = React.useMemo(() => {
     const map = new Map<string, ListingPhoto[]>();
     for (const p of photos) {
@@ -32,10 +52,15 @@ export function RoomGalleryGrid({ photos }: { photos: ListingPhoto[] }) {
 
   if (groups.length === 0) return null;
 
+  function roomLabel(key: string): string {
+    const tk = ROOM_KEY[key];
+    return tk ? t(tk) : key;
+  }
+
   return (
     <>
       <section className="space-y-3">
-        <h2 className="text-base font-semibold">Raum für Raum entdecken</h2>
+        <h2 className="text-base font-semibold">{t("rooms.heading")}</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           {groups.map(([room, list]) => (
             <button
@@ -71,11 +96,11 @@ export function RoomGalleryGrid({ photos }: { photos: ListingPhoto[] }) {
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
               <div className="absolute bottom-0 inset-x-0 p-3 text-white flex items-end justify-between gap-2">
                 <div>
-                  <div className="font-medium text-sm">
-                    {ROOM_LABEL[room] ?? room}
-                  </div>
+                  <div className="font-medium text-sm">{roomLabel(room)}</div>
                   <div className="text-[10px] opacity-90">
-                    {list.length} {list.length === 1 ? "Bild" : "Bilder"}
+                    {tFormat(list.length === 1 ? t("rooms.image") : t("rooms.images"), {
+                      n: list.length,
+                    })}
                   </div>
                 </div>
                 <ArrowRight className="size-5 opacity-90 group-hover:translate-x-0.5 transition-transform" />
@@ -89,7 +114,7 @@ export function RoomGalleryGrid({ photos }: { photos: ListingPhoto[] }) {
         <PhotoLightbox
           photos={openPhotos}
           startIndex={openIndex}
-          roomLabel={ROOM_LABEL[openRoom] ?? openRoom}
+          roomLabel={roomLabel(openRoom)}
           onClose={() => setOpenRoom(null)}
         />
       )}

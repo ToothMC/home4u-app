@@ -1,4 +1,8 @@
+"use client";
+
 import { ExternalLink } from "lucide-react";
+import { useT } from "@/lib/i18n/client";
+import { tFormat } from "@/lib/i18n/dict";
 
 const SOURCE_LABELS: Record<string, string> = {
   bazaraki: "Bazaraki",
@@ -6,7 +10,7 @@ const SOURCE_LABELS: Record<string, string> = {
   cyprus_real_estate: "Cyprus-Real.Estate",
   fb: "Facebook",
   direct: "Home4U",
-  other: "externer Quelle",
+  other: "—",
 };
 
 function sourceLabel(source: string): string {
@@ -22,6 +26,7 @@ export function SourceLinkButton({
   source: string;
   full?: boolean;
 }) {
+  const { t } = useT();
   const label = sourceLabel(source);
   return (
     <div className="space-y-2">
@@ -35,17 +40,17 @@ export function SourceLinkButton({
         }
       >
         <ExternalLink className="size-4" />
-        Direkt zum Inserat auf {label}
+        {tFormat(t("sourceLink.cta"), { label })}
       </a>
       <p className="text-xs text-[var(--muted-foreground)] text-center px-2">
-        Anbieter-Kontakt liegt uns nicht vor — du kommst hier auf das
-        Original-Inserat und kannst dort direkt anfragen.
+        {t("sourceLink.hint")}
       </p>
     </div>
   );
 }
 
 export function NoContactFallback({ full }: { full?: boolean }) {
+  const { t } = useT();
   return (
     <div
       className={
@@ -53,11 +58,8 @@ export function NoContactFallback({ full }: { full?: boolean }) {
         (full ? "w-full" : "")
       }
     >
-      <p className="font-semibold mb-1">Kontakt aktuell nicht verfügbar</p>
-      <p className="text-xs text-[var(--muted-foreground)]">
-        Wir konnten weder den Anbieter-Kontakt noch die Original-Quelle
-        ermitteln. Bitte versuche es später nochmal.
-      </p>
+      <p className="font-semibold mb-1">{t("noContact.heading")}</p>
+      <p className="text-xs text-[var(--muted-foreground)]">{t("noContact.text")}</p>
     </div>
   );
 }

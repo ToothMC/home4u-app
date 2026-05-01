@@ -8,6 +8,8 @@ import {
   MapPin,
 } from "lucide-react";
 import type { NearbyPOI } from "./types";
+import { getT } from "@/lib/i18n/server";
+import { tFormat } from "@/lib/i18n/dict";
 
 const ICON: Record<NearbyPOI["category"], React.ReactNode> = {
   transit: <Bus className="size-4" />,
@@ -19,7 +21,7 @@ const ICON: Record<NearbyPOI["category"], React.ReactNode> = {
   other: <MapPin className="size-4" />,
 };
 
-export function LocationBlock({
+export async function LocationBlock({
   city,
   district,
   address,
@@ -34,6 +36,7 @@ export function LocationBlock({
   lng: number | null;
   pois: NearbyPOI[];
 }) {
+  const { t } = await getT();
   const hasGeo = lat != null && lng != null;
   const mapUrl = hasGeo
     ? `https://www.openstreetmap.org/export/embed.html?bbox=${lng! - 0.005},${lat! - 0.003},${lng! + 0.005},${lat! + 0.003}&layer=mapnik&marker=${lat},${lng}`
@@ -41,12 +44,12 @@ export function LocationBlock({
 
   return (
     <section id="nearby" className="rounded-2xl border bg-[var(--card)] p-4 space-y-3">
-      <h3 className="text-sm font-semibold">Lage auf einen Blick</h3>
+      <h3 className="text-sm font-semibold">{t("location.heading.glance")}</h3>
 
       {hasGeo ? (
         <div className="rounded-xl overflow-hidden border aspect-[2/1]">
           <iframe
-            title="Lage"
+            title={t("location.heading")}
             src={mapUrl!}
             className="h-full w-full"
             loading="lazy"
@@ -54,7 +57,7 @@ export function LocationBlock({
         </div>
       ) : (
         <div className="rounded-xl border bg-[var(--muted)] aspect-[2/1] flex items-center justify-center text-xs text-[var(--muted-foreground)]">
-          Adresse noch nicht hinterlegt
+          {t("location.noAddress")}
         </div>
       )}
 
@@ -73,7 +76,7 @@ export function LocationBlock({
                 <div className="min-w-0 flex-1">
                   <div className="truncate">{p.name}</div>
                   <div className="text-[10px] text-[var(--muted-foreground)]">
-                    {p.walking_minutes} Min.
+                    {tFormat(t("location.minutes"), { n: p.walking_minutes })}
                   </div>
                 </div>
               </div>

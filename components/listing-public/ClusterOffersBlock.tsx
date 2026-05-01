@@ -1,6 +1,17 @@
 import { ExternalLink } from "lucide-react";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { buildSourceUrl } from "@/lib/listings/source-url";
+import { getT } from "@/lib/i18n/server";
+import { tFormat } from "@/lib/i18n/dict";
+import type { SupportedLang } from "@/lib/lang/preferred-language";
+
+const NUMBER_LOCALE: Record<SupportedLang, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 const SOURCE_LABELS: Record<string, string> = {
   bazaraki: "Bazaraki",
@@ -8,7 +19,7 @@ const SOURCE_LABELS: Record<string, string> = {
   cyprus_real_estate: "Cyprus-Real.Estate",
   fb: "Facebook",
   direct: "Home4U",
-  other: "externe Quelle",
+  other: "—",
 };
 
 type Offer = {
@@ -23,12 +34,6 @@ type Offer = {
   days_since_seen?: number;
 };
 
-/**
- * Variante A — "Auch verfügbar von:"-Block.
- * Zeigt alle Anbieter desselben Cluster-Masters (= dieselbe Wohnung
- * von verschiedenen Maklern zu evt. unterschiedlichen Preisen).
- * Render nur wenn Cluster mind. 2 Anbieter hat.
- */
 export async function ClusterOffersBlock({
   canonicalListingId,
 }: {
@@ -45,16 +50,19 @@ export async function ClusterOffersBlock({
   const offers = data as Offer[];
   if (offers.length < 2) return null;
 
+  const { t, lang } = await getT();
+  const otherCount = offers.length - 1;
+
   return (
     <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-3">
       <div>
         <h2 className="text-base font-semibold">
-          Auch verfügbar von {offers.length - 1} weiteren{" "}
-          {offers.length - 1 === 1 ? "Anbieter" : "Anbietern"}
+          {otherCount === 1
+            ? t("cluster.alsoAvailableFromOne")
+            : tFormat(t("cluster.alsoAvailableFrom"), { n: otherCount })}
         </h2>
         <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-          Dieselbe Immobilie wird auch hier angeboten — günstigster Preis
-          oben.
+          {t("cluster.subtitle")}
         </p>
       </div>
       <div className="space-y-2">
@@ -65,7 +73,7 @@ export async function ClusterOffersBlock({
             external_id: o.external_id,
             extracted_data: null,
           });
-          const fmtPrice = new Intl.NumberFormat("de-DE", {
+          const fmtPrice = new Intl.NumberFormat(NUMBER_LOCALE[lang], {
             style: "currency",
             currency: o.currency || "EUR",
             maximumFractionDigits: 0,
@@ -80,7 +88,7 @@ export async function ClusterOffersBlock({
                   {fmtPrice}
                   {o.is_canonical && (
                     <span className="ml-2 text-[10px] uppercase tracking-wider text-emerald-700 font-semibold">
-                      hier gezeigt
+                      {t("cluster.shownHere")}
                     </span>
                   )}
                 </div>
@@ -96,7 +104,7 @@ export async function ClusterOffersBlock({
                   rel="noopener noreferrer"
                   className="shrink-0 text-xs text-[var(--primary)] hover:underline inline-flex items-center gap-1"
                 >
-                  Ansehen <ExternalLink className="size-3" />
+                  {t("cluster.view")} <ExternalLink className="size-3" />
                 </a>
               )}
             </div>

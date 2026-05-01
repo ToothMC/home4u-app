@@ -1,7 +1,8 @@
 import { Check, Minus } from "lucide-react";
 import type { HonestAssessment } from "./types";
+import { getT } from "@/lib/i18n/server";
 
-export function HonestAssessmentBlock({
+export async function HonestAssessmentBlock({
   assessment,
 }: {
   assessment: HonestAssessment | null;
@@ -9,9 +10,10 @@ export function HonestAssessmentBlock({
   if (!assessment || (assessment.pros.length === 0 && assessment.cons.length === 0)) {
     return null;
   }
+  const { t } = await getT();
   return (
     <section className="rounded-2xl border bg-[var(--card)] p-4">
-      <h3 className="text-sm font-semibold mb-3">Ehrlich gesagt</h3>
+      <h3 className="text-sm font-semibold mb-3">{t("honest.heading")}</h3>
       <ul className="space-y-3">
         {assessment.pros.map((p, i) => (
           <li key={`pro-${i}`} className="flex items-start gap-3">
