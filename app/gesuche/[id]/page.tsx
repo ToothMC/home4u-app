@@ -1,8 +1,3 @@
-// Detail-Page eines Such-Inserats. Anonymisierter Profil-Block + Picker, mit
-// dem ein eingeloggter Owner eines seiner aktiven Listings als Angebot
-// schicken kann. Owner-Picker-Daten kommen direkt aus dem RPC
-// get_wanted_profile (eligible_listings filtert auf caller-owned + active +
-// passender Type).
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, MapPin, Wallet, Bed, PawPrint, Users2, CalendarDays } from "lucide-react";
@@ -13,8 +8,39 @@ import {
   createSupabaseServerClient,
   createSupabaseServiceClient,
 } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
+import type { SupportedLang } from "@/lib/lang/preferred-language";
 
 export const dynamic = "force-dynamic";
+
+const NUMBER_LOCALE: Record<SupportedLang, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
+
+const HOUSEHOLD_KEY: Record<string, TKey> = {
+  single: "household.single",
+  couple: "household.couple",
+  family: "household.family",
+  shared: "household.shared",
+};
+
+const PROPERTY_TYPE_KEY: Record<string, TKey> = {
+  apartment: "property.apartment",
+  house: "property.house",
+  villa: "property.villa",
+  maisonette: "property.maisonette",
+  studio: "property.studio",
+  townhouse: "property.townhouse",
+  penthouse: "property.penthouse",
+  bungalow: "property.bungalow",
+  land: "property.land",
+  commercial: "property.commercial",
+};
 
 type ProfileRow = {
   id: string;
@@ -47,22 +73,21 @@ type EligibleListing = {
   cover_url: string | null;
 };
 
-const HOUSEHOLD_LABEL: Record<string, string> = {
-  single: "Einzelperson",
-  couple: "Paar",
-  family: "Familie",
-  shared: "WG",
-};
-
-function formatBudget(min: number | null, max: number, currency: string): string {
+function formatBudget(
+  min: number | null,
+  max: number,
+  currency: string,
+  lang: SupportedLang,
+  t: T,
+): string {
   const fmt = (n: number) =>
-    new Intl.NumberFormat("de-DE", {
+    new Intl.NumberFormat(NUMBER_LOCALE[lang], {
       style: "currency",
       currency,
       maximumFractionDigits: 0,
     }).format(n);
   if (min && min > 0) return `${fmt(min)} – ${fmt(max)}`;
-  return `bis ${fmt(max)}`;
+  return `${t("common.budgetUpTo")} ${fmt(max)}`;
 }
 
 export default async function GesucheDetailPage({
@@ -72,14 +97,12 @@ export default async function GesucheDetailPage({
 }) {
   const { id } = await params;
   const user = await getAuthUser();
-  // Auth-Gate konsistent zur Liste — Such-Inserate insgesamt nur eingeloggt
-  // sichtbar (verhindert anonymes Scrapen).
   if (!user) {
     redirect(`/?auth=required&next=/gesuche/${id}`);
   }
 
-  // Server-Client damit auth.uid() im RPC sichtbar ist und eligible_listings
-  // korrekt befüllt wird.
+  const { t, lang } = await getT();
+
   let supabase;
   try {
     supabase = await createSupabaseServerClient();
@@ -100,6 +123,19 @@ export default async function GesucheDetailPage({
   const p = payload.profile;
   const eligible = payload.eligible_listings ?? [];
 
+  const propertyTypeLabel = p.property_type
+    ? PROPERTY_TYPE_KEY[p.property_type]
+      ? t(PROPERTY_TYPE_KEY[p.property_type])
+      : p.property_type
+    : null;
+  const householdLabel = p.household
+    ? HOUSEHOLD_KEY[p.household]
+      ? t(HOUSEHOLD_KEY[p.household])
+      : p.household
+    : null;
+
+  const typeLabel = p.type === "rent" ? t("searchEditor.type.rent") : t("searchEditor.type.sale");
+
   return (
     <main className="flex-1">
       <header className="mx-auto max-w-3xl w-full px-4 pt-4 flex items-center justify-between">
@@ -107,7 +143,7 @@ export default async function GesucheDetailPage({
           href="/gesuche"
           className="text-sm text-[var(--muted-foreground)] hover:underline flex items-center gap-1"
         >
-          <ArrowLeft className="size-4" /> Zurück zu Such-Inseraten
+          <ArrowLeft className="size-4" /> {t("wantedDetail.back")}
         </Link>
         <AuthMenu />
       </header>
@@ -118,11 +154,11 @@ export default async function GesucheDetailPage({
             <span className={`rounded px-2 py-0.5 text-xs font-medium ${
               p.type === "rent" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
             }`}>
-              {p.type === "rent" ? "sucht zur Miete" : "sucht zum Kauf"}
+              {p.type === "rent" ? t("wanted.card.rent") : t("wanted.card.sale")}
             </span>
-            {p.property_type ? (
+            {propertyTypeLabel ? (
               <span className="text-sm text-[var(--muted-foreground)]">
-                {p.property_type}
+                {propertyTypeLabel}
               </span>
             ) : null}
           </div>
@@ -135,44 +171,44 @@ export default async function GesucheDetailPage({
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <div className="flex items-center gap-1.5">
               <Wallet className="size-4 text-[var(--muted-foreground)]" />
-              <dt className="text-[var(--muted-foreground)]">Budget</dt>
-              <dd className="font-medium">{formatBudget(p.budget_min, p.budget_max, p.currency)}</dd>
+              <dt className="text-[var(--muted-foreground)]">{t("wantedDetail.budget")}</dt>
+              <dd className="font-medium">{formatBudget(p.budget_min, p.budget_max, p.currency, lang, t)}</dd>
             </div>
             {p.rooms ? (
               <div className="flex items-center gap-1.5">
                 <Bed className="size-4 text-[var(--muted-foreground)]" />
-                <dt className="text-[var(--muted-foreground)]">Zimmer</dt>
-                <dd className="font-medium">{p.rooms}{p.rooms_strict ? " (genau)" : "+"}</dd>
+                <dt className="text-[var(--muted-foreground)]">{t("wantedDetail.rooms")}</dt>
+                <dd className="font-medium">{p.rooms}{p.rooms_strict ? t("wantedDetail.roomsExact") : "+"}</dd>
               </div>
             ) : null}
-            {p.household ? (
+            {householdLabel ? (
               <div className="flex items-center gap-1.5">
                 <Users2 className="size-4 text-[var(--muted-foreground)]" />
-                <dt className="text-[var(--muted-foreground)]">Haushalt</dt>
-                <dd className="font-medium">{HOUSEHOLD_LABEL[p.household] ?? p.household}</dd>
+                <dt className="text-[var(--muted-foreground)]">{t("wantedDetail.household")}</dt>
+                <dd className="font-medium">{householdLabel}</dd>
               </div>
             ) : null}
             {p.move_in_date ? (
               <div className="flex items-center gap-1.5">
                 <CalendarDays className="size-4 text-[var(--muted-foreground)]" />
-                <dt className="text-[var(--muted-foreground)]">Einzug ab</dt>
-                <dd className="font-medium">{new Date(p.move_in_date).toLocaleDateString("de-DE")}</dd>
+                <dt className="text-[var(--muted-foreground)]">{t("wantedDetail.moveIn")}</dt>
+                <dd className="font-medium">{new Date(p.move_in_date).toLocaleDateString(NUMBER_LOCALE[lang])}</dd>
               </div>
             ) : null}
             {p.pets ? (
               <div className="flex items-center gap-1.5">
                 <PawPrint className="size-4 text-[var(--muted-foreground)]" />
-                <dt className="text-[var(--muted-foreground)]">Haustier</dt>
-                <dd className="font-medium">ja</dd>
+                <dt className="text-[var(--muted-foreground)]">{t("wantedDetail.pet")}</dt>
+                <dd className="font-medium">{t("wantedDetail.petYes")}</dd>
               </div>
             ) : null}
           </dl>
 
           {p.lifestyle_tags && p.lifestyle_tags.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
-              {p.lifestyle_tags.map((t) => (
-                <span key={t} className="rounded-full border px-2 py-0.5 text-xs text-[var(--muted-foreground)]">
-                  {t}
+              {p.lifestyle_tags.map((tag) => (
+                <span key={tag} className="rounded-full border px-2 py-0.5 text-xs text-[var(--muted-foreground)]">
+                  {tag}
                 </span>
               ))}
             </div>
@@ -181,7 +217,7 @@ export default async function GesucheDetailPage({
           {p.free_text ? (
             <div className="border-t pt-3">
               <h2 className="text-xs uppercase tracking-wide text-[var(--muted-foreground)] mb-1">
-                Persönliche Notiz
+                {t("wantedDetail.note")}
               </h2>
               <p className="text-sm whitespace-pre-line">&bdquo;{p.free_text}&ldquo;</p>
             </div>
@@ -190,9 +226,10 @@ export default async function GesucheDetailPage({
 
         {eligible.length === 0 ? (
           <div className="rounded-md border bg-[var(--muted)] px-4 py-3 text-sm text-[var(--muted-foreground)]">
-            Du hast noch kein aktives Inserat vom Typ &bdquo;{p.type === "rent" ? "Miete" : "Verkauf"}&ldquo;.
-            Lege erst eines an um dieses Such-Inserat zu beantworten.{" "}
-            <Link href="/dashboard?view=provider" className="underline">Inserat anlegen</Link>
+            {tFormat(t("wantedDetail.noActiveListing"), { type: typeLabel })}{" "}
+            <Link href="/dashboard?view=provider" className="underline">
+              {t("wantedDetail.createListing")}
+            </Link>
           </div>
         ) : (
           <OfferToSeekerPicker profileId={p.id} listings={eligible} />

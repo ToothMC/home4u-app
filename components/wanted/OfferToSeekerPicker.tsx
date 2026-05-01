@@ -7,6 +7,16 @@ import Image from "next/image";
 import { Check, Loader2, MessageCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import { tFormat } from "@/lib/i18n/dict";
+
+const NUMBER_LOCALE: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 export type EligibleListing = {
   id: string;
@@ -35,6 +45,7 @@ export function OfferToSeekerPicker({
   listings: EligibleListing[];
 }) {
   const router = useRouter();
+  const { t, lang } = useT();
   const [picked, setPicked] = React.useState<string | null>(
     listings.length === 1 ? listings[0].id : null
   );
@@ -81,19 +92,15 @@ export function OfferToSeekerPicker({
     return (
       <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-4 space-y-2">
         <div className="flex items-center gap-2 text-emerald-800 font-medium">
-          <Check className="size-5" /> Angebot verschickt
+          <Check className="size-5" /> {t("offer.sent")}
         </div>
-        <p className="text-sm text-emerald-900">
-          Der Sucher sieht dein Angebot in seinem Home4U-Postfach und bekommt
-          eine Trigger-Mail. Antworten landen in deiner Inbox — keine echte
-          Email-Adresse wird ausgetauscht.
-        </p>
+        <p className="text-sm text-emerald-900">{t("offer.sentText")}</p>
         <Link
           href={`/dashboard/requests/${state.matchId}`}
           className="inline-flex items-center gap-1 text-sm font-medium text-emerald-800 hover:underline"
         >
           <MessageCircle className="size-4" />
-          {state.connected ? "Connection ansehen" : "Anfrage ansehen"}
+          {state.connected ? t("offer.viewConnection") : t("offer.viewRequest")}
         </Link>
       </div>
     );
@@ -101,9 +108,7 @@ export function OfferToSeekerPicker({
 
   return (
     <div className="rounded-md border bg-white px-4 py-4 space-y-3">
-      <h2 className="text-sm font-medium">
-        Welche deiner Wohnungen möchtest du anbieten?
-      </h2>
+      <h2 className="text-sm font-medium">{t("offer.heading")}</h2>
       <ul className="space-y-2">
         {listings.map((l) => (
           <li key={l.id}>
@@ -132,19 +137,19 @@ export function OfferToSeekerPicker({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate">
-                  {l.title ?? "Inserat"}
+                  {l.title ?? t("offer.fallbackTitle")}
                 </div>
                 <div className="text-xs text-[var(--muted-foreground)] truncate">
                   {[l.location_district, l.location_city].filter(Boolean).join(", ")}
                   {" · "}
                   {l.price && l.currency
-                    ? new Intl.NumberFormat("de-DE", {
+                    ? new Intl.NumberFormat(NUMBER_LOCALE[lang] ?? "en-GB", {
                         style: "currency",
                         currency: l.currency,
                         maximumFractionDigits: 0,
                       }).format(l.price)
-                    : "Preis n.A."}
-                  {l.rooms ? ` · ${l.rooms} Zi` : ""}
+                    : t("offer.priceUnknown")}
+                  {l.rooms ? ` · ${l.rooms} ${t("matchCard.roomsShort")}` : ""}
                   {l.size_sqm ? ` · ${l.size_sqm}m²` : ""}
                 </div>
               </div>
@@ -170,20 +175,18 @@ export function OfferToSeekerPicker({
           <AlertCircle className="size-4 mt-0.5 shrink-0" />
           <span>
             {state.message === "rate_limited"
-              ? "Du hast heute schon 5 Anbieter-Anfragen gesendet — Limit erreicht. Versuch's morgen."
+              ? t("offer.error.rateLimited")
               : state.message === "listing_not_owned"
-              ? "Dieses Inserat gehört nicht dir oder ist nicht aktiv."
+              ? t("offer.error.notOwned")
               : state.message === "profile_not_public"
-              ? "Dieses Such-Inserat ist nicht mehr veröffentlicht."
-              : `Fehler: ${state.message}`}
+              ? t("offer.error.notPublic")
+              : tFormat(t("offer.error.generic"), { msg: state.message })}
           </span>
         </div>
       ) : null}
 
       <div className="flex items-center justify-between gap-3 pt-1">
-        <p className="text-xs text-[var(--muted-foreground)]">
-          Email bleibt unsichtbar. Kontakt läuft über dein Home4U-Postfach.
-        </p>
+        <p className="text-xs text-[var(--muted-foreground)]">{t("offer.privacy")}</p>
         <Button
           type="button"
           onClick={submit}
@@ -192,10 +195,10 @@ export function OfferToSeekerPicker({
           {state.kind === "submitting" ? (
             <>
               <Loader2 className="size-4 animate-spin mr-2" />
-              senden …
+              {t("offer.sending")}
             </>
           ) : (
-            "Wohnung anbieten"
+            t("offer.cta")
           )}
         </Button>
       </div>
