@@ -2,20 +2,21 @@
  * Outreach-Orchestrator: nach erfolgreichem seeker_request_match wird hier
  * der Channel gewählt + Provider-Send angestoßen.
  *
- * Reihenfolge der Channels (heute):
- *   1. Email — wenn contact_email_enc entschlüsselbar
- *   2. Direct-Listing-Owner — wenn source='direct' und owner_user_id gesetzt
- *      (Email an profiles.notification_email oder auth.users.email)
- *   3. WhatsApp via 360dialog — Slice 3b, separater Branch
- *   4. Skip mit Audit (status='skipped', reason='no_contact_data')
+ * Reihenfolge der Channels (Phase 1 — Telegram-first):
+ *   1. Telegram — wenn Owner ein verified+opted-in channel_identities-Eintrag
+ *      hat (preferred_channel='telegram' ODER explizit verifiziert).
+ *      Sophie generiert Bridge-Outreach in Owner-Sprache, Send via grammY.
+ *   2. Email — Fallback: contact_email_enc entschlüsselt (bridge listings)
+ *      ODER profiles.notification_email/auth.users.email (direct).
+ *   3. Skip mit Audit (status='skipped', reason='no_contact_data').
  *
  * Idempotency via record_outreach_attempt RPC: pro (match, channel, recipient)
  * max ein Send pro 24h.
  *
  * Best-effort: Outreach-Failure blockiert NICHT die Inquire-Response. User
- * bekommt sein "ok, Anfrage gesendet", auch wenn Mail-Provider grad bockt.
- * Failed-Status im outreach_log triggert späteren Retry-Worker (TODO).
+ * bekommt sein "ok, Anfrage gesendet", auch wenn Provider grad bockt.
  */
+import { createHash } from "node:crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/send";
 import { buildInquiryBrokerEmail } from "@/lib/email/templates/inquiry-broker";
@@ -24,9 +25,17 @@ import {
   signActionToken,
   type ActionTokenPayload,
 } from "@/lib/listings/action-token";
+import { getTelegramBot, telegramConfigured } from "@/lib/telegram/bot";
+import { bridgeOutreachKeyboard } from "@/lib/telegram/keyboards";
+import {
+  createDeeplinkToken,
+  buildWebDeeplinkUrl,
+} from "@/lib/identity/deeplink";
+import { translate } from "@/lib/translation/translate";
+import type { Lang } from "@/lib/translation/glossary";
 
 export type OutreachResult = {
-  channel: "email" | "whatsapp" | "skipped";
+  channel: "telegram" | "email" | "whatsapp" | "skipped";
   status: "sent" | "skipped" | "failed";
   reason?: string;
 };
@@ -61,6 +70,18 @@ export async function triggerOutreachForMatch(matchId: string): Promise<Outreach
   }
   if (["rented", "sold", "opted_out", "archived"].includes(listing.status)) {
     return { channel: "skipped", status: "skipped", reason: `listing_${listing.status}` };
+  }
+
+  // 1.5) Telegram-Pfad zuerst probieren — wenn Owner verifizierte
+  // Telegram-Identity hat und nicht opted-out, geht der Outreach dorthin
+  // statt per Email. Owner-Sprache aus profiles.preferred_language.
+  if (listing.owner_user_id && telegramConfigured()) {
+    const tg = await tryTelegramOutreach({
+      service,
+      matchId,
+      listing,
+    });
+    if (tg) return tg;
   }
 
   // 2) Email-Kandidat ermitteln
@@ -202,4 +223,198 @@ export async function triggerOutreachForMatch(matchId: string): Promise<Outreach
   });
 
   return { channel: "email", status: "sent" };
+}
+
+// ============================================================================
+// Telegram-Outreach (Phase 1)
+// ============================================================================
+
+const ALLOWED_LANGS: readonly Lang[] = ["de", "en", "ru", "el"] as const;
+
+type ServiceClient = NonNullable<ReturnType<typeof createSupabaseServiceClient>>;
+type ListingRow = {
+  id: string;
+  source: string;
+  status: string;
+  type: string;
+  title: string | null;
+  price: number | null;
+  currency: string | null;
+  location_city: string;
+  location_district: string | null;
+  rooms: number | null;
+  size_sqm: number | null;
+  language: string | null;
+  owner_user_id: string | null;
+  extracted_data: unknown;
+};
+
+async function tryTelegramOutreach(args: {
+  service: ServiceClient;
+  matchId: string;
+  listing: ListingRow;
+}): Promise<OutreachResult | null> {
+  const { service, matchId, listing } = args;
+  if (!listing.owner_user_id) return null;
+
+  // Owner-Telegram-Identity laden
+  const { data: identity } = await service
+    .from("channel_identities")
+    .select("id, external_id, opt_out_at, verified_at")
+    .eq("user_id", listing.owner_user_id)
+    .eq("channel", "telegram")
+    .maybeSingle();
+
+  if (!identity || identity.opt_out_at) {
+    return null; // Kein Telegram für diesen Owner — fall back to email
+  }
+
+  // Owner-Profil für preferred_language + contact_channel
+  const { data: profile } = await service
+    .from("profiles")
+    .select("preferred_language, contact_channel, display_name")
+    .eq("id", listing.owner_user_id)
+    .maybeSingle();
+
+  // Wenn der Owner explizit NICHT Telegram als Kanal will, abbrechen.
+  // contact_channel kann 'email','whatsapp','telegram','phone','chat' sein.
+  // Wir nehmen Telegram nur, wenn explizit 'telegram' ODER nicht gesetzt
+  // (in dem Fall ist die verifizierte Telegram-Identity das stärkere Signal).
+  if (profile?.contact_channel && profile.contact_channel !== "telegram") {
+    return null;
+  }
+
+  const ownerLang = normalizeLang(profile?.preferred_language) ?? "en";
+  const ownerName = profile?.display_name ?? null;
+
+  // Idempotency-Check
+  const recipientHash = hashTelegramId(identity.external_id);
+  const { data: attemptData, error: attemptErr } = await service.rpc(
+    "record_outreach_attempt",
+    {
+      p_match_id: matchId,
+      p_listing_id: listing.id,
+      p_channel: "telegram",
+      p_recipient_hash: recipientHash,
+      p_template_key: "bridge_outreach_v1",
+      p_language: ownerLang,
+    }
+  );
+  if (attemptErr) {
+    console.error("[outreach-tg] record_outreach_attempt failed", attemptErr);
+    return { channel: "telegram", status: "failed", reason: attemptErr.message };
+  }
+  const attempt = attemptData as {
+    ok: boolean;
+    already_sent?: boolean;
+    log_id: string;
+  };
+  if (!attempt?.log_id) {
+    return { channel: "telegram", status: "failed", reason: "no_log_id" };
+  }
+  if (attempt.already_sent) {
+    return { channel: "telegram", status: "skipped", reason: "already_sent_24h" };
+  }
+
+  // Deeplink für "Lead ansehen"-Button generieren
+  const deeplink = await createDeeplinkToken({
+    direction: "to_web",
+    intent: "view_lead",
+    intentPayload: { match_id: matchId, listing_id: listing.id },
+    userId: listing.owner_user_id,
+    channelIdentityId: identity.id,
+    ttlMinutes: 60 * 24, // 24h für Lead-Button — länger als Login-Tokens
+  });
+  const webUrl = deeplink ? buildWebDeeplinkUrl(deeplink.token) : "https://home4u.ai/dashboard/requests";
+
+  // Bridge-Outreach-Text in Owner-Sprache
+  const text = await renderBridgeOutreachText({
+    listing,
+    ownerLang,
+    ownerName,
+  });
+
+  // Inline-Keyboard
+  const keyboard = bridgeOutreachKeyboard({
+    matchId,
+    webUrl,
+    locale: ownerLang,
+  });
+
+  // Send via grammY
+  try {
+    const bot = getTelegramBot();
+    const sent = await bot.api.sendMessage(Number(identity.external_id), text, {
+      reply_markup: keyboard,
+      parse_mode: undefined,
+    });
+    await service.rpc("update_outreach_status", {
+      p_log_id: attempt.log_id,
+      p_status: "sent",
+      p_provider_message_id: String(sent.message_id),
+    });
+    return { channel: "telegram", status: "sent" };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error("[outreach-tg] send failed", reason);
+    await service.rpc("update_outreach_status", {
+      p_log_id: attempt.log_id,
+      p_status: "failed",
+      p_error_reason: reason,
+    });
+    // Bei Telegram-Send-Fehler NICHT zu Email fallen — sonst doppelter Outreach
+    // bei kurzfristiger Telegram-API-Macke. Operator kann manuell retriggern.
+    return { channel: "telegram", status: "failed", reason };
+  }
+}
+
+async function renderBridgeOutreachText(args: {
+  listing: ListingRow;
+  ownerLang: Lang;
+  ownerName: string | null;
+}): Promise<string> {
+  const { listing, ownerLang, ownerName } = args;
+  const greeting = ownerName ?? (ownerLang === "de" ? "Hi" : "Hi");
+
+  // Plain-Text-Template auf Englisch — wird unten in Owner-Sprache übersetzt
+  const titlePart = listing.title ?? `${listing.rooms ?? "?"}-bedroom`;
+  const cityPart = listing.location_district
+    ? `${listing.location_city}, ${listing.location_district}`
+    : listing.location_city;
+  const pricePart =
+    listing.price !== null
+      ? ` · ${listing.price} ${listing.currency ?? "EUR"}`
+      : "";
+
+  const enText = [
+    `${greeting}, this is Sophie from Home4U.`,
+    `A pre-qualified seeker is interested in your listing: ${titlePart} in ${cityPart}${pricePart}.`,
+    `Would you like to see the seeker's profile and decide whether to connect?`,
+  ].join("\n\n");
+
+  // Falls Owner-Sprache != en, übersetzen.
+  if (ownerLang === "en") return enText;
+
+  try {
+    const out = await translate({
+      text: enText,
+      source_lang: "en",
+      target_langs: [ownerLang],
+      context: "chat",
+    });
+    return out.translations[ownerLang] ?? enText;
+  } catch (err) {
+    console.warn("[outreach-tg] translation failed, using EN", err);
+    return enText;
+  }
+}
+
+function hashTelegramId(externalId: string): string {
+  return createHash("sha256").update(`telegram:${externalId}`).digest("hex");
+}
+
+function normalizeLang(s?: string | null): Lang | null {
+  if (!s) return null;
+  const short = s.slice(0, 2).toLowerCase();
+  return ALLOWED_LANGS.includes(short as Lang) ? (short as Lang) : null;
 }

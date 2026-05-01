@@ -9,6 +9,8 @@ import {
   embedAndStoreListing,
   embedAndStoreSearchProfile,
 } from "@/lib/embeddings";
+import { translate } from "@/lib/translation/translate";
+import type { Lang } from "@/lib/translation/glossary";
 
 export type ToolResult = {
   ok: boolean;
@@ -246,6 +248,15 @@ const handlers: Record<string, Handler> = {
       String(rooms),
     ].join(":");
 
+    // original_language ableiten (input.language falls valid, sonst null →
+    // wird beim ersten Übersetzungs-Call automatisch detektiert).
+    const originalLang = normalizeLang(language);
+
+    // Auto-Title aus Stadt + Zimmer + Preis bauen, wenn nicht expliziter Titel —
+    // der Indexer macht das auch so. Notes wird die Beschreibung.
+    const autoTitle = `${rooms}-Zimmer ${type === "rent" ? "Miete" : "Kauf"} in ${city}${district ? ` · ${district}` : ""}`;
+    const description = notes ?? autoTitle;
+
     const { data, error } = await supabase
       .from("listings")
       .insert({
@@ -262,6 +273,9 @@ const handlers: Record<string, Handler> = {
         size_sqm: sizeSqm,
         contact_channel: contactChannel,
         language,
+        title: autoTitle,
+        description,
+        original_language: originalLang,
         owner_user_id: ctx.userId,
         dedup_hash: dedupHash,
         media: mediaUrls ?? [],
@@ -291,13 +305,23 @@ const handlers: Record<string, Handler> = {
       raw_text: notes,
     });
 
+    // Auto-i18n fire-and-forget — Listing ist sofort sichtbar im Original,
+    // Übersetzungen erscheinen wenn Haiku zurück ist (typisch <2s).
+    void translateListingFields({
+      listingId: data.id,
+      title: autoTitle,
+      description,
+      sourceLang: originalLang,
+    });
+
     return {
       ok: true,
       data: {
         listing_id: data.id,
-        message: `Inserat angelegt: ${city}${district ? " · " + district : ""}, ${rooms} Zimmer, ${price} €.`,
+        message: `Inserat angelegt: ${city}${district ? " · " + district : ""}, ${rooms} Zimmer, ${price} €. Übersetzung in DE/EN/RU/EL läuft im Hintergrund.`,
         notes_ack: notes ? true : false,
         media_count: mediaUrls?.length ?? 0,
+        i18n_pending: true,
       },
     };
   },
@@ -515,4 +539,61 @@ function asBoolean(v: unknown): boolean | undefined {
 function asStringArray(v: unknown): string[] | undefined {
   if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
   return undefined;
+}
+
+const ALLOWED_LANGS_LOCAL: readonly Lang[] = ["de", "en", "ru", "el"] as const;
+
+function normalizeLang(s: string | null | undefined): Lang | null {
+  if (!s) return null;
+  const short = s.slice(0, 2).toLowerCase();
+  return ALLOWED_LANGS_LOCAL.includes(short as Lang) ? (short as Lang) : null;
+}
+
+/**
+ * Listing-Titel + Beschreibung in alle 4 Zielsprachen übersetzen und
+ * in listings.title_i18n / description_i18n schreiben. Best-Effort —
+ * fehlende Sprachen fallen beim Render auf das Original zurück.
+ */
+async function translateListingFields(args: {
+  listingId: string;
+  title: string;
+  description: string;
+  sourceLang: Lang | null;
+}): Promise<void> {
+  const supabase = createSupabaseServiceClient();
+  if (!supabase) return;
+
+  const targets: Lang[] = (["de", "en", "ru", "el"] as Lang[]).filter(
+    (l) => l !== args.sourceLang
+  );
+  if (targets.length === 0) return;
+
+  try {
+    const [titleOut, descOut] = await Promise.all([
+      translate({
+        text: args.title,
+        source_lang: args.sourceLang ?? "auto",
+        target_langs: targets,
+        context: "listing",
+      }),
+      translate({
+        text: args.description,
+        source_lang: args.sourceLang ?? "auto",
+        target_langs: targets,
+        context: "listing",
+      }),
+    ]);
+
+    await supabase
+      .from("listings")
+      .update({
+        title_i18n: titleOut.translations,
+        description_i18n: descOut.translations,
+        // Wenn Quelle 'auto' war, jetzt die detektierte Sprache speichern
+        original_language: args.sourceLang ?? titleOut.source_lang,
+      })
+      .eq("id", args.listingId);
+  } catch (err) {
+    console.warn("[translate-listing] failed", err);
+  }
 }

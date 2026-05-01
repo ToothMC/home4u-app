@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/client";
+import { TelegramLoginButton } from "@/components/auth/TelegramLoginButton";
 
 type Mode = "email" | "code" | "success";
 
@@ -175,6 +176,21 @@ export function SignInDialog({
                   {busy ? t("auth.signin.sending") : t("auth.signin.send")}
                 </Button>
               </form>
+
+              {process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME && (
+                <>
+                  <div className="my-4 flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+                    <span className="h-px flex-1 bg-[var(--border)]" />
+                    <span>oder</span>
+                    <span className="h-px flex-1 bg-[var(--border)]" />
+                  </div>
+                  <TelegramLoginButton
+                    botUsername={process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME}
+                    next={redirectAfter ?? "/dashboard"}
+                  />
+                </>
+              )}
+
               {error && (
                 <p className="mt-3 text-sm text-[var(--destructive)]">{error}</p>
               )}
