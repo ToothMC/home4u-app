@@ -2,6 +2,16 @@
 
 import Link from "next/link";
 import { ChevronRight, SearchIcon } from "lucide-react";
+import { useT } from "@/lib/i18n/client";
+import { tFormat } from "@/lib/i18n/dict";
+
+const NUMBER_LOCALE: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 export type SearchRowData = {
   id: string;
@@ -20,6 +30,7 @@ export function SearchRow({
   profile: SearchRowData;
   matchCount: number;
 }) {
+  const { t, lang } = useT();
   return (
     <div className="group flex items-stretch gap-3 rounded-lg border bg-[var(--card)] hover:bg-[var(--accent)] transition-colors">
       <Link
@@ -33,11 +44,11 @@ export function SearchRow({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{profile.location}</p>
           <p className="truncate text-xs text-[var(--muted-foreground)]">
-            {profile.rooms ? `${profile.rooms} Zi` : "?"}
+            {profile.rooms ? `${profile.rooms} ${t("matchCard.roomsShort")}` : "?"}
             {profile.budget_max
-              ? ` · bis ${Number(profile.budget_max).toLocaleString("de-DE")} €`
+              ? ` · ${t("searchRow.budgetUpTo")} ${Number(profile.budget_max).toLocaleString(NUMBER_LOCALE[lang] ?? "en-GB")} €`
               : ""}
-            {profile.move_in_date ? ` · ab ${profile.move_in_date}` : ""}
+            {profile.move_in_date ? ` · ${t("searchRow.moveIn")} ${profile.move_in_date}` : ""}
             {profile.household ? ` · ${profile.household}` : ""}
           </p>
         </div>
@@ -51,15 +62,15 @@ export function SearchRow({
         >
           {matchCount > 0 ? (
             <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-300">
-              {matchCount} Treffer
+              {tFormat(t("searchRow.matches"), { n: matchCount })}
             </span>
           ) : (
             <span className="text-[10px] text-[var(--muted-foreground)]">
-              0 Treffer
+              {t("searchRow.matchesNone")}
             </span>
           )}
           <span className="text-[10px] text-[var(--muted-foreground)]">
-            {profile.active ? "aktiv" : "pausiert"}
+            {profile.active ? t("searchRow.active") : t("searchRow.paused")}
           </span>
         </Link>
         <ChevronRight className="size-4 self-center text-[var(--muted-foreground)] opacity-0 group-hover:opacity-100 transition-opacity" />

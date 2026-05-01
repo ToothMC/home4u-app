@@ -1,45 +1,49 @@
-const MAP: Record<string, { label: string; cls: string }> = {
+"use client";
+
+import { useT } from "@/lib/i18n/client";
+import type { TKey } from "@/lib/i18n/dict";
+
+const KEYS: Record<string, { key: TKey; cls: string }> = {
   active: {
-    label: "online",
+    key: "listingStatus.active",
     cls: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
   },
   stale: {
-    label: "fraglich",
+    key: "listingStatus.stale",
     cls: "bg-amber-500/20 text-amber-700 dark:text-amber-300",
   },
   reserved: {
-    label: "reserviert",
+    key: "listingStatus.reserved",
     cls: "bg-amber-500/20 text-amber-700 dark:text-amber-300",
   },
   rented: {
-    label: "vermietet",
+    key: "listingStatus.rented",
     cls: "bg-[var(--destructive)]/15 text-[var(--destructive)] font-semibold",
   },
   sold: {
-    label: "verkauft",
+    key: "listingStatus.sold",
     cls: "bg-[var(--destructive)]/15 text-[var(--destructive)] font-semibold",
   },
   opted_out: {
-    label: "deaktiviert",
+    key: "listingStatus.opted_out",
     cls: "bg-[var(--muted)] text-[var(--muted-foreground)]",
   },
   archived: {
-    label: "archiviert",
+    key: "listingStatus.archived",
     cls: "bg-[var(--muted)] text-[var(--muted-foreground)]",
   },
 };
 
 export function ListingStatusBadge({ status }: { status: string }) {
-  const m =
-    MAP[status] ?? {
-      label: status,
-      cls: "bg-[var(--muted)] text-[var(--muted-foreground)]",
-    };
+  const { t } = useT();
+  const m = KEYS[status];
+  const label = m ? t(m.key) : status;
+  const cls = m?.cls ?? "bg-[var(--muted)] text-[var(--muted-foreground)]";
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider ${m.cls}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider ${cls}`}
     >
-      {m.label}
+      {label}
     </span>
   );
 }

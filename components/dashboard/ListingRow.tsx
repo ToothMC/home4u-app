@@ -3,6 +3,16 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { ListingStatusBadge } from "./ListingStatusBadge";
+import { useT } from "@/lib/i18n/client";
+import { tFormat } from "@/lib/i18n/dict";
+
+const NUMBER_LOCALE: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 export type ListingRowData = {
   id: string;
@@ -25,6 +35,7 @@ export function ListingRow({
   newCount: number;
   handledCount: number;
 }) {
+  const { t, lang } = useT();
   const thumb = listing.media?.[0];
   const isVideo = thumb ? /\.(mp4|mov|webm)$/i.test(thumb) : false;
 
@@ -49,7 +60,7 @@ export function ListingRow({
           )
         ) : (
           <div className="h-full w-full flex items-center justify-center text-[10px] text-[var(--muted-foreground)]">
-            kein Bild
+            {t("match.noImage")}
           </div>
         )}
       </div>
@@ -60,9 +71,9 @@ export function ListingRow({
           {listing.location_district ? ` · ${listing.location_district}` : ""}
         </p>
         <p className="truncate text-xs text-[var(--muted-foreground)]">
-          {listing.rooms ?? "?"} Zi
+          {listing.rooms ?? "?"} {t("matchCard.roomsShort")}
           {listing.size_sqm ? ` · ${listing.size_sqm} m²` : ""} ·{" "}
-          {Number(listing.price).toLocaleString("de-DE")}{" "}
+          {Number(listing.price).toLocaleString(NUMBER_LOCALE[lang] ?? "en-GB")}{" "}
           {listing.currency || "EUR"}
         </p>
       </div>
@@ -71,16 +82,16 @@ export function ListingRow({
         <ListingStatusBadge status={listing.status} />
         {newCount > 0 ? (
           <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-300">
-            {newCount} neu
+            {tFormat(t("listingRow.new"), { n: newCount })}
           </span>
         ) : (
           <span className="text-[10px] text-[var(--muted-foreground)]">
-            keine neuen
+            {t("listingRow.noNew")}
           </span>
         )}
         {handledCount > 0 && (
           <span className="rounded-full bg-[var(--accent)] px-2 py-0.5 text-[10px] text-[var(--muted-foreground)]">
-            {handledCount} bearbeitet
+            {tFormat(t("listingRow.handled"), { n: handledCount })}
           </span>
         )}
       </div>

@@ -2,11 +2,20 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Inbox, Send, Loader2, Handshake, ChevronRight } from "lucide-react";
+import { Inbox, Send, Handshake, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { OwnerInboxCard, type OwnerInboxRow } from "./OwnerInboxCard";
 import { AvailabilityChips } from "./AvailabilityChips";
 import { onMatchesUpdated } from "@/lib/events/match-events";
+import { useT } from "@/lib/i18n/client";
+
+const NUMBER_LOCALE: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 type OutboxRow = {
   match_id: string;
@@ -39,6 +48,7 @@ export function MatchSections({
 }: {
   role: "seeker" | "provider";
 }) {
+  const { t, lang } = useT();
   const [inbox, setInbox] = useState<OwnerInboxRow[] | null>(null);
   const [outbox, setOutbox] = useState<OutboxRow[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -90,14 +100,14 @@ export function MatchSections({
       <section id="match-inbox" className="mt-8 scroll-mt-8">
         <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
           <Inbox className="size-4" />
-          Anfragen an dich ({inbox?.length ?? "…"})
+          {t("inbox.heading")} ({inbox?.length ?? "…"})
         </h2>
         {inbox === null ? (
-          <p className="text-xs text-[var(--muted-foreground)]">Lädt…</p>
+          <p className="text-xs text-[var(--muted-foreground)]">{t("common.loading")}</p>
         ) : inbox.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
-              Noch keine Anfragen für deine Inserate.
+              {t("inbox.empty")}
             </CardContent>
           </Card>
         ) : (
@@ -121,15 +131,14 @@ export function MatchSections({
     <section className="mt-8">
       <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
         <Send className="size-4" />
-        Meine Anfragen ({outbox?.length ?? "…"})
+        {t("outbox.heading")} ({outbox?.length ?? "…"})
       </h2>
       {outbox === null ? (
-        <p className="text-xs text-[var(--muted-foreground)]">Lädt…</p>
+        <p className="text-xs text-[var(--muted-foreground)]">{t("common.loading")}</p>
       ) : outbox.length === 0 ? (
         <Card>
           <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
-            Noch keine Anfragen gesendet. Bitte Sophie im Chat, ein Match
-            anzufragen.
+            {t("outbox.empty")}
           </CardContent>
         </Card>
       ) : (
@@ -156,7 +165,7 @@ export function MatchSections({
                     />
                   ) : (
                     <div className="h-full w-full flex items-center justify-center text-[10px] text-[var(--muted-foreground)]">
-                      kein Bild
+                      {t("match.noImage")}
                     </div>
                   )}
                 </div>
@@ -167,39 +176,39 @@ export function MatchSections({
                       {m.listing_district ? ` · ${m.listing_district}` : ""}
                     </p>
                     <p className="truncate text-xs text-[var(--muted-foreground)]">
-                      {m.listing_rooms ?? "?"} Zi ·{" "}
-                      {Number(m.listing_price).toLocaleString("de-DE")} €
+                      {m.listing_rooms ?? "?"} {t("matchCard.roomsShort")} ·{" "}
+                      {Number(m.listing_price).toLocaleString(NUMBER_LOCALE[lang] ?? "en-GB")} €
                       {m.listing_size_sqm ? ` · ${m.listing_size_sqm} m²` : ""}
                     </p>
                   </div>
                   <div className="text-[10px]">
                     {m.listing_status === "rented" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[var(--destructive)]/15 px-2 py-0.5 text-[var(--destructive)] font-semibold uppercase tracking-wider">
-                        Inserat vermietet
+                        {t("match.status.rented")}
                       </span>
                     ) : m.listing_status === "sold" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[var(--destructive)]/15 px-2 py-0.5 text-[var(--destructive)] font-semibold uppercase tracking-wider">
-                        Inserat verkauft
+                        {t("match.status.sold")}
                       </span>
                     ) : m.listing_status === "reserved" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-amber-700 dark:text-amber-300 uppercase tracking-wider">
-                        reserviert
+                        {t("match.status.reserved")}
                       </span>
                     ) : m.listing_status === "stale" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-amber-700 dark:text-amber-300 uppercase tracking-wider">
-                        Inserat fraglich
+                        {t("match.status.stale")}
                       </span>
                     ) : m.connected_at ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-emerald-700 dark:text-emerald-300">
-                        <Handshake className="size-3" /> verbunden
+                        <Handshake className="size-3" /> {t("match.status.connected")}
                       </span>
                     ) : m.owner_interest === false ? (
                       <span className="uppercase tracking-wider text-[var(--destructive)]">
-                        abgelehnt
+                        {t("match.status.rejected")}
                       </span>
                     ) : (
                       <span className="uppercase tracking-wider text-[var(--muted-foreground)]">
-                        wartet auf Anbieter
+                        {t("match.status.waiting")}
                       </span>
                     )}
                   </div>

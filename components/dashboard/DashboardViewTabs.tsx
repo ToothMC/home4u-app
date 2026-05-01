@@ -3,21 +3,23 @@
 import Link from "next/link";
 import { SearchIcon, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 export function DashboardViewTabs({
   current,
 }: {
   current: "seeker" | "provider";
 }) {
+  const { t } = useT();
   return (
     <div className="inline-flex rounded-md border p-1 mb-4">
       <Tab href="/dashboard?view=seeker" active={current === "seeker"}>
         <SearchIcon className="size-3" />
-        Ich suche
+        {t("tabs.iSearch")}
       </Tab>
       <Tab href="/dashboard?view=provider" active={current === "provider"}>
         <KeyRound className="size-3" />
-        Ich biete
+        {t("tabs.iOffer")}
       </Tab>
     </div>
   );

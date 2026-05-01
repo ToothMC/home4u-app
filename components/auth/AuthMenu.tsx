@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { SignInDialog } from "@/components/auth/SignInDialog";
 import { MobileNav } from "@/components/nav/MobileNav";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/client";
 
 type AuthState =
   | { status: "loading" }
@@ -22,6 +23,7 @@ export function AuthMenu({
    *  ist der zusätzliche Button im AuthMenu redundant — dann ausblenden. */
   hideDashboard?: boolean;
 }) {
+  const { t } = useT();
   const [state, setState] = useState<AuthState>({ status: "loading" });
   const [open, setOpen] = useState(false);
   const [nextUrl, setNextUrl] = useState<string | null>(null);
@@ -91,16 +93,16 @@ export function AuthMenu({
 
   if (state.status === "user") {
     // Nur Local-Part anzeigen (vor dem @): michael@mmhammer.org → michael
-    const label = state.email ? state.email.split("@")[0] : "Account";
+    const label = state.email ? state.email.split("@")[0] : t("auth.menu.account");
     return (
       <div className="flex items-center gap-2">
         <MobileNav />
         {!hideDashboard && (
           <Button asChild size="sm" variant="outline">
-            <Link href="/dashboard" aria-label="Dashboard">
+            <Link href="/dashboard" aria-label={t("common.dashboard")}>
               <LayoutDashboard className="size-3" />
               {!compact && (
-                <span className="hidden sm:inline">Dashboard</span>
+                <span className="hidden sm:inline">{t("common.dashboard")}</span>
               )}
             </Link>
           </Button>
@@ -111,7 +113,7 @@ export function AuthMenu({
             "flex items-center gap-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] max-w-[160px] truncate" +
             (compact ? "" : " sm:max-w-none")
           }
-          title={state.email ?? "Profil"}
+          title={state.email ?? t("auth.menu.profile")}
         >
           <UserIcon className="size-3" />
           {label}
@@ -120,7 +122,7 @@ export function AuthMenu({
           size="sm"
           variant="ghost"
           onClick={signOut}
-          aria-label="Abmelden"
+          aria-label={t("auth.menu.signout")}
         >
           <LogOut className="size-3" />
         </Button>
@@ -133,7 +135,7 @@ export function AuthMenu({
       <MobileNav />
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         <LogIn className="size-3" />
-        Anmelden
+        {t("auth.menu.signin")}
       </Button>
       <SignInDialog
         open={open}
