@@ -268,6 +268,9 @@ function ProviderView({
               </Link>
             </Button>
           )}
+          <Button asChild size="sm" variant="outline" title="Stöbern in Such-Inseraten — Vermieter können dort gezielt eine Wohnung anbieten">
+            <Link href="/gesuche">Such-Inserate</Link>
+          </Button>
           <Button asChild size="sm" variant="outline">
             <Link href="/chat?flow=owner">+ Inserat</Link>
           </Button>

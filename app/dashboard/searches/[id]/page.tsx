@@ -29,7 +29,7 @@ export default async function SearchDetailPage({
     .select(
       `id, location, type, budget_min, budget_max, rooms, move_in_date,
        household, lifestyle_tags, pets, free_text, active, notify_new_matches,
-       user_id, anonymous_id`
+       published_as_wanted, user_id, anonymous_id`
     )
     .eq("id", id)
     .maybeSingle();
@@ -59,6 +59,7 @@ export default async function SearchDetailPage({
     free_text: data.free_text,
     active: data.active,
     notify_new_matches: data.notify_new_matches !== false,
+    published_as_wanted: data.published_as_wanted === true,
   };
 
   return (

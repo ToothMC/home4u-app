@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
-import { ArrowRight, Heart } from "lucide-react";
+import { ArrowRight, Heart, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatLink, PathCards } from "@/components/landing/PathCards";
 import { FeaturedListings } from "@/components/landing/FeaturedListings";
@@ -28,6 +28,7 @@ export default async function LandingPage({
             <ChatLink flow="seeker" className="hover:text-[var(--brand-gold)] transition-colors">Suchen</ChatLink>
             <Link href="/chat?flow=owner" className="hover:text-[var(--brand-gold)] transition-colors">Vermieten</Link>
             <Link href="/chat?flow=owner&intent=sale" className="hover:text-[var(--brand-gold)] transition-colors">Verkaufen</Link>
+            <Link href="/gesuche" className="hover:text-[var(--brand-gold)] transition-colors">Such-Inserate</Link>
             <Link href="/chat?flow=agent" className="hover:text-[var(--brand-gold)] transition-colors">Für Makler</Link>
             <Link href="/scam-check" className="hover:text-[var(--brand-gold)] transition-colors">Scam-Check</Link>
           </nav>
@@ -114,7 +115,7 @@ export default async function LandingPage({
         <h2 className="font-display text-3xl sm:text-4xl text-center text-[var(--brand-navy)] mb-12 sm:mb-16">
           Warum Home4U?
         </h2>
-        <div className="grid sm:grid-cols-3 gap-10 sm:gap-12">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10 sm:gap-12">
           <Pillar
             badge={
               <span className="inline-flex rounded-full bg-white border border-emerald-300 px-2 py-0.5 text-[11px] font-semibold leading-none text-emerald-700">
@@ -155,6 +156,17 @@ export default async function LandingPage({
             title="Aktuelle Marktpreis-Bewertung"
             text="Von „sehr guter Preis“ bis „sehr hoher Preis“ – ist die Miete wirklich angemessen? Wir zeigen dir, wie sich der Preis im Vergleich zu ähnlichen Objekten in der Gegend schlägt."
           />
+          <Pillar
+            badge={
+              <span className="inline-flex items-center gap-1 rounded-full bg-white border border-emerald-300 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-emerald-700">
+                <Lock className="size-3" aria-hidden />
+                100 % anonym
+              </span>
+            }
+            title="Gefunden werden — statt zu suchen"
+            text="Eigenes Such-Inserat aufgeben wie früher in der Zeitung: „Junges Paar sucht 3-Zimmer Villa mit Pool im Raum Paphos.“ Makler mit passenden Angeboten dürfen Kontakt aufnehmen — ohne Preisgabe deiner Email-Adresse."
+            cta={{ href: "/gesuche", label: "Such-Inserate ansehen →" }}
+          />
         </div>
       </section>
 
@@ -163,10 +175,10 @@ export default async function LandingPage({
         <FeaturedListings regionSlug={sp.region ?? null} />
       </Suspense>
 
-      {/* Drei Wege */}
+      {/* Vier Wege */}
       <section id="pfade" className="mx-auto max-w-6xl px-6 pb-16 sm:pb-24">
         <h2 className="font-display text-3xl sm:text-4xl text-center text-[var(--brand-navy)] mb-10">
-          Drei Wege zu Home4U
+          Vier Wege zu Home4U
         </h2>
         <Suspense
           fallback={
@@ -245,7 +257,8 @@ export default async function LandingPage({
           </div>
           <div className="flex items-center gap-5 text-white/50">
             <ChatLink flow="seeker" className="hover:text-white">Suchen</ChatLink>
-            <a href="#pfade" className="hover:text-white">Drei Wege</a>
+            <Link href="/gesuche" className="hover:text-white">Such-Inserate</Link>
+            <a href="#pfade" className="hover:text-white">Vier Wege</a>
           </div>
         </div>
       </footer>
@@ -257,10 +270,12 @@ function Pillar({
   badge,
   title,
   text,
+  cta,
 }: {
   badge: React.ReactNode;
   title: string;
   text: string;
+  cta?: { href: string; label: string };
 }) {
   return (
     <div>
@@ -269,6 +284,14 @@ function Pillar({
         {title}
       </h3>
       <p className="text-sm text-[var(--warm-bark)] leading-relaxed">{text}</p>
+      {cta ? (
+        <Link
+          href={cta.href}
+          className="mt-3 inline-block text-sm font-medium text-[var(--brand-navy)] hover:text-[var(--brand-gold)] transition-colors"
+        >
+          {cta.label}
+        </Link>
+      ) : null}
     </div>
   );
 }
