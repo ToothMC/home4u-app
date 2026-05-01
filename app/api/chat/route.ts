@@ -10,6 +10,7 @@ import { SOPHIE_TOOLS } from "@/lib/sophie/tools";
 import { executeTool, type ToolContext } from "@/lib/sophie/tool-handlers";
 import { getOrCreateAnonymousSession } from "@/lib/session";
 import { getAuthUser } from "@/lib/supabase/auth";
+import { getPreferredLanguage } from "@/lib/lang/preferred-language";
 import {
   appendMessage,
   createConversation,
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
 
   const session = await getOrCreateAnonymousSession();
   const authUser = await getAuthUser();
+  const preferredLang = (await getPreferredLanguage()) ?? "de";
 
   // Conversation: weiterführen oder neu anlegen
   let conversationId = body.conversationId;
@@ -140,6 +142,21 @@ export async function POST(req: NextRequest) {
       systemBlocks.push({
         type: "text",
         text: `<user_role>${roleTag}</user_role>\nLeite davon ab, welche Tools du nutzen darfst. Bei 'unknown' oder '*_intent_anonymous' setze die Rolle via set_user_role (nur für eingeloggte Nutzer persistent).`,
+      });
+
+      // Sprach-Präferenz aus Profil oder Cookie. Sophie soll in dieser
+      // Sprache antworten, solange der User nicht in einer anderen schreibt
+      // — siehe Sprach-Regeln im SOPHIE_SYSTEM_PROMPT.
+      const langName: Record<string, string> = {
+        de: "Deutsch",
+        en: "English",
+        ru: "Русский (Russian)",
+        el: "Ελληνικά (Greek)",
+        zh: "中文 (Mandarin Chinese, simplified)",
+      };
+      systemBlocks.push({
+        type: "text",
+        text: `<user_language>${preferredLang}</user_language>\nDie bevorzugte Sprache des Nutzers ist **${langName[preferredLang] ?? preferredLang}**. Antworte in dieser Sprache, solange der Nutzer nicht aktiv in einer anderen schreibt. Wenn er die Sprache wechselt, wechselst du sofort mit — ohne Kommentar.`,
       });
 
       if (body.region) {
