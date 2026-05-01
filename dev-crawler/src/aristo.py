@@ -128,7 +128,12 @@ def parse(client: httpx.Client, url: str) -> ParsedListing | None:
 
     title = _meta(tree, "og:title") or slug.replace("-", " ").title()
     cover = _meta(tree, "og:image")
+    # og:description fehlt auf Aristo-Detail-Pages — Fallback auf meta name="description"
     description = _meta(tree, "og:description")
+    if not description:
+        node = tree.css_first('meta[name="description"]')
+        if node:
+            description = (node.attributes.get("content") or "").strip() or None
 
     # Erstes <h3 class*="secondary-header-text"> trägt die Headline-Preis-Angabe
     price_node = tree.css_first('h3.secondary-header-text')
@@ -152,16 +157,24 @@ def parse(client: httpx.Client, url: str) -> ParsedListing | None:
         except ValueError:
             pass
 
-    # Property-Type-Heuristik aus Slug + Title
+    # Property-Type-Heuristik aus Slug + Title.
+    # plot/land vor house prüfen — sonst wird "land for sale" zu "house" wenn
+    # zufällig "residence" im Slug auftaucht (Marketing-Artefakt).
     pt_text = (slug + " " + title).lower()
-    if any(k in pt_text for k in ("villa", "house", "residence", "maisonette")):
+    if "plot" in pt_text or "land for sale" in pt_text:
+        property_type = "plot"
+    elif any(k in pt_text for k in ("villa", "house", "residence", "maisonette")):
         property_type = "house"
     elif any(k in pt_text for k in ("apartment", "flat")):
         property_type = "apartment"
-    elif "plot" in pt_text or "land" in pt_text:
-        property_type = "plot"
     else:
         property_type = "house"  # Default Bauträger = Neubau-Häuser
+
+    # Bei plot ergibt Bedrooms keinen Sinn — Footer-Newsletter hat ein
+    # "3 Bedrooms"-Snippet das der Regex sonst fälschlich aufgreift.
+    if property_type == "plot":
+        rooms = None
+        size_sqm = None
 
     media: list[str] = []
     if cover:
