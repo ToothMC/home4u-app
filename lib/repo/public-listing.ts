@@ -125,6 +125,7 @@ export async function loadPublicListing(
       source: l.source as string,
       external_id: l.external_id ?? null,
       extracted_data: (l.extracted_data as Record<string, unknown> | null) ?? null,
+      title: l.title ?? null,
     }),
     has_phone_contact: l.contact_phone_enc != null,
     has_email_contact: l.contact_email_enc != null,
