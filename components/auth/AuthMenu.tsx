@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LogIn, LogOut, User as UserIcon, Loader2, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SignInDialog } from "@/components/auth/SignInDialog";
+import { MobileNav } from "@/components/nav/MobileNav";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type AuthState =
@@ -76,12 +77,15 @@ export function AuthMenu({
 
   if (state.status === "loading") {
     return (
-      <div
-        className="flex items-center gap-1 text-xs text-[var(--muted-foreground)] px-3 py-1.5"
-        aria-live="polite"
-      >
-        <Loader2 className="size-3 animate-spin" />
-      </div>
+      <>
+        <MobileNav />
+        <div
+          className="flex items-center gap-1 text-xs text-[var(--muted-foreground)] px-3 py-1.5"
+          aria-live="polite"
+        >
+          <Loader2 className="size-3 animate-spin" />
+        </div>
+      </>
     );
   }
 
@@ -90,6 +94,7 @@ export function AuthMenu({
     const label = state.email ? state.email.split("@")[0] : "Account";
     return (
       <div className="flex items-center gap-2">
+        <MobileNav />
         {!hideDashboard && (
           <Button asChild size="sm" variant="outline">
             <Link href="/dashboard" aria-label="Dashboard">
@@ -125,6 +130,7 @@ export function AuthMenu({
 
   return (
     <>
+      <MobileNav />
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         <LogIn className="size-3" />
         Anmelden
