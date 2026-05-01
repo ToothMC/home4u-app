@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, Check, Loader2, X } from "lucide-react";
+import { Bell, BellOff, Check, Globe, Loader2, Lock, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ export type EditableSearchProfile = {
   free_text: string | null;
   active: boolean;
   notify_new_matches: boolean;
+  published_as_wanted: boolean;
 };
 
 const HOUSEHOLD = [
@@ -134,6 +135,51 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
             className={cn(
               "absolute left-0.5 inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
               get("notify_new_matches") ? "translate-x-5" : "translate-x-0"
+            )}
+          />
+        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => set("published_as_wanted", !(get("published_as_wanted") as boolean))}
+        className={cn(
+          "w-full flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm transition-colors",
+          get("published_as_wanted")
+            ? "border-sky-300 bg-sky-500/10 text-sky-900"
+            : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]"
+        )}
+        aria-pressed={get("published_as_wanted") as boolean}
+      >
+        <span className="flex items-start gap-2 text-left">
+          {get("published_as_wanted") ? (
+            <Globe className="size-4 mt-0.5" />
+          ) : (
+            <Lock className="size-4 mt-0.5" />
+          )}
+          <span className="flex flex-col gap-0.5">
+            <span>
+              {get("published_as_wanted")
+                ? 'Als „Such-Inserat" auf /gesuche veröffentlicht'
+                : "Privat — nur du siehst dieses Profil"}
+            </span>
+            <span className="text-xs opacity-80">
+              {get("published_as_wanted")
+                ? "Vermieter können dir über Home4U-Postfach eine Wohnung anbieten. Email bleibt unsichtbar."
+                : "Toggle aktivieren um Anbieter zu erlauben dir Wohnungen vorzuschlagen."}
+            </span>
+          </span>
+        </span>
+        <span
+          className={cn(
+            "relative inline-flex h-5 w-10 shrink-0 items-center rounded-full transition-colors mt-0.5",
+            get("published_as_wanted") ? "bg-sky-500" : "bg-neutral-300"
+          )}
+        >
+          <span
+            className={cn(
+              "absolute left-0.5 inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
+              get("published_as_wanted") ? "translate-x-5" : "translate-x-0"
             )}
           />
         </span>

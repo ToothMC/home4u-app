@@ -23,6 +23,7 @@ const patchSchema = z
     free_text: z.string().max(2000).nullable().optional(),
     active: z.boolean().optional(),
     notify_new_matches: z.boolean().optional(),
+    published_as_wanted: z.boolean().optional(),
   })
   .strict();
 
@@ -74,6 +75,14 @@ export async function PATCH(
   const auth = await loadAndAuthorize(id);
   if (!auth.ok) {
     return Response.json({ error: auth.error }, { status: auth.status });
+  }
+
+  // Anonyme Profile dürfen nicht öffentlich publiziert werden — kein
+  // Email-Delivery, keine Inbox-Erreichbarkeit. Toggle wird stillschweigend
+  // auf false geclamped (besser als 400 — der User könnte verwirrt sein
+  // warum sein Toggle nicht klickbar ist; im Frontend disablen wir ihn nicht).
+  if (parsed.data.published_as_wanted === true && !auth.userId) {
+    parsed.data.published_as_wanted = false;
   }
 
   const { data, error } = await auth.supabase
