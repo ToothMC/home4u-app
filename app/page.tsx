@@ -28,6 +28,7 @@ export default async function LandingPage({
             <ChatLink flow="seeker" className="hover:text-[var(--brand-gold)] transition-colors">Suchen</ChatLink>
             <Link href="/chat?flow=owner" className="hover:text-[var(--brand-gold)] transition-colors">Vermieten</Link>
             <Link href="/chat?flow=owner&intent=sale" className="hover:text-[var(--brand-gold)] transition-colors">Verkaufen</Link>
+            <Link href="/gesuche" className="hover:text-[var(--brand-gold)] transition-colors">Such-Inserate</Link>
             <Link href="/chat?flow=agent" className="hover:text-[var(--brand-gold)] transition-colors">Für Makler</Link>
             <Link href="/scam-check" className="hover:text-[var(--brand-gold)] transition-colors">Scam-Check</Link>
           </nav>
@@ -245,6 +246,7 @@ export default async function LandingPage({
           </div>
           <div className="flex items-center gap-5 text-white/50">
             <ChatLink flow="seeker" className="hover:text-white">Suchen</ChatLink>
+            <Link href="/gesuche" className="hover:text-white">Such-Inserate</Link>
             <a href="#pfade" className="hover:text-white">Drei Wege</a>
           </div>
         </div>
