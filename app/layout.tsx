@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
+import { getT } from "@/lib/i18n/server";
+import { LangProvider } from "@/lib/i18n/provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,18 +40,19 @@ export const viewport: Viewport = {
   colorScheme: "light",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { lang } = await getT();
   return (
     <html
-      lang="de"
+      lang={lang}
       className={`${geistSans.variable} ${geistMono.variable} ${cormorant.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[var(--background)] text-[var(--foreground)]">
-        {children}
+        <LangProvider lang={lang}>{children}</LangProvider>
       </body>
     </html>
   );
