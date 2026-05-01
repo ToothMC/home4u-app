@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 // Plain Link statt ChatLink (das useSearchParams() nutzt) — sonst muss
 // jede Page die AuthMenu rendert in Suspense gewrapped werden, sonst
 // schlägt der Production-Build mit "missing-suspense-with-csr-bailout"
-// fehl. Region-Param-Preservation ist beim Burger-Entry nicht kritisch.
+// fehl.
 type Item = { label: string; href: string };
 
 const ITEMS: Item[] = [
@@ -23,7 +23,6 @@ const ITEMS: Item[] = [
 export function MobileNav() {
   const [open, setOpen] = React.useState(false);
 
-  // ESC zum Schließen + Body-Scroll-Lock während offen
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -45,12 +44,12 @@ export function MobileNav() {
         onClick={() => setOpen(true)}
         aria-label="Menü öffnen"
         aria-expanded={open}
-        className="lg:hidden inline-flex size-9 items-center justify-center rounded-full text-[var(--brand-navy)] hover:bg-[var(--brand-gold-50)] hover:text-[var(--brand-gold)] transition-colors"
+        className="lg:hidden inline-flex size-9 items-center justify-center rounded-full text-[var(--brand-navy,#0a1f3a)] hover:bg-[var(--brand-gold-50,#fef3e2)] hover:text-[var(--brand-gold,#c9a14a)] transition-colors"
       >
         <Menu className="size-5" />
       </button>
 
-      {/* Overlay + Drawer */}
+      {/* Overlay — fixed inset-0, full viewport */}
       <div
         className={cn(
           "lg:hidden fixed inset-0 z-50 transition-opacity",
@@ -58,54 +57,65 @@ export function MobileNav() {
         )}
         aria-hidden={!open}
       >
-        {/* Backdrop */}
+        {/* Backdrop click-to-close */}
         <button
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Menü schließen"
-          className="absolute inset-0 bg-[var(--brand-navy)]/60 backdrop-blur-sm"
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         />
 
-        {/* Panel von rechts einschwebend */}
+        {/* Panel — explizit h-screen + bg-white statt CSS-var damit's robust ist.
+            Statt flex-col + flex-1 (das auf manchen Pages kollabiert): klassisches
+            Layout mit absolutem header/footer und scroll-bereich dazwischen. */}
         <nav
+          aria-label="Hauptnavigation"
           className={cn(
-            "absolute top-0 right-0 h-full w-[80%] max-w-xs bg-[var(--warm-cream)] shadow-xl flex flex-col",
+            "absolute top-0 right-0 h-screen w-[80%] max-w-xs bg-white shadow-xl",
             "transition-transform duration-200",
             open ? "translate-x-0" : "translate-x-full"
           )}
-          aria-label="Hauptnavigation"
         >
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
-            <span className="text-sm font-medium text-[var(--brand-navy)]">Menü</span>
+          {/* Header */}
+          <div className="absolute top-0 inset-x-0 h-14 flex items-center justify-between px-5 border-b border-neutral-200 bg-white">
+            <span className="text-sm font-medium text-neutral-800">Menü</span>
             <button
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Menü schließen"
-              className="inline-flex size-8 items-center justify-center rounded-full text-[var(--brand-navy)] hover:bg-[var(--brand-gold-50)]"
+              className="inline-flex size-8 items-center justify-center rounded-full text-neutral-700 hover:bg-neutral-100"
             >
               <X className="size-5" />
             </button>
           </div>
 
-          <ul className="flex-1 overflow-y-auto py-2">
-            {ITEMS.map((it) => (
-              <li key={it.label}>
-                <Link
-                  href={it.href}
-                  onClick={() => setOpen(false)}
-                  className="block w-full px-5 py-3 text-base text-[var(--brand-navy)] hover:bg-[var(--brand-gold-50)] hover:text-[var(--brand-gold)] transition-colors"
-                >
-                  {it.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          {/* Scroll-Bereich für die Items — explizite top/bottom-Offsets statt
+              flex-1, damit die Items garantiert sichtbar sind. */}
+          <div
+            className="absolute inset-x-0 top-14 bottom-14 overflow-y-auto bg-white"
+            data-mobile-nav-items
+          >
+            <ul className="py-2">
+              {ITEMS.map((it) => (
+                <li key={it.label}>
+                  <Link
+                    href={it.href}
+                    onClick={() => setOpen(false)}
+                    className="block w-full px-5 py-3 text-base text-neutral-800 hover:bg-neutral-100 transition-colors"
+                  >
+                    {it.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
 
-          <div className="border-t border-[var(--border)] px-5 py-3">
+          {/* Footer */}
+          <div className="absolute bottom-0 inset-x-0 h-14 flex items-center px-5 border-t border-neutral-200 bg-white">
             <Link
               href="/dashboard"
               onClick={() => setOpen(false)}
-              className="block text-sm font-medium text-[var(--brand-navy)] hover:text-[var(--brand-gold)] transition-colors"
+              className="text-sm font-medium text-neutral-800 hover:text-neutral-600 transition-colors"
             >
               Dashboard →
             </Link>
