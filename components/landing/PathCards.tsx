@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { MessageCircle, KeyRound, Building2 } from "lucide-react";
+import { MessageCircle, KeyRound, Building2, Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,7 +21,7 @@ export function PathCards() {
     appendRegionParam(`/chat?flow=${flow}`, region);
 
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <PathCard
         icon={<MessageCircle className="size-6" />}
         title="Ich suche"
@@ -30,16 +30,23 @@ export function PathCards() {
         href={href("seeker")}
       />
       <PathCard
+        icon={<Megaphone className="size-6" />}
+        title="Gefunden werden"
+        description="Gib dein Such-Profil frei, damit Makler dich finden und dir passende Objekte anbieten können."
+        cta="Such-Inserate ansehen"
+        href="/gesuche"
+      />
+      <PathCard
         icon={<KeyRound className="size-6" />}
-        title="Ich vermiete privat"
-        description="Immobilie online in unter 10 Minuten. KI-Preisempfehlung, mehrsprachige Texte, qualifizierte Interessenten."
+        title="Ich biete (privat)"
+        description="Dein Inserat in 3 Minuten. KI-Preisempfehlung, mehrsprachige Texte, Vorschau-Modus uvm."
         cta="Inserat erstellen"
         href={href("owner")}
       />
       <PathCard
         icon={<Building2 className="size-6" />}
         title="Ich bin Makler"
-        description="Beta-Zugang für die ersten 50 Partner — Bulk-Import, Lead-Scoring, mehrsprachige Inserate, kein Bait-and-Switch."
+        description="Beta-Zugang für die ersten 50 Partner — Bulk-Import, Such-Inserate, 4-sprachig uvm."
         cta="Makler-Beirat"
         href={href("agent")}
       />

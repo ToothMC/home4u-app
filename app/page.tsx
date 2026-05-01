@@ -175,10 +175,10 @@ export default async function LandingPage({
         <FeaturedListings regionSlug={sp.region ?? null} />
       </Suspense>
 
-      {/* Drei Wege */}
+      {/* Vier Wege */}
       <section id="pfade" className="mx-auto max-w-6xl px-6 pb-16 sm:pb-24">
         <h2 className="font-display text-3xl sm:text-4xl text-center text-[var(--brand-navy)] mb-10">
-          Drei Wege zu Home4U
+          Vier Wege zu Home4U
         </h2>
         <Suspense
           fallback={
@@ -258,7 +258,7 @@ export default async function LandingPage({
           <div className="flex items-center gap-5 text-white/50">
             <ChatLink flow="seeker" className="hover:text-white">Suchen</ChatLink>
             <Link href="/gesuche" className="hover:text-white">Such-Inserate</Link>
-            <a href="#pfade" className="hover:text-white">Drei Wege</a>
+            <a href="#pfade" className="hover:text-white">Vier Wege</a>
           </div>
         </div>
       </footer>
