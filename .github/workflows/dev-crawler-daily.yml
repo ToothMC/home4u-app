@@ -1,0 +1,83 @@
+name: Daily CY-Developer Crawl
+
+# Bauträger-Bundle: Aristo + Pafilia + Leptos + Cybarco + Korantina + Imperio.
+# Nur Aristo aktuell live, Rest sind Stubs (siehe dev-crawler/_stubs.py).
+# Streaming-Architektur identisch zu cre/index — Watchdog 90min, exit 0
+# garantiert grün auch bei mid-Listing-Stop.
+
+on:
+  schedule:
+    # 4× täglich versetzt, 30min nach den existierenden Crawlern:
+    # bazaraki=0/6/12/18, INDEX=1/7/13/19, CRE=2/8/14/20, dev=3/9/15/21.
+    - cron: "0 3,9,15,21 * * *"
+  workflow_dispatch:
+    inputs:
+      developers:
+        description: "Comma-Liste, leer = alle implementierten"
+        required: false
+        default: ""
+      max_listings:
+        description: "Cap pro Developer (0 = unbegrenzt)"
+        required: false
+        default: "0"
+      rate_limit_s:
+        description: "Sekunden Pause pro Detail-Fetch"
+        required: false
+        default: "1.0"
+      max_runtime_s:
+        description: "Wall-Clock-Budget in Sekunden (default 5400 = 90min)"
+        required: false
+        default: "5400"
+      dry_run:
+        description: "Nur loggen, kein DB-Write"
+        type: boolean
+        required: false
+        default: false
+      skip_phash:
+        description: "pHash-Phase überspringen"
+        type: boolean
+        required: false
+        default: false
+      force_refetch:
+        description: "Auch bekannte Listings nochmal fetchen"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: dev-crawler
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    # Hard-Cap = MAX_RUNTIME_S/60 + 10min Headroom für SIGTERM-freien exit 0.
+    timeout-minutes: 100
+    defaults:
+      run:
+        working-directory: ./dev-crawler
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+
+      - name: Run crawler
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DEVELOPERS: ${{ inputs.developers }}
+          MAX_LISTINGS: ${{ inputs.max_listings || '0' }}
+          RATE_LIMIT_S: ${{ inputs.rate_limit_s || '1.0' }}
+          MAX_RUNTIME_S: ${{ inputs.max_runtime_s || '5400' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          SKIP_PHASH: ${{ inputs.skip_phash && '1' || '' }}
+          FORCE_REFETCH: ${{ inputs.force_refetch && '1' || '' }}
+        run: python -m src.main
