@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { DeleteRecordButton } from "@/components/dashboard/DeleteRecordButton";
 import { emitMatchesUpdated } from "@/lib/events/match-events";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import type { TKey } from "@/lib/i18n/dict";
 
 export type EditableSearchProfile = {
   id: string;
@@ -28,17 +30,25 @@ export type EditableSearchProfile = {
   published_as_wanted: boolean;
 };
 
-const HOUSEHOLD = [
-  { value: "single", label: "Einzelperson" },
-  { value: "couple", label: "Paar" },
-  { value: "family", label: "Familie" },
-  { value: "shared", label: "WG" },
+const HOUSEHOLD: Array<{ value: string; key: TKey }> = [
+  { value: "single", key: "household.single" },
+  { value: "couple", key: "household.couple" },
+  { value: "family", key: "household.family" },
+  { value: "shared", key: "household.shared" },
 ];
 
-const LIFESTYLE_OPTIONS = [
-  "ruhig", "zentrale Lage", "nah am Strand", "Familienviertel",
-  "Homeoffice", "Schulen", "Restaurants",
-  "Pool", "Community-Pool", "Garage", "Parkplatz",
+const LIFESTYLE_OPTIONS: Array<{ value: string; key: TKey }> = [
+  { value: "ruhig", key: "lifestyle.quiet" },
+  { value: "zentrale Lage", key: "lifestyle.central" },
+  { value: "nah am Strand", key: "lifestyle.beach" },
+  { value: "Familienviertel", key: "lifestyle.familyArea" },
+  { value: "Homeoffice", key: "lifestyle.homeoffice" },
+  { value: "Schulen", key: "lifestyle.schools" },
+  { value: "Restaurants", key: "lifestyle.restaurants" },
+  { value: "Pool", key: "lifestyle.pool" },
+  { value: "Community-Pool", key: "lifestyle.communityPool" },
+  { value: "Garage", key: "lifestyle.garage" },
+  { value: "Parkplatz", key: "lifestyle.parking" },
 ];
 
 // Toggle-Felder werden direkt beim Click gespeichert (Instant-Save), nicht
@@ -52,6 +62,7 @@ const INSTANT_SAVE_FIELDS = new Set<keyof EditableSearchProfile>([
 
 export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
   const router = useRouter();
+  const { t } = useT();
   const [form, setForm] = React.useState<Partial<EditableSearchProfile>>({});
   // Instant-saved toggles werden hier persistiert, damit das UI nach dem
   // Server-Roundtrip den neuen Stand anzeigt ohne auf router.refresh() warten
@@ -81,8 +92,6 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
     return initial[key];
   };
 
-  // Instant-Save: ein einzelnes Feld direkt PATCHen, optimistic-update
-  // setzen und bei Fehler den Toggle zurückdrehen + Error zeigen.
   async function saveInstant<K extends keyof EditableSearchProfile>(
     key: K,
     value: EditableSearchProfile[K]
@@ -99,15 +108,14 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
-        // Rollback der optimistic-update
+        setError(detail.detail ?? detail.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
         setInstant((prev) => ({ ...prev, [key]: previous }));
         return;
       }
       setSavedAt(Date.now());
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setError(err instanceof Error ? err.message : t("btn.networkError"));
       setInstant((prev) => ({ ...prev, [key]: previous }));
     } finally {
       setBusy(null);
@@ -115,8 +123,8 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
   }
 
   const tags = (get("lifestyle_tags") ?? []) as string[];
-  const toggleTag = (t: string) => {
-    const next = tags.includes(t) ? tags.filter((x) => x !== t) : [...tags, t];
+  const toggleTag = (tag: string) => {
+    const next = tags.includes(tag) ? tags.filter((x) => x !== tag) : [...tags, tag];
     set("lifestyle_tags", next);
   };
 
@@ -132,7 +140,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
+        setError(detail.detail ?? detail.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
         return;
       }
       const json = await res.json().catch(() => ({} as { match_count?: number }));
@@ -141,11 +149,10 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
       setMatchCount(
         typeof json.match_count === "number" ? json.match_count : null
       );
-      // Andere geöffnete Listen (z.B. /matches) sofort refreshen lassen.
       emitMatchesUpdated();
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setError(err instanceof Error ? err.message : t("btn.networkError"));
     } finally {
       setBusy(null);
     }
@@ -176,8 +183,8 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
           )}
           <span>
             {get("notify_new_matches")
-              ? "Tägliche E-Mail bei neuen Treffern aktiv"
-              : "Keine E-Mail-Benachrichtigung"}
+              ? t("searchEditor.notify.on")
+              : t("searchEditor.notify.off")}
           </span>
         </span>
         <span
@@ -217,13 +224,13 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
           <span className="flex flex-col gap-0.5">
             <span>
               {get("published_as_wanted")
-                ? 'Als „Such-Inserat" auf /gesuche veröffentlicht'
-                : "Privat — nur du siehst dieses Profil"}
+                ? t("searchEditor.publish.on")
+                : t("searchEditor.publish.off")}
             </span>
             <span className="text-xs opacity-80">
               {get("published_as_wanted")
-                ? "Vermieter können dir über Home4U-Postfach eine Wohnung anbieten. Email bleibt unsichtbar."
-                : "Toggle aktivieren um Anbieter zu erlauben dir Wohnungen vorzuschlagen."}
+                ? t("searchEditor.publish.onSub")
+                : t("searchEditor.publish.offSub")}
             </span>
           </span>
         </span>
@@ -242,27 +249,27 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
         </span>
       </button>
 
-      <Field label="Wo suchst du?">
+      <Field label={t("searchEditor.location")}>
         <Input
           value={(get("location") as string) ?? ""}
           onChange={(e) => set("location", e.target.value)}
-          placeholder="z. B. Paphos Kato oder Limassol Tourist Area"
+          placeholder={t("searchEditor.locationPlaceholder")}
           className="bg-white"
         />
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Typ">
+        <Field label={t("searchEditor.type")}>
           <select
             value={get("type") as string}
             onChange={(e) => set("type", e.target.value as "rent" | "sale")}
             className="h-10 w-full rounded-md border bg-white px-3 text-sm"
           >
-            <option value="rent">Miete</option>
-            <option value="sale">Kauf</option>
+            <option value="rent">{t("searchEditor.type.rent")}</option>
+            <option value="sale">{t("searchEditor.type.sale")}</option>
           </select>
         </Field>
-        <Field label="Status">
+        <Field label={t("searchEditor.statusLabel")}>
           <div className="flex gap-2">
             <button
               type="button"
@@ -275,7 +282,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
                   : "bg-[var(--background)]"
               )}
             >
-              aktiv
+              {t("searchRow.active")}
             </button>
             <button
               type="button"
@@ -288,14 +295,14 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
                   : "bg-[var(--background)]"
               )}
             >
-              pausiert
+              {t("searchRow.paused")}
             </button>
           </div>
         </Field>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Budget min (€)">
+        <Field label={t("searchEditor.budgetMin")}>
           <Input
             type="number"
             value={(get("budget_min") as number | null) ?? ""}
@@ -307,7 +314,13 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
             className="bg-white"
           />
         </Field>
-        <Field label={get("type") === "sale" ? "Budget max (€)" : "Budget max pro Monat (€)"}>
+        <Field
+          label={
+            get("type") === "sale"
+              ? t("searchEditor.budgetMaxSale")
+              : t("searchEditor.budgetMaxRent")
+          }
+        >
           <Input
             type="number"
             value={(get("budget_max") as number | null) ?? ""}
@@ -322,7 +335,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Zimmer">
+        <Field label={t("searchEditor.rooms")}>
           <Input
             type="number"
             value={(get("rooms") as number | null) ?? ""}
@@ -335,7 +348,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
             className="bg-white"
           />
         </Field>
-        <Field label="Einzug ab">
+        <Field label={t("searchEditor.moveIn")}>
           <Input
             type="date"
             value={((get("move_in_date") as string) ?? "").slice(0, 10)}
@@ -345,7 +358,7 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
         </Field>
       </div>
 
-      <Field label="Haushalt">
+      <Field label={t("searchEditor.household")}>
         <div className="flex gap-2 flex-wrap">
           {HOUSEHOLD.map((h) => {
             const active = get("household") === h.value;
@@ -366,19 +379,19 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
                     : "bg-[var(--background)] hover:bg-[var(--accent)]"
                 )}
               >
-                {h.label}
+                {t(h.key)}
               </button>
             );
           })}
         </div>
       </Field>
 
-      <Field label="Haustiere">
+      <Field label={t("searchEditor.pets")}>
         <div className="flex gap-2">
           {[
-            { v: true, l: "Ja" },
-            { v: false, l: "Nein" },
-            { v: null, l: "—" },
+            { v: true, l: t("searchEditor.pets.yes") },
+            { v: false, l: t("searchEditor.pets.no") },
+            { v: null, l: t("searchEditor.pets.dontCare") },
           ].map((o) => (
             <button
               key={String(o.v)}
@@ -397,15 +410,15 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
         </div>
       </Field>
 
-      <Field label="Lifestyle / was wichtig ist">
+      <Field label={t("searchEditor.lifestyle")}>
         <div className="flex flex-wrap gap-2">
-          {LIFESTYLE_OPTIONS.map((t) => {
-            const active = tags.includes(t);
+          {LIFESTYLE_OPTIONS.map((opt) => {
+            const active = tags.includes(opt.value);
             return (
               <button
-                key={t}
+                key={opt.value}
                 type="button"
-                onClick={() => toggleTag(t)}
+                onClick={() => toggleTag(opt.value)}
                 className={cn(
                   "rounded-full border px-3 py-1 text-xs",
                   active
@@ -414,18 +427,18 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
                 )}
               >
                 {active && <Check className="inline size-3 mr-0.5" />}
-                {t}
+                {t(opt.key)}
               </button>
             );
           })}
         </div>
       </Field>
 
-      <Field label="Was Sophie sonst noch wissen sollte">
+      <Field label={t("searchEditor.freeText")}>
         <Textarea
           value={(get("free_text") as string) ?? ""}
           onChange={(e) => set("free_text", e.target.value || null)}
-          placeholder="z. B. 'arbeite remote, brauche schnelles Internet und Balkon für Pflanzen'"
+          placeholder={t("searchEditor.freeTextPlaceholder")}
           rows={4}
           maxLength={2000}
           className="bg-white"
@@ -442,25 +455,25 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
         <DeleteRecordButton
           endpoint={`/api/searches/${initial.id}`}
           redirectTo="/dashboard?view=seeker"
-          what="Diese Suche"
+          what={t("searchEditor.deleteWhat")}
         />
         <div className="flex items-center gap-2">
           {savedAt && !dirty && (
             <span className="text-xs text-emerald-700 flex items-center gap-1">
-              <Check className="size-3" /> Gespeichert
+              <Check className="size-3" /> {t("searchEditor.saved")}
               {matchCount !== null && (
                 <Link
                   href="/matches"
                   className="ml-1 underline hover:no-underline"
                 >
-                  · {matchCount} {matchCount === 1 ? "Treffer" : "Treffer"}
+                  · {matchCount} {t("searchEditor.matches")}
                 </Link>
               )}
             </span>
           )}
           <Button onClick={save} disabled={!dirty || busy === "save"}>
             {busy === "save" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-            {dirty ? "Änderungen speichern" : "Keine Änderungen"}
+            {dirty ? t("searchEditor.save") : t("searchEditor.noChanges")}
           </Button>
         </div>
       </div>

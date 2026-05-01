@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Heart, Share2, Check, Link as LinkIcon } from "lucide-react";
 import { SignInDialog } from "@/components/auth/SignInDialog";
+import { useT } from "@/lib/i18n/client";
 
 type Props = {
   listingId: string;
@@ -28,6 +29,7 @@ export function ListingHeaderActions({
   shareTitle,
   shareText,
 }: Props) {
+  const { t } = useT();
   const [saved, setSaved] = React.useState(initialSaved);
   const [authed, setAuthed] = React.useState(isAuthenticated);
   const [busy, setBusy] = React.useState<"save" | "share" | null>(null);
@@ -66,18 +68,18 @@ export function ListingHeaderActions({
       const json = await res.json().catch(() => ({}));
       if (!res.ok || typeof json.saved !== "boolean") {
         setSaved(prev);
-        setToast({ kind: "err", msg: json.error ?? "Konnte nicht speichern", t: Date.now() });
+        setToast({ kind: "err", msg: json.error ?? t("headerActions.saveError"), t: Date.now() });
         return;
       }
       setSaved(json.saved);
       setToast({
         kind: "ok",
-        msg: json.saved ? "In Favoriten gespeichert" : "Aus Favoriten entfernt",
+        msg: json.saved ? t("headerActions.savedToast") : t("headerActions.removedToast"),
         t: Date.now(),
       });
     } catch {
       setSaved(prev);
-      setToast({ kind: "err", msg: "Netzwerkfehler", t: Date.now() });
+      setToast({ kind: "err", msg: t("btn.networkError"), t: Date.now() });
     } finally {
       setBusy(null);
     }
@@ -98,17 +100,15 @@ export function ListingHeaderActions({
         });
         // Kein Erfolgs-Toast — das System-Sheet zeigt das Feedback selbst.
       } else if (navigator.clipboard) {
-        // Fallback: Link in die Zwischenablage kopieren
         await navigator.clipboard.writeText(url);
-        setToast({ kind: "ok", msg: "Link kopiert", t: Date.now() });
+        setToast({ kind: "ok", msg: t("headerActions.linkCopied"), t: Date.now() });
       } else {
-        setToast({ kind: "err", msg: "Teilen wird nicht unterstützt", t: Date.now() });
+        setToast({ kind: "err", msg: t("headerActions.shareUnsupported"), t: Date.now() });
       }
     } catch (err) {
-      // User hat den Share-Dialog abgebrochen → kein Fehler
       const isAbort = err instanceof Error && err.name === "AbortError";
       if (!isAbort) {
-        setToast({ kind: "err", msg: "Teilen fehlgeschlagen", t: Date.now() });
+        setToast({ kind: "err", msg: t("headerActions.shareFailed"), t: Date.now() });
       }
     } finally {
       setBusy(null);
@@ -122,7 +122,7 @@ export function ListingHeaderActions({
           type="button"
           onClick={handleSave}
           disabled={busy === "save"}
-          aria-label={saved ? "Aus Favoriten entfernen" : "Speichern"}
+          aria-label={saved ? t("headerActions.removeFromFavs") : t("headerActions.save")}
           aria-pressed={saved}
           className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] disabled:opacity-50"
         >
@@ -134,18 +134,18 @@ export function ListingHeaderActions({
             }
           />
           <span className="hidden sm:inline">
-            {saved ? "Gespeichert" : "Speichern"}
+            {saved ? t("headerActions.saved") : t("headerActions.save")}
           </span>
         </button>
         <button
           type="button"
           onClick={handleShare}
           disabled={busy === "share"}
-          aria-label="Teilen"
+          aria-label={t("headerActions.share")}
           className="inline-flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] disabled:opacity-50"
         >
           <Share2 className="size-4" />
-          <span className="hidden sm:inline">Teilen</span>
+          <span className="hidden sm:inline">{t("headerActions.share")}</span>
         </button>
       </div>
 
