@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { MatchCard, type MatchCardData, type SwipeDirection } from "./MatchCard";
 import { useT } from "@/lib/i18n/client";
+import { tFormat, type T } from "@/lib/i18n/dict";
 
 type Status = "browsing" | "submitting" | "done";
 type ToastState = {
@@ -229,12 +230,10 @@ export function MatchBrowser({
     // kein Page-Scroll. min-h-0 ist nötig, damit flex-1 Kinder schrumpfen dürfen.
     <div className="flex flex-col flex-1 min-h-0 gap-2 relative">
       <div className="shrink-0 text-xs text-[var(--muted-foreground)] flex items-center justify-between">
-        <span>
-          {idx + 1} / {queue.length} Treffer
-        </span>
+        <span>{tFormat(t("matchBrowse.counter"), { i: idx + 1, n: queue.length })}</span>
         {status === "submitting" && (
           <span className="text-[var(--muted-foreground)] flex items-center gap-1">
-            <Loader2 className="size-3 animate-spin" /> wird gesendet…
+            <Loader2 className="size-3 animate-spin" /> {t("matchBrowse.sending")}
           </span>
         )}
       </div>
@@ -248,7 +247,7 @@ export function MatchBrowser({
           onSwipe={handleSwipe}
           isTop
         />
-        {hintVisible && <SwipeHintOverlay onDismiss={dismissHint} />}
+        {hintVisible && <SwipeHintOverlay onDismiss={dismissHint} t={t} />}
       </div>
 
       {error && (
@@ -266,36 +265,39 @@ export function MatchBrowser({
           listingId={toast.listingId}
           onUndo={undoLast}
           onDismiss={() => setToast(null)}
+          t={t}
         />
       )}
     </div>
   );
 }
 
-function SwipeHintOverlay({ onDismiss }: { onDismiss: () => void }) {
+function SwipeHintOverlay({ onDismiss, t }: { onDismiss: () => void; t: T }) {
   return (
     <button
       type="button"
       onClick={onDismiss}
       className="absolute inset-0 z-10 rounded-2xl bg-black/65 backdrop-blur-sm text-white p-6 flex flex-col items-center justify-center gap-4 text-center"
-      aria-label="Hinweise schließen"
+      aria-label={t("matchBrowse.hintAriaClose")}
     >
       <Hand className="size-10" />
       <div className="space-y-3 text-sm max-w-xs">
         <div className="flex items-center gap-3 justify-center">
           <span className="text-2xl">→</span>
-          <span>Wischen rechts = <strong>Interesse</strong></span>
+          <span>
+            {t("matchBrowse.hintRight")}<strong>{t("matchBrowse.hintInterest")}</strong>
+          </span>
         </div>
         <div className="flex items-center gap-3 justify-center">
           <span className="text-2xl">←</span>
-          <span>Wischen links = Kein Interesse</span>
+          <span>{t("matchBrowse.hintLeft")}</span>
         </div>
         <div className="flex items-center gap-3 justify-center">
           <ChevronUp className="size-5" />
           <ChevronDown className="size-5" />
-          <span>Hoch/Runter = alle Bilder</span>
+          <span>{t("matchBrowse.hintUpDown")}</span>
         </div>
-        <div className="text-xs opacity-80 pt-2">Tap zum Schließen</div>
+        <div className="text-xs opacity-80 pt-2">{t("matchBrowse.hintTapClose")}</div>
       </div>
     </button>
   );
@@ -305,23 +307,25 @@ function Toast({
   listingId,
   onUndo,
   onDismiss,
+  t,
 }: {
   listingId: string;
   onUndo: () => void;
   onDismiss: () => void;
+  t: T;
 }) {
   const isDesktop = useIsDesktop();
   return (
     <div className="fixed top-4 right-4 z-50 max-w-xs rounded-xl shadow-lg bg-emerald-700 text-white p-3 flex items-start gap-2 animate-in fade-in slide-in-from-top-4">
       <Check className="size-4 mt-0.5 shrink-0" />
       <div className="flex-1 min-w-0 text-sm">
-        <div className="font-medium">Zu Favoriten hinzugefügt</div>
+        <div className="font-medium">{t("matchBrowse.toast.added")}</div>
         <div className="text-xs opacity-90 flex items-center gap-2 mt-0.5">
           <Link
             href="/dashboard/bookmarks"
             className="underline hover:no-underline"
           >
-            Favoriten
+            {t("matchBrowse.toast.favsLink")}
           </Link>
           <span>·</span>
           <Link
@@ -329,7 +333,7 @@ function Toast({
             {...(isDesktop ? { target: "_blank", rel: "noopener noreferrer" } : {})}
             className="underline hover:no-underline"
           >
-            Inserat
+            {t("matchBrowse.toast.listing")}
           </Link>
           <span>·</span>
           <button
@@ -337,14 +341,14 @@ function Toast({
             onClick={onUndo}
             className="underline hover:no-underline"
           >
-            rückgängig
+            {t("matchBrowse.toast.undo")}
           </button>
         </div>
       </div>
       <button
         type="button"
         onClick={onDismiss}
-        aria-label="Schließen"
+        aria-label={t("matchBrowse.toast.close")}
         className="opacity-80 hover:opacity-100"
       >
         <X className="size-3" />
@@ -362,25 +366,25 @@ function Loading() {
 }
 
 function FinishedState() {
+  const { t } = useT();
   return (
     <div className="rounded-2xl border p-8 text-center space-y-4">
       <div className="mx-auto size-12 rounded-full bg-emerald-100 flex items-center justify-center">
         <Sparkles className="size-6 text-emerald-700" />
       </div>
       <div>
-        <h2 className="text-lg font-semibold">Alle Treffer durch</h2>
+        <h2 className="text-lg font-semibold">{t("matchBrowse.finished")}</h2>
         <p className="text-sm text-[var(--muted-foreground)] mt-1">
-          Du hast alle vorgeschlagenen Inserate gesehen. Sophie sucht weiter —
-          schau später nochmal vorbei.
+          {t("matchBrowse.finishedSub")}
         </p>
       </div>
       <div className="flex flex-col sm:flex-row gap-2 justify-center">
         <Button asChild>
-          <Link href="/dashboard">Zum Dashboard</Link>
+          <Link href="/dashboard">{t("matchBrowse.toDashboard")}</Link>
         </Button>
         <Button asChild variant="outline">
           <Link href="/chat">
-            <MessageCircle className="size-4" /> Mit Sophie chatten
+            <MessageCircle className="size-4" /> {t("matches.cta")}
           </Link>
         </Button>
       </div>
