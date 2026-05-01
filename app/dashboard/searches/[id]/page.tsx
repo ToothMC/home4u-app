@@ -9,6 +9,7 @@ import {
 import { getAuthUser } from "@/lib/supabase/auth";
 import { getOrCreateAnonymousSession } from "@/lib/session";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function SearchDetailPage({
   const { id } = await params;
   const user = await getAuthUser();
   const session = user ? null : await getOrCreateAnonymousSession();
+  const { t } = await getT();
 
   const supabase = createSupabaseServiceClient();
   if (!supabase) redirect("/dashboard");
@@ -69,18 +71,17 @@ export default async function SearchDetailPage({
           href="/dashboard?view=seeker"
           className="text-sm text-[var(--muted-foreground)] hover:underline flex items-center gap-1"
         >
-          <ArrowLeft className="size-4" /> Suchen
+          <ArrowLeft className="size-4" /> {t("dashDetail.searches.back")}
         </Link>
         <AuthMenu />
       </header>
 
       <section className="mx-auto max-w-md w-full px-4 pt-4 pb-10">
         <div className="mb-4">
-          <h1 className="text-xl font-semibold">Suche bearbeiten</h1>
+          <h1 className="text-xl font-semibold">{t("dashDetail.searches.heading")}</h1>
           <p className="text-xs text-[var(--muted-foreground)] mt-1 flex items-center gap-1">
             <Sparkles className="size-3" />
-            Sophie nutzt diese Daten zum Matchen — ändern beeinflusst direkt
-            deine Treffer.
+            {t("dashDetail.searches.subtitle")}
           </p>
         </div>
 

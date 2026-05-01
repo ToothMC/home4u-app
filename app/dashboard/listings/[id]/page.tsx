@@ -8,6 +8,7 @@ import {
 } from "@/components/dashboard/ListingEditor";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function ListingDetailPage({
     redirect(`/?auth=required&next=/dashboard/listings/${id}`);
   }
 
+  const { t } = await getT();
   const supabase = createSupabaseServiceClient();
   if (!supabase) redirect("/dashboard");
 
@@ -110,7 +112,7 @@ export default async function ListingDetailPage({
           href="/dashboard?view=provider"
           className="text-sm text-[var(--muted-foreground)] hover:underline flex items-center gap-1"
         >
-          <ArrowLeft className="size-4" /> Inserate
+          <ArrowLeft className="size-4" /> {t("dashDetail.listings.back")}
         </Link>
         <AuthMenu />
       </header>
@@ -118,11 +120,11 @@ export default async function ListingDetailPage({
       <section className="mx-auto max-w-3xl w-full px-4 pt-4 pb-10">
         <div className="mb-4">
           <h1 className="text-xl font-semibold">
-            Inserat bearbeiten
+            {t("dashDetail.listings.heading")}
           </h1>
           <p className="text-xs text-[var(--muted-foreground)] mt-1 flex items-center gap-1">
             <Sparkles className="size-3" />
-            Sophie befüllt diese Felder per Foto-Analyse — hier kontrollierst und korrigierst du.
+            {t("dashDetail.listings.subtitle")}
             {data.source && data.source !== "direct" && (
               <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px]">
                 {data.source}

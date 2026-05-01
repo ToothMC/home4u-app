@@ -25,6 +25,8 @@ import { PhotoDropZone } from "@/components/dashboard/PhotoDropZone";
 import { MarketHint } from "@/components/dashboard/MarketHint";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import type { T, TKey } from "@/lib/i18n/dict";
 
 export type UtilityArrangement =
   | "included"
@@ -102,38 +104,52 @@ const PROPERTY_TYPES = [
   "townhouse", "penthouse", "bungalow", "land", "commercial",
 ];
 
-const FURNISHING = [
-  { value: "furnished", label: "Möbliert" },
-  { value: "semi_furnished", label: "Teilmöbliert" },
-  { value: "unfurnished", label: "Unmöbliert" },
+const FURNISHING: Array<{ value: string; key: TKey }> = [
+  { value: "furnished", key: "furnishing.furnished" },
+  { value: "semi_furnished", key: "furnishing.semi_furnished" },
+  { value: "unfurnished", key: "furnishing.unfurnished" },
 ];
 
 const ENERGY_CLASSES = ["A+", "A", "B", "C", "D", "E", "F", "G"];
 
-const FEATURE_OPTIONS: { value: string; label: string }[] = [
-  { value: "parking", label: "Parkplatz" },
-  { value: "covered_parking", label: "Garage" },
-  { value: "pool", label: "Pool" },
-  { value: "garden", label: "Garten" },
-  { value: "balcony", label: "Balkon" },
-  { value: "terrace", label: "Terrasse" },
-  { value: "elevator", label: "Aufzug" },
-  { value: "air_conditioning", label: "Klimaanlage" },
-  { value: "solar", label: "Solar" },
-  { value: "sea_view", label: "Meerblick" },
-  { value: "mountain_view", label: "Bergblick" },
-  { value: "storage", label: "Abstellraum" },
-  { value: "fireplace", label: "Kamin" },
-  { value: "jacuzzi", label: "Jacuzzi" },
-  { value: "gym", label: "Fitnessraum" },
-  { value: "smart_home", label: "Smart Home" },
-  { value: "accessible", label: "Barrierefrei" },
+const FEATURE_OPTIONS: Array<{ value: string; key: TKey }> = [
+  { value: "parking", key: "feature.parking" },
+  { value: "covered_parking", key: "feature.covered_parking" },
+  { value: "pool", key: "feature.pool" },
+  { value: "garden", key: "feature.garden" },
+  { value: "balcony", key: "feature.balcony" },
+  { value: "terrace", key: "feature.terrace" },
+  { value: "elevator", key: "feature.elevator" },
+  { value: "air_conditioning", key: "feature.air_conditioning" },
+  { value: "solar", key: "feature.solar" },
+  { value: "sea_view", key: "feature.sea_view" },
+  { value: "mountain_view", key: "feature.mountain_view" },
+  { value: "storage", key: "feature.storage" },
+  { value: "fireplace", key: "feature.fireplace" },
+  { value: "jacuzzi", key: "feature.jacuzzi" },
+  { value: "gym", key: "feature.gym" },
+  { value: "smart_home", key: "feature.smart_home" },
+  { value: "accessible", key: "feature.accessible" },
 ];
+
+const PROPERTY_TYPE_KEY: Record<string, TKey> = {
+  apartment: "property.apartment",
+  house: "property.house",
+  villa: "property.villa",
+  maisonette: "property.maisonette",
+  studio: "property.studio",
+  townhouse: "property.townhouse",
+  penthouse: "property.penthouse",
+  bungalow: "property.bungalow",
+  land: "property.land",
+  commercial: "property.commercial",
+};
 
 type FormState = Partial<EditableListing>;
 
 export function ListingEditor({ initial }: { initial: EditableListing }) {
   const router = useRouter();
+  const { t } = useT();
   const [form, setForm] = React.useState<FormState>({});
   const [media, setMedia] = React.useState<string[]>(initial.media ?? []);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
@@ -141,7 +157,6 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
   const [error, setError] = React.useState<string | null>(null);
   const [savedAt, setSavedAt] = React.useState<number | null>(null);
 
-  // Hilfs-Setter: nur Diff zum Original speichern, NULL erlaubt
   const set = <K extends keyof EditableListing>(
     key: K,
     value: EditableListing[K]
@@ -160,16 +175,9 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
     set("features", next);
   };
 
-  // Mehrfach-Upload: PhotoDropZone ruft onUploaded pro fertigem File.
-  // Wir aktualisieren media[] mit functional state-update + 400ms-Debounce
-  // für ein einziges DB-Write am Ende.
   const persistTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistMediaRef = React.useRef<string[] | null>(null);
 
-  // Persistierung via atomarem RPC set_listing_media (Migration 0040).
-  // Synchronisiert listings.media[] UND listing_photos (Position + Existenz) in
-  // einem Roundtrip — sonst war Editor-Reorder/Delete im Public-View unsichtbar,
-  // weil public-listing.ts bevorzugt aus listing_photos liest.
   function schedulePersistMedia(next: string[]) {
     persistMediaRef.current = next;
     if (persistTimer.current) clearTimeout(persistTimer.current);
@@ -183,7 +191,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
         p_media: toSave,
       });
       if (error) setError(error.message);
-      else router.refresh(); // Public-Vorschau nachzieht (Server-Comp re-rendert)
+      else router.refresh();
     }, 400);
   }
 
@@ -196,8 +204,6 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
     });
   }
 
-  // Bild-Reihenfolge ändern. media[0] ist Cover — moveMedia(idx, 0) macht das
-  // gewählte Bild zum Cover. Drag-and-Drop (Desktop) und Buttons (alle Devices).
   function moveMedia(fromIdx: number, toIdx: number) {
     if (fromIdx === toIdx || toIdx < 0) return;
     setMedia((prev) => {
@@ -221,8 +227,6 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
       next = prev.filter((m) => m !== url);
       return next;
     });
-    // RPC statt direktem update — räumt auch listing_photos auf, sonst
-    // bleibt das gelöschte Bild im Public-View sichtbar.
     const { error } = await supabase.rpc("set_listing_media", {
       p_listing_id: initial.id,
       p_media: next,
@@ -244,14 +248,14 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
+        setError(detail.detail ?? detail.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
         return;
       }
       setForm({});
       setSavedAt(Date.now());
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setError(err instanceof Error ? err.message : t("btn.networkError"));
     } finally {
       setBusy(null);
     }
@@ -261,36 +265,30 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
 
   return (
     <div className="space-y-6">
-      {/* Vorschau-Link → so sieht es für Suchende aus */}
       <Link
         href={`/listings/${initial.id}?from=edit`}
-        // Bewusst KEIN target="_blank" — sonst sammelt jeder Vorschau-Klick
-        // einen neuen Tab an. Public-Page rendert per ?from=edit den Back-
-        // Link „Zurück zur Bearbeitung" → Browser-Back funktioniert sauber.
         className="flex items-center justify-between rounded-xl border bg-emerald-50/60 hover:bg-emerald-50 transition-colors px-4 py-3"
       >
         <div className="flex items-center gap-2 text-sm">
           <Eye className="size-4 text-emerald-700" />
           <span>
-            <strong>Vorschau:</strong> So sieht das Inserat für Suchende aus
+            <strong>{t("listingEditor.preview.title")}</strong> {t("listingEditor.preview.subtitle")}
           </span>
         </div>
-        <span className="text-xs text-emerald-700 underline">Öffnen ↗</span>
+        <span className="text-xs text-emerald-700 underline">{t("listingEditor.preview.open")}</span>
       </Link>
 
-      {/* Sophie-Vision: alle Felder auto-befüllen */}
       <AnalyzeWithSophieButton
         listingId={initial.id}
         hasMedia={media.length > 0}
         alreadyAnalyzed={Boolean(initial.ai_analyzed_at)}
       />
 
-      {/* Bilder + Videos */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Bilder & Videos ({media.length})</h2>
+          <h2 className="text-sm font-semibold">{t("listingEditor.media.heading")} ({media.length})</h2>
           <span className="text-[10px] text-[var(--muted-foreground)]">
-            Ziehen oder Pfeile zum Sortieren · ⭐ = Cover
+            {t("listingEditor.media.hint")}
           </span>
         </div>
 
@@ -308,7 +306,6 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                   onDragStart={(e) => {
                     setDragIdx(idx);
                     e.dataTransfer.effectAllowed = "move";
-                    // Hint-Text als drag-image (Browser zeigt das Element selbst)
                     e.dataTransfer.setData("text/plain", String(idx));
                   }}
                   onDragOver={(e) => {
@@ -332,7 +329,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                 >
                   {isCover && (
                     <span className="absolute top-1 left-1 z-10 rounded bg-emerald-600/90 backdrop-blur px-1.5 py-0.5 text-[9px] font-semibold text-white flex items-center gap-0.5">
-                      <Star className="size-2.5 fill-current" /> Cover
+                      <Star className="size-2.5 fill-current" /> {t("listingEditor.media.cover")}
                     </span>
                   )}
                   {isVideo ? (
@@ -343,7 +340,6 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                     <img src={url} alt="" className="h-full w-full object-cover pointer-events-none" loading="lazy" />
                   )}
 
-                  {/* Reorder-Buttons unten — immer leicht sichtbar, voll auf Hover */}
                   <div className="absolute bottom-1 left-1 right-1 flex justify-between gap-1 opacity-70 group-hover:opacity-100 transition-opacity pointer-events-none">
                     <button
                       type="button"
@@ -353,7 +349,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                       }}
                       disabled={isFirst}
                       className="size-6 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black disabled:opacity-30 disabled:cursor-not-allowed pointer-events-auto"
-                      aria-label="Nach links verschieben"
+                      aria-label={t("listingEditor.media.moveLeft")}
                     >
                       <ArrowLeft className="size-3" />
                     </button>
@@ -365,8 +361,8 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                           moveMedia(idx, 0);
                         }}
                         className="size-6 rounded-full bg-emerald-600/90 text-white flex items-center justify-center hover:bg-emerald-700 pointer-events-auto"
-                        aria-label="Als Cover setzen"
-                        title="Als Cover setzen"
+                        aria-label={t("listingEditor.media.makeCover")}
+                        title={t("listingEditor.media.makeCover")}
                       >
                         <Star className="size-3" />
                       </button>
@@ -379,7 +375,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                       }}
                       disabled={isLast}
                       className="size-6 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black disabled:opacity-30 disabled:cursor-not-allowed pointer-events-auto"
-                      aria-label="Nach rechts verschieben"
+                      aria-label={t("listingEditor.media.moveRight")}
                     >
                       <ArrowRight className="size-3" />
                     </button>
@@ -393,7 +389,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                     }}
                     disabled={busy === `media-remove-${url}`}
                     className="absolute top-1 right-1 size-6 rounded-full bg-black/70 text-white flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                    aria-label="Bild entfernen"
+                    aria-label={t("listingEditor.media.remove")}
                   >
                     {busy === `media-remove-${url}` ? (
                       <Loader2 className="size-3 animate-spin" />
@@ -410,74 +406,75 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
         <PhotoDropZone onUploaded={appendMedia} />
       </section>
 
-      {/* Quick-Facts */}
       <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-[var(--muted-foreground)]" />
-          <h2 className="text-sm font-semibold">Eckdaten</h2>
+          <h2 className="text-sm font-semibold">{t("listingEditor.facts")}</h2>
         </div>
 
-        <Field label="Titel">
+        <Field label={t("listingEditor.title")}>
           <Input
             value={(get("title") as string) ?? ""}
             onChange={(e) => set("title", e.target.value || null)}
-            placeholder="z. B. Modernes 2-Zi-Apartment mit Meerblick in Limassol"
+            placeholder={t("listingEditor.titlePlaceholder")}
             maxLength={160}
           />
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Typ">
+          <Field label={t("searchEditor.type")}>
             <select
               value={get("type") as string}
               onChange={(e) => set("type", e.target.value as "rent" | "sale")}
               className="h-10 w-full rounded-md border bg-[var(--background)] px-3 text-sm"
             >
-              <option value="rent">Miete</option>
-              <option value="sale">Kauf</option>
+              <option value="rent">{t("searchEditor.type.rent")}</option>
+              <option value="sale">{t("searchEditor.type.sale")}</option>
             </select>
           </Field>
-          <Field label="Immobilien-Art">
+          <Field label={t("listingEditor.propertyType")}>
             <select
               value={(get("property_type") as string) ?? ""}
               onChange={(e) => set("property_type", e.target.value || null)}
               className="h-10 w-full rounded-md border bg-[var(--background)] px-3 text-sm"
             >
-              <option value="">— wählen —</option>
-              {PROPERTY_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
+              <option value="">{t("listingEditor.propertyTypeChoose")}</option>
+              {PROPERTY_TYPES.map((p) => (
+                <option key={p} value={p}>
+                  {PROPERTY_TYPE_KEY[p] ? t(PROPERTY_TYPE_KEY[p]) : p}
+                </option>
               ))}
             </select>
           </Field>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Stadt">
+          <Field label={t("listingEditor.city")}>
             <Input
               value={(get("location_city") as string) ?? ""}
               onChange={(e) => set("location_city", e.target.value)}
             />
           </Field>
-          <Field label="Bezirk">
+          <Field label={t("listingEditor.district")}>
             <Input
               value={(get("location_district") as string) ?? ""}
               onChange={(e) => set("location_district", e.target.value || null)}
-              placeholder="z. B. Germasogeia"
+              placeholder={t("listingEditor.districtPlaceholder")}
             />
           </Field>
         </div>
 
-        <Field label="Vollständige Adresse (Straße + Hausnummer + PLZ)">
+        <Field label={t("listingEditor.address")}>
           <Input
             value={(get("location_address") as string) ?? ""}
             onChange={(e) => set("location_address", e.target.value || null)}
-            placeholder="z. B. Prenzlauer Allee 123, 10409 Berlin – Prenzlauer Berg"
+            placeholder={t("listingEditor.addressPlaceholder")}
             maxLength={240}
           />
         </Field>
 
         <div className="grid grid-cols-3 gap-3">
-          <Field label={get("type") === "sale" ? "Kaufpreis (€)" : "Miete (€)"}>
+          <Field label={get("type") === "sale" ? t("listingEditor.priceSale") : t("listingEditor.priceRent")}>
             <Input
               type="number"
               value={(get("price") as number | undefined) ?? ""}
@@ -488,7 +485,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
               min={0}
             />
           </Field>
-          <Field label="Kaution (€)">
+          <Field label={t("listingEditor.depositLabel")}>
             <Input
               type="number"
               value={(get("deposit") as number | null) ?? ""}
@@ -497,11 +494,11 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                 set("deposit", Number.isFinite(n) ? n : null);
               }}
               min={0}
-              placeholder="z. B. 2 × Miete"
+              placeholder={t("listingEditor.depositPlaceholder")}
             />
           </Field>
           {get("type") === "rent" && (
-            <Field label="Service-Charge / Mt. (€)">
+            <Field label={t("listingEditor.serviceChargeLabel")}>
               <Input
                 type="number"
                 value={(get("service_charge_monthly") as number | null) ?? ""}
@@ -510,13 +507,13 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                   set("service_charge_monthly", Number.isFinite(n) ? n : null);
                 }}
                 min={0}
-                placeholder="Pool/Aufzug"
+                placeholder={t("listingEditor.serviceChargePlaceholder")}
               />
             </Field>
           )}
         </div>
 
-        <Field label="Verfügbar ab">
+        <Field label={t("listingEditor.availableFrom")}>
           <Input
             type="date"
             value={((get("available_from") as string) ?? "").slice(0, 10)}
@@ -533,14 +530,12 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
           compsetSize={initial.market_compset_size}
         />
 
-        {get("type") === "rent" && (
-          <ContractTermEditor get={get} set={set} />
-        )}
+        {get("type") === "rent" && <ContractTermEditor get={get} set={set} t={t} />}
 
-        {get("type") === "rent" && <UtilitiesEditor get={get} set={set} />}
+        {get("type") === "rent" && <UtilitiesEditor get={get} set={set} t={t} />}
 
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Zimmer">
+          <Field label={t("searchEditor.rooms")}>
             <Input
               type="number"
               value={(get("rooms") as number | undefined) ?? ""}
@@ -552,7 +547,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
               max={20}
             />
           </Field>
-          <Field label="Bäder">
+          <Field label={t("listingEditor.bathrooms")}>
             <Input
               type="number"
               value={(get("bathrooms") as number | undefined) ?? ""}
@@ -564,7 +559,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
               max={20}
             />
           </Field>
-          <Field label="Wohnfläche (m²)">
+          <Field label={t("listingEditor.size")}>
             <Input
               type="number"
               value={(get("size_sqm") as number | undefined) ?? ""}
@@ -577,7 +572,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
           </Field>
         </div>
 
-        <Field label="Möbliert">
+        <Field label={t("listingEditor.furnishing")}>
           <div className="flex gap-2 flex-wrap">
             {FURNISHING.map((f) => {
               const active = get("furnishing") === f.value;
@@ -598,7 +593,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                       : "bg-[var(--background)] hover:bg-[var(--accent)]"
                   )}
                 >
-                  {f.label}
+                  {t(f.key)}
                 </button>
               );
             })}
@@ -606,21 +601,19 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
         </Field>
       </section>
 
-      {/* Beschreibung */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Beschreibung</h2>
+        <h2 className="text-sm font-semibold">{t("listingEditor.descriptionHeading")}</h2>
         <Textarea
           value={(get("description") as string) ?? ""}
           onChange={(e) => set("description", e.target.value || null)}
-          placeholder="Lage, Beschaffenheit, Ausstattung. Sophie kann das später automatisch generieren — du kannst hier korrigieren."
+          placeholder={t("listingEditor.descriptionPlaceholder")}
           rows={6}
           maxLength={8000}
         />
       </section>
 
-      {/* Features / Ausstattung */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Ausstattung</h2>
+        <h2 className="text-sm font-semibold">{t("listingEditor.featuresHeading")}</h2>
         <div className="flex flex-wrap gap-2">
           {FEATURE_OPTIONS.map((f) => {
             const active = features.includes(f.value);
@@ -637,14 +630,13 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                 )}
               >
                 {active && <Check className="size-3" />}
-                {f.label}
+                {t(f.key)}
               </button>
             );
           })}
         </div>
       </section>
 
-      {/* Profi-Modus */}
       <section className="border-t pt-4">
         <button
           type="button"
@@ -652,19 +644,19 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
           className="flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
         >
           {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          Profi-Modus {showAdvanced ? "ausblenden" : "öffnen"}
+          {showAdvanced ? t("listingEditor.advancedClose") : t("listingEditor.advancedOpen")}
         </button>
         {showAdvanced && (
           <div className="mt-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Etage">
+              <Field label={t("listingEditor.floor")}>
                 <Input
                   value={(get("floor") as string) ?? ""}
                   onChange={(e) => set("floor", e.target.value || null)}
-                  placeholder="z. B. 2nd, ground, top"
+                  placeholder={t("listingEditor.floorPlaceholder")}
                 />
               </Field>
-              <Field label="Baujahr">
+              <Field label={t("listingEditor.yearBuilt")}>
                 <Input
                   type="number"
                   value={(get("year_built") as number | undefined) ?? ""}
@@ -678,7 +670,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Grundstück (m²)">
+              <Field label={t("listingEditor.plotSqm")}>
                 <Input
                   type="number"
                   value={(get("plot_sqm") as number | undefined) ?? ""}
@@ -688,7 +680,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                   }}
                 />
               </Field>
-              <Field label="Energie-Klasse">
+              <Field label={t("listingEditor.energyClass")}>
                 <select
                   value={(get("energy_class") as string) ?? ""}
                   onChange={(e) => set("energy_class", e.target.value || null)}
@@ -701,12 +693,12 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                 </select>
               </Field>
             </div>
-            <Field label="Haustiere erlaubt">
+            <Field label={t("listingEditor.petsAllowed")}>
               <div className="flex gap-2">
                 {[
-                  { v: true, l: "Ja" },
-                  { v: false, l: "Nein" },
-                  { v: null, l: "—" },
+                  { v: true, l: t("searchEditor.pets.yes") },
+                  { v: false, l: t("searchEditor.pets.no") },
+                  { v: null, l: t("searchEditor.pets.dontCare") },
                 ].map((o) => (
                   <button
                     key={String(o.v)}
@@ -725,14 +717,14 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
               </div>
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Kontakt-Kanal">
+              <Field label={t("listingEditor.contactChannel")}>
                 <Input
                   value={(get("contact_channel") as string) ?? ""}
                   onChange={(e) => set("contact_channel", e.target.value || null)}
                   placeholder="email | whatsapp | phone"
                 />
               </Field>
-              <Field label="Sprache">
+              <Field label={t("listingEditor.language")}>
                 <select
                   value={(get("language") as string) ?? ""}
                   onChange={(e) =>
@@ -745,10 +737,11 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                   <option value="en">English</option>
                   <option value="ru">Русский</option>
                   <option value="el">Ελληνικά</option>
+                  <option value="zh">中文</option>
                 </select>
               </Field>
             </div>
-            <Field label="Status">
+            <Field label={t("searchEditor.statusLabel")}>
               <select
                 value={get("status") as string}
                 onChange={(e) =>
@@ -756,25 +749,24 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                 }
                 className="h-10 w-full rounded-md border bg-[var(--background)] px-3 text-sm"
               >
-                <option value="active">aktiv (sichtbar)</option>
-                <option value="reserved">reserviert (mündliche Zusage)</option>
-                <option value="rented">vermietet</option>
-                <option value="sold">verkauft</option>
-                <option value="stale">verfügbarkeit unklar</option>
-                <option value="archived">archiviert</option>
-                <option value="opted_out">nicht auf Home4U zeigen</option>
+                <option value="active">{t("listingEditor.statusActive")}</option>
+                <option value="reserved">{t("listingEditor.statusReserved")}</option>
+                <option value="rented">{t("listingEditor.statusRented")}</option>
+                <option value="sold">{t("listingEditor.statusSold")}</option>
+                <option value="stale">{t("listingEditor.statusStale")}</option>
+                <option value="archived">{t("listingEditor.statusArchived")}</option>
+                <option value="opted_out">{t("listingEditor.statusOptedOut")}</option>
               </select>
               <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
-                Auf „aktiv" setzen reaktiviert das Inserat — es taucht wieder
-                in Suchen auf.
+                {t("listingEditor.statusReactivateHint")}
               </p>
             </Field>
             <div className="border-t pt-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">
-                Externe Assets
+                {t("listingEditor.externalAssets")}
               </h3>
               <div className="space-y-2">
-                <Field label="Grundriss-URL (PDF/Bild)">
+                <Field label={t("listingEditor.floorplanUrl")}>
                   <Input
                     type="url"
                     value={(get("floorplan_url") as string) ?? ""}
@@ -782,7 +774,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                     placeholder="https://…"
                   />
                 </Field>
-                <Field label="3D-Tour-URL (Matterport o. ä.)">
+                <Field label={t("listingEditor.tour3dUrl")}>
                   <Input
                     type="url"
                     value={(get("tour_3d_url") as string) ?? ""}
@@ -790,7 +782,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                     placeholder="https://…"
                   />
                 </Field>
-                <Field label="Video-URL (YouTube/Vimeo)">
+                <Field label={t("listingEditor.videoUrl")}>
                   <Input
                     type="url"
                     value={(get("video_url") as string) ?? ""}
@@ -814,17 +806,17 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
         <DeleteRecordButton
           endpoint={`/api/listings/${initial.id}`}
           redirectTo="/dashboard?view=provider"
-          what="Dieses Inserat"
+          what={t("listingEditor.deleteWhat")}
         />
         <div className="flex items-center gap-2">
           {savedAt && !dirty && (
             <span className="text-xs text-emerald-700 flex items-center gap-1">
-              <Check className="size-3" /> Gespeichert
+              <Check className="size-3" /> {t("searchEditor.saved")}
             </span>
           )}
           <Button onClick={save} disabled={!dirty || busy === "save"}>
             {busy === "save" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-            {dirty ? "Änderungen speichern" : "Keine Änderungen"}
+            {dirty ? t("searchEditor.save") : t("searchEditor.noChanges")}
           </Button>
         </div>
       </div>
@@ -843,29 +835,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-// ---------- Utilities-Editor (Cyprus-Modell) ----------
-
-const UTILITY_OPTIONS = [
-  { value: "tenant_pays", label: "Mieter zahlt" },
-  { value: "included", label: "inklusive" },
-  { value: "landlord_pays", label: "Vermieter zahlt" },
-  { value: "estimated", label: "geschätzt" },
-];
-const INTERNET_OPTIONS = [
-  { value: "tenant_pays", label: "Mieter zahlt" },
-  { value: "included", label: "inklusive" },
-  { value: "landlord_pays", label: "Vermieter zahlt" },
-  { value: "not_provided", label: "nicht vorhanden" },
-];
-
 function UtilitiesEditor({
   get,
   set,
+  t,
 }: {
   get: <K extends keyof EditableListing>(key: K) => EditableListing[K];
   set: <K extends keyof EditableListing>(key: K, value: EditableListing[K]) => void;
+  t: T;
 }) {
   const u = (get("utilities") as Utilities) ?? {};
+  const utilityOptions: Array<{ value: string; key: TKey }> = [
+    { value: "tenant_pays", key: "utilities.tenantPays" },
+    { value: "included", key: "utilities.included" },
+    { value: "landlord_pays", key: "utilities.landlordPays" },
+    { value: "estimated", key: "utilities.estimated" },
+  ];
+  const internetOptions: Array<{ value: string; key: TKey }> = [
+    { value: "tenant_pays", key: "utilities.tenantPays" },
+    { value: "included", key: "utilities.included" },
+    { value: "landlord_pays", key: "utilities.landlordPays" },
+    { value: "not_provided", key: "utilities.notProvided" },
+  ];
 
   function update<K extends keyof Utilities>(key: K, value: Utilities[K]) {
     set("utilities", { ...u, [key]: value } as EditableListing["utilities"]);
@@ -874,38 +865,42 @@ function UtilitiesEditor({
   return (
     <div className="rounded-lg border bg-[var(--accent)]/40 p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Nebenkosten</h3>
+        <h3 className="text-sm font-semibold">{t("listingEditor.utilities.heading")}</h3>
         <span className="text-[10px] text-[var(--muted-foreground)]">
-          Strom · Wasser · Internet · Verträge
+          {t("listingEditor.utilities.hint")}
         </span>
       </div>
 
       <UtilityRow
-        label="Strom"
+        label={t("utilities.electricity")}
         value={u.electricity ?? null}
-        options={UTILITY_OPTIONS}
+        options={utilityOptions}
+        t={t}
         onChange={(v) => update("electricity", v as UtilityArrangement)}
       />
       <UtilityRow
-        label="Wasser"
+        label={t("utilities.water")}
         value={u.water ?? null}
-        options={UTILITY_OPTIONS}
+        options={utilityOptions}
+        t={t}
         onChange={(v) => update("water", v as UtilityArrangement)}
       />
       <UtilityRow
-        label="Internet"
+        label={t("utilities.internet")}
         value={u.internet ?? null}
-        options={INTERNET_OPTIONS}
+        options={internetOptions}
+        t={t}
         onChange={(v) => update("internet", v as UtilityArrangement)}
       />
       <UtilityRow
-        label="Müll"
+        label={t("utilities.garbage")}
         value={u.garbage ?? null}
-        options={UTILITY_OPTIONS}
+        options={utilityOptions}
+        t={t}
         onChange={(v) => update("garbage", v as UtilityArrangement)}
       />
 
-      <Field label="Geschätzte Nebenkosten / Monat (€)">
+      <Field label={t("listingEditor.utilities.estimatedTotal")}>
         <Input
           type="number"
           value={u.estimated_monthly_total ?? ""}
@@ -914,16 +909,16 @@ function UtilitiesEditor({
             update("estimated_monthly_total", Number.isFinite(n) ? n : null);
           }}
           min={0}
-          placeholder="z. B. 80–120 € — Strom + Wasser + Internet zusammen"
+          placeholder={t("listingEditor.utilities.estimatedPlaceholder")}
         />
       </Field>
 
-      <Field label="Verträge">
+      <Field label={t("listingEditor.utilities.contracts")}>
         <div className="flex flex-wrap gap-2">
           {[
-            { v: true, l: "Mieter meldet eigene Verträge an" },
-            { v: false, l: "Verträge laufen über Vermieter" },
-            { v: null, l: "noch offen" },
+            { v: true, l: t("listingEditor.utilities.tenantSelf") },
+            { v: false, l: t("listingEditor.utilities.viaLandlord") },
+            { v: null, l: t("listingEditor.utilities.tbd") },
           ].map((o) => (
             <button
               key={String(o.v)}
@@ -942,11 +937,11 @@ function UtilitiesEditor({
         </div>
       </Field>
 
-      <Field label="Notizen / Besonderheiten">
+      <Field label={t("listingEditor.utilities.notes")}>
         <Input
           value={u.notes ?? ""}
           onChange={(e) => update("notes", e.target.value || null)}
-          placeholder="z. B. Solar-Boiler, kein Klimaanlagen-Stromverbrauch im Sommer"
+          placeholder={t("listingEditor.utilities.notesPlaceholder")}
           maxLength={500}
         />
       </Field>
@@ -954,37 +949,37 @@ function UtilitiesEditor({
   );
 }
 
-// ---------- Contract-Term-Editor ----------
-
-const CONTRACT_OPTIONS = [
-  { value: 6, label: "6 Monate" },
-  { value: 12, label: "1 Jahr" },
-  { value: 24, label: "2 Jahre" },
-  { value: 0, label: "flexibel / kurzfristig" },
-];
-
 function ContractTermEditor({
   get,
   set,
+  t,
 }: {
   get: <K extends keyof EditableListing>(key: K) => EditableListing[K];
   set: <K extends keyof EditableListing>(key: K, value: EditableListing[K]) => void;
+  t: T;
 }) {
   const months = get("contract_min_months") as number | null;
   const notes = (get("contract_notes") as string | null) ?? "";
 
+  const contractOptions: Array<{ value: number; key: TKey }> = [
+    { value: 6, key: "listingEditor.contract.term6m" },
+    { value: 12, key: "listingEditor.contract.term1y" },
+    { value: 24, key: "listingEditor.contract.term2y" },
+    { value: 0, key: "listingEditor.contract.flexible" },
+  ];
+
   return (
     <div className="rounded-lg border bg-[var(--accent)]/40 p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Mietvertrag</h3>
+        <h3 className="text-sm font-semibold">{t("listingEditor.contract.heading")}</h3>
         <span className="text-[10px] text-[var(--muted-foreground)]">
-          CY-üblich: 1-Jahres-Vertrag
+          {t("listingEditor.contract.hint")}
         </span>
       </div>
 
-      <Field label="Mindestlaufzeit">
+      <Field label={t("facts.minTerm")}>
         <div className="flex flex-wrap gap-2">
-          {CONTRACT_OPTIONS.map((o) => {
+          {contractOptions.map((o) => {
             const active = months === o.value;
             return (
               <button
@@ -1000,18 +995,18 @@ function ContractTermEditor({
                     : "bg-[var(--background)] hover:bg-[var(--accent)]"
                 )}
               >
-                {o.label}
+                {t(o.key)}
               </button>
             );
           })}
         </div>
       </Field>
 
-      <Field label="Hinweise zum Vertrag">
+      <Field label={t("listingEditor.contract.notes")}>
         <Input
           value={notes}
           onChange={(e) => set("contract_notes", e.target.value || null)}
-          placeholder="z. B. '1+1 mit Verlängerungsoption', 'Kündigung 1 Monat zum Monatsende'"
+          placeholder={t("listingEditor.contract.notesPlaceholder")}
           maxLength={500}
         />
       </Field>
@@ -1024,11 +1019,13 @@ function UtilityRow({
   value,
   options,
   onChange,
+  t,
 }: {
   label: string;
   value: string | null;
-  options: { value: string; label: string }[];
+  options: Array<{ value: string; key: TKey }>;
   onChange: (v: string | null) => void;
+  t: T;
 }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
@@ -1046,7 +1043,7 @@ function UtilityRow({
                 : "bg-[var(--background)] hover:bg-[var(--accent)]"
             )}
           >
-            {o.label}
+            {t(o.key)}
           </button>
         ))}
       </div>
