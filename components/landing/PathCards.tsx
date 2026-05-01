@@ -84,16 +84,18 @@ export function ChatLink({
   flow,
   children,
   className,
+  onClick,
 }: {
   flow?: string;
   children: React.ReactNode;
   className?: string;
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
 }) {
   const searchParams = useSearchParams();
   const region = searchParams.get("region");
   const base = flow ? `/chat?flow=${flow}` : "/chat";
   return (
-    <Link href={appendRegionParam(base, region)} className={className}>
+    <Link href={appendRegionParam(base, region)} className={className} onClick={onClick}>
       {children}
     </Link>
   );

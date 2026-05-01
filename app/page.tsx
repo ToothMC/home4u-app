@@ -9,6 +9,7 @@ import { StatsStrip } from "@/components/landing/StatsStrip";
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { BrandLockup } from "@/components/brand/Logo";
 import { LanguageFlagPicker } from "@/components/lang/LanguageFlagPicker";
+import { MobileNav } from "@/components/nav/MobileNav";
 import { getPreferredLanguage } from "@/lib/lang/preferred-language";
 
 export default async function LandingPage({
@@ -42,6 +43,7 @@ export default async function LandingPage({
               <Heart className="size-5" />
             </Link>
             <AuthMenu />
+            <MobileNav />
           </div>
         </div>
       </header>
