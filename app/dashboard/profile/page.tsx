@@ -9,6 +9,7 @@ import {
 } from "@/components/dashboard/ProfileEditor";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function ProfilePage() {
     redirect("/?auth=required&next=/dashboard/profile");
   }
 
+  const { t } = await getT();
   const supabase = createSupabaseServiceClient();
   if (!supabase) redirect("/dashboard");
 
@@ -51,14 +53,14 @@ export default async function ProfilePage() {
           href="/dashboard"
           className="text-sm text-[var(--muted-foreground)] hover:underline inline-flex items-center gap-1 mb-4"
         >
-          <ArrowLeft className="size-4" /> Dashboard
+          <ArrowLeft className="size-4" /> {t("common.dashboard")}
         </Link>
 
         <div className="flex items-center gap-3 mb-6">
           <UserCircle className="size-7 text-[var(--brand-navy)]" />
           <div>
             <h1 className="text-2xl font-semibold text-[var(--brand-navy)]">
-              Mein Profil
+              {t("profilePage.heading")}
             </h1>
             <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
               {user.email}
@@ -71,8 +73,7 @@ export default async function ProfilePage() {
         </div>
 
         <p className="mt-6 text-xs text-[var(--muted-foreground)] leading-relaxed">
-          Telefon und Kontakt-Kanal werden erst geteilt, wenn beide Seiten
-          einem Match zustimmen — vorher sieht niemand außer dir diese Daten.
+          {t("profilePage.privacy")}
         </p>
       </section>
     </main>
