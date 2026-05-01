@@ -18,8 +18,26 @@ import {
 import { RespondMatchButtons } from "@/components/dashboard/RespondMatchButtons";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
+import type { SupportedLang } from "@/lib/lang/preferred-language";
 
 export const dynamic = "force-dynamic";
+
+const NUMBER_LOCALE: Record<SupportedLang, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
+
+const HOUSEHOLD_KEY: Record<string, TKey> = {
+  single: "household.single",
+  couple: "household.couple",
+  family: "household.family",
+  shared: "household.shared",
+};
 
 type Status = "pending" | "accepted" | "rejected" | "connected";
 
@@ -44,12 +62,10 @@ export default async function OwnerRequestDetailPage({
     redirect(`/?auth=required&next=/dashboard/requests/${id}`);
   }
 
+  const { t, lang } = await getT();
   const supabase = createSupabaseServiceClient();
   if (!supabase) redirect("/dashboard");
 
-  // search_profiles wird LEFT-joined — orphan-Bookmarks haben keinen
-  // Profil-Anker, sollen aber für den Anbieter sichtbar bleiben.
-  // Seeker-Identität liegt direkt am Match.
   const { data: match, error } = await supabase
     .from("matches")
     .select(
@@ -90,12 +106,10 @@ export default async function OwnerRequestDetailPage({
     market_position: string | null;
   };
 
-  // Auth: nur der Listing-Owner darf die Detail-Page sehen
   if (listing.owner_user_id !== user.id) {
     redirect("/dashboard");
   }
 
-  // Profil ist optional — bei orphan-Bookmarks NULL.
   const profile = (match.search_profiles as unknown) as {
     id: string;
     location: string | null;
@@ -113,7 +127,6 @@ export default async function OwnerRequestDetailPage({
   const status = deriveStatus(match);
   const seekerUserId = (match.seeker_user_id as string | null) ?? null;
 
-  // Seeker-Email nur bei connected, aus seeker_user_id (direkt am Match).
   let seekerEmail: string | null = null;
   if (status === "connected" && seekerUserId) {
     try {
@@ -142,14 +155,22 @@ export default async function OwnerRequestDetailPage({
   };
 
   const budgetLabel = profile
-    ? formatBudget(profile.budget_min, profile.budget_max)
+    ? formatBudget(profile.budget_min, profile.budget_max, lang, t)
     : null;
-  const householdMap: Record<string, string> = {
-    single: "Einzelperson",
-    couple: "Paar",
-    family: "Familie",
-    shared: "WG",
-  };
+  const householdLabel = profile?.household
+    ? HOUSEHOLD_KEY[profile.household]
+      ? t(HOUSEHOLD_KEY[profile.household])
+      : profile.household
+    : null;
+
+  const statusText =
+    status === "connected"
+      ? t("requestDetail.statusConnected")
+      : status === "accepted"
+        ? t("requestDetail.statusAccepted")
+        : status === "rejected"
+          ? t("requestDetail.statusRejected")
+          : t("requestDetail.statusPending");
 
   return (
     <main className="flex-1">
@@ -158,34 +179,21 @@ export default async function OwnerRequestDetailPage({
           href="/dashboard?view=provider#match-inbox"
           className="text-sm text-[var(--muted-foreground)] hover:underline flex items-center gap-1"
         >
-          <ArrowLeft className="size-4" /> Anfragen
+          <ArrowLeft className="size-4" /> {t("requestDetail.back")}
         </Link>
         <AuthMenu />
       </header>
 
       <section className="mx-auto max-w-md md:max-w-2xl lg:max-w-3xl w-full px-4 pt-4 pb-10 space-y-4">
         <div>
-          <h1 className="text-xl font-semibold">Anfrage für dein Inserat</h1>
-          <p className="text-xs text-[var(--muted-foreground)] mt-1">
-            {status === "connected"
-              ? "Verbunden — schreib direkt"
-              : status === "accepted"
-                ? "Du hast zugesagt — wir warten auf den Suchenden"
-                : status === "rejected"
-                  ? "Du hast abgelehnt"
-                  : "Eingegangen, wartet auf deine Antwort"}
-          </p>
+          <h1 className="text-xl font-semibold">{t("requestDetail.heading")}</h1>
+          <p className="text-xs text-[var(--muted-foreground)] mt-1">{statusText}</p>
         </div>
 
-        {/* Fixed-Höhe-Wrapper analog /matches/[id] — MatchCard braucht
-            begrenzten Container (sonst Mobile=0px, Desktop=ungehemmt). */}
         <div className="aspect-[3/4] max-h-[80dvh] w-full">
           <MatchCard data={cardData} />
         </div>
 
-        {/* Seeker-Profil — nur wenn Suche verknüpft. Bei orphan-Anfragen
-            (User hat das Inserat direkt favorisiert ohne festes Profil)
-            zeigen wir einen knappen Hinweis statt die Profil-Box. */}
         {profile ? (
           <article className="rounded-xl border bg-[var(--card)] p-4 space-y-3">
             <div className="flex items-center gap-3">
@@ -196,11 +204,12 @@ export default async function OwnerRequestDetailPage({
                 <p className="text-sm font-medium truncate">
                   {status === "connected" && seekerEmail
                     ? seekerEmail
-                    : "Suchender"}
+                    : t("requestDetail.seeker")}
                 </p>
                 {profile.location && (
                   <p className="text-xs text-[var(--muted-foreground)] flex items-center gap-1 truncate">
-                    <MapPin className="size-3" /> sucht in {profile.location}
+                    <MapPin className="size-3" />{" "}
+                    {tFormat(t("ownerInbox.searchesIn"), { location: profile.location })}
                   </p>
                 )}
               </div>
@@ -208,28 +217,28 @@ export default async function OwnerRequestDetailPage({
 
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               {profile.rooms != null && (
-                <Detail label="Zimmer" value={`${profile.rooms} Zi`} />
+                <Detail label={t("matchCard.rooms")} value={`${profile.rooms} ${t("matchCard.roomsShort")}`} />
               )}
-              {budgetLabel && <Detail label="Budget" value={budgetLabel} />}
-              {profile.household && (
+              {budgetLabel && <Detail label={t("ownerInbox.budget")} value={budgetLabel} />}
+              {householdLabel && (
                 <Detail
-                  label="Haushalt"
+                  label={t("searchEditor.household")}
                   icon={<Users2 className="size-3" />}
-                  value={householdMap[profile.household] ?? profile.household}
+                  value={householdLabel}
                 />
               )}
               {profile.move_in_date && (
                 <Detail
-                  label="Einzug"
+                  label={t("ownerInbox.moveIn")}
                   icon={<CalendarDays className="size-3" />}
-                  value={new Date(profile.move_in_date).toLocaleDateString("de-DE")}
+                  value={new Date(profile.move_in_date).toLocaleDateString(NUMBER_LOCALE[lang])}
                 />
               )}
               {profile.pets != null && (
                 <Detail
-                  label="Haustiere"
+                  label={t("searchEditor.pets")}
                   icon={<PawPrint className="size-3" />}
-                  value={profile.pets ? "ja" : "nein"}
+                  value={profile.pets ? t("searchEditor.pets.yes") : t("searchEditor.pets.no")}
                 />
               )}
             </div>
@@ -263,40 +272,36 @@ export default async function OwnerRequestDetailPage({
                 <p className="text-sm font-medium truncate">
                   {status === "connected" && seekerEmail
                     ? seekerEmail
-                    : "Suchender"}
+                    : t("requestDetail.seeker")}
                 </p>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Direkt-Anfrage auf dein Inserat — keine zusätzlichen
-                  Suchkriterien hinterlegt.
+                  {t("requestDetail.orphan")}
                 </p>
               </div>
             </div>
           </article>
         )}
 
-        {/* Action area */}
         <div className="pt-2">
           {status === "connected" && seekerEmail && (
             <a
               href={`mailto:${seekerEmail}`}
               className="flex items-center justify-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium h-14"
             >
-              <Mail className="size-4" /> Kontakt aufnehmen
+              <Mail className="size-4" /> {t("ownerInbox.contact")}
               <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-[10px]">
-                <Handshake className="size-3" /> verbunden
+                <Handshake className="size-3" /> {t("ownerInbox.status.connected")}
               </span>
             </a>
           )}
           {status === "rejected" && (
             <p className="rounded-md border bg-[var(--accent)] p-3 text-xs text-[var(--muted-foreground)] text-center">
-              Du hast diese Anfrage abgelehnt — der Suchende sieht das in
-              seiner Outbox.
+              {t("requestDetail.rejectedNote")}
             </p>
           )}
           {status === "accepted" && !match.connected_at && (
             <p className="rounded-md border bg-emerald-50/60 p-3 text-xs text-[var(--muted-foreground)] text-center">
-              Du hast zugesagt. Sobald der Suchende es bestätigt, wird der
-              Kontakt freigeschaltet.
+              {t("requestDetail.acceptedWaiting")}
             </p>
           )}
           {status === "pending" && <RespondMatchButtons matchId={match.id} />}
@@ -328,10 +333,16 @@ function Detail({
   );
 }
 
-function formatBudget(min: number | null, max: number | null): string | null {
+function formatBudget(
+  min: number | null,
+  max: number | null,
+  lang: SupportedLang,
+  t: T,
+): string | null {
   if (!max) return null;
+  const loc = NUMBER_LOCALE[lang];
   if (min && min > 0) {
-    return `${Number(min).toLocaleString("de-DE")}–${Number(max).toLocaleString("de-DE")} €`;
+    return `${Number(min).toLocaleString(loc)}–${Number(max).toLocaleString(loc)} €`;
   }
-  return `bis ${Number(max).toLocaleString("de-DE")} €`;
+  return `${t("common.budgetUpTo")} ${Number(max).toLocaleString(loc)} €`;
 }

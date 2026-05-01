@@ -4,11 +4,13 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/client";
 
 type State = "idle" | "confirm" | "submitting" | "error";
 
 export function WithdrawRequestButton({ matchId }: { matchId: string }) {
   const router = useRouter();
+  const { t } = useT();
   const [state, setState] = React.useState<State>("idle");
   const [error, setError] = React.useState<string | null>(null);
 
@@ -23,14 +25,14 @@ export function WithdrawRequestButton({ matchId }: { matchId: string }) {
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
+        setError(detail.detail ?? detail.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
         setState("error");
         return;
       }
       router.replace("/dashboard?view=seeker");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setError(err instanceof Error ? err.message : t("btn.networkError"));
       setState("error");
     }
   }
@@ -38,10 +40,7 @@ export function WithdrawRequestButton({ matchId }: { matchId: string }) {
   if (state === "confirm" || state === "submitting") {
     return (
       <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3 space-y-2">
-        <p className="text-sm">
-          Anfrage wirklich zurückziehen? Der Anbieter sieht sie dann nicht
-          mehr.
-        </p>
+        <p className="text-sm">{t("withdraw.confirmText")}</p>
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -49,7 +48,7 @@ export function WithdrawRequestButton({ matchId }: { matchId: string }) {
             onClick={() => setState("idle")}
             disabled={state === "submitting"}
           >
-            Doch nicht
+            {t("withdraw.dismiss")}
           </Button>
           <Button
             size="sm"
@@ -62,7 +61,7 @@ export function WithdrawRequestButton({ matchId }: { matchId: string }) {
             ) : (
               <Trash2 className="size-3" />
             )}
-            Ja, zurückziehen
+            {t("withdraw.confirmYes")}
           </Button>
         </div>
         {error && <p className="text-xs text-red-700">{error}</p>}
@@ -76,7 +75,7 @@ export function WithdrawRequestButton({ matchId }: { matchId: string }) {
       onClick={() => setState("confirm")}
       className="text-amber-700 hover:bg-amber-50 hover:text-amber-800 border-amber-300"
     >
-      <Trash2 className="size-4" /> Anfrage zurückziehen
+      <Trash2 className="size-4" /> {t("withdraw.outerCta")}
     </Button>
   );
 }

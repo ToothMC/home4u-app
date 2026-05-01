@@ -9,6 +9,8 @@ import { WithdrawRequestButton } from "@/components/match-browse/WithdrawRequest
 import { getAuthUser } from "@/lib/supabase/auth";
 import { getOrCreateAnonymousSession } from "@/lib/session";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import { tFormat, type T } from "@/lib/i18n/dict";
 
 export const dynamic = "force-dynamic";
 
@@ -23,16 +25,16 @@ function deriveStatus(row: {
   return "waiting";
 }
 
-function formatDateRel(iso: string | null): string | null {
+function formatDateRel(iso: string | null, t: T): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   const diffMin = Math.round((Date.now() - d.getTime()) / 60000);
-  if (diffMin < 1) return "gerade eben";
-  if (diffMin < 60) return `vor ${diffMin} Min.`;
+  if (diffMin < 1) return t("matchDetail.justNow");
+  if (diffMin < 60) return tFormat(t("matchDetail.minAgo"), { n: diffMin });
   const h = Math.floor(diffMin / 60);
-  if (h < 24) return `vor ${h} h`;
+  if (h < 24) return tFormat(t("matchDetail.hoursAgo"), { n: h });
   const days = Math.floor(h / 24);
-  return `vor ${days} Tagen`;
+  return tFormat(t("matchDetail.daysAgo"), { n: days });
 }
 
 export default async function MatchDetailPage({
@@ -49,8 +51,8 @@ export default async function MatchDetailPage({
     redirect("/dashboard");
   }
 
-  // Match + Listing laden. Seeker-Identität liegt direkt am Match
-  // (seit Migration 20260430110000); search_profile_id ist optional.
+  const { t } = await getT();
+
   const { data: match, error } = await supabase
     .from("matches")
     .select(
@@ -70,7 +72,6 @@ export default async function MatchDetailPage({
     notFound();
   }
 
-  // Authorisierung: Match gehört dem Seeker direkt
   const seekerUserId = (match.seeker_user_id as string | null) ?? null;
   const seekerAnonId = (match.seeker_anonymous_id as string | null) ?? null;
   const isOwnerByUser = user && seekerUserId === user.id;
@@ -99,7 +100,6 @@ export default async function MatchDetailPage({
   };
   const status = deriveStatus(match);
 
-  // Owner-Email nur bei connected — Service-Role kann auth.admin nutzen
   let ownerEmail: string | null = null;
   if (status === "connected" && listing.owner_user_id) {
     try {
@@ -122,7 +122,7 @@ export default async function MatchDetailPage({
     rooms: listing.rooms,
     size_sqm: listing.size_sqm,
     media: listing.media,
-    score: 1, // im Detail-View nicht relevant
+    score: 1,
     scamScore: listing.scam_score,
     scamFlags: listing.scam_flags,
     marketPosition:
@@ -136,25 +136,22 @@ export default async function MatchDetailPage({
           href="/dashboard?view=seeker"
           className="text-sm text-[var(--muted-foreground)] hover:underline flex items-center gap-1"
         >
-          <ArrowLeft className="size-4" /> Dashboard
+          <ArrowLeft className="size-4" /> {t("common.dashboard")}
         </Link>
         <AuthMenu />
       </header>
 
       <section className="mx-auto max-w-md md:max-w-2xl lg:max-w-3xl w-full px-4 pt-4 pb-10 space-y-4">
         <div>
-          <h1 className="text-xl font-semibold">Deine Anfrage</h1>
+          <h1 className="text-xl font-semibold">{t("matchDetail.heading")}</h1>
           <StatusLine
             status={status}
             decidedAt={match.seeker_decided_at}
             ownerDecidedAt={match.owner_decided_at}
+            t={t}
           />
         </div>
 
-        {/* Fixed-Höhe-Wrapper: MatchCard nutzt intern h-full + flex und braucht
-            einen begrenzten Container, sonst kollabiert sie auf Mobile zu 0px
-            (Bild verschwindet) bzw. expandiert ungehemmt auf Desktop. Aspect 3/4
-            gibt eine Foto-typische Höhe; max-h-[80dvh] schützt Desktop. */}
         <div className="aspect-[3/4] max-h-[80dvh] w-full">
           <MatchCard data={cardData} />
         </div>
@@ -163,19 +160,19 @@ export default async function MatchDetailPage({
           <Card className="border-emerald-200 bg-emerald-50/50">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <Handshake className="size-4" /> Verbunden
+                <Handshake className="size-4" /> {t("matchDetail.connected")}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm space-y-1">
               <p className="text-[var(--muted-foreground)]">
-                Beide Seiten sind dran. Schreib direkt:
+                {t("matchDetail.connectedSub")}
               </p>
               <p className="flex items-center gap-1 font-medium">
                 <MailIcon className="size-4" /> {ownerEmail}
               </p>
               {listing.contact_channel && (
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  Bevorzugter Kanal: {listing.contact_channel}
+                  {t("matchDetail.preferredChannel")}: {listing.contact_channel}
                 </p>
               )}
             </CardContent>
@@ -186,8 +183,7 @@ export default async function MatchDetailPage({
           <Card>
             <CardContent className="py-4 text-sm text-[var(--muted-foreground)] flex items-center gap-2">
               <Clock className="size-4" />
-              Wir warten auf die Bestätigung. Du wirst hier informiert sobald
-              der Anbieter reagiert.
+              {t("matchDetail.waiting")}
             </CardContent>
           </Card>
         )}
@@ -195,10 +191,9 @@ export default async function MatchDetailPage({
         {status === "rejected" && (
           <Card className="border-amber-200 bg-amber-50/50">
             <CardContent className="py-4 text-sm">
-              Der Anbieter hat abgelehnt. Sophie sucht weiter — du findest
-              andere Treffer im{" "}
+              {t("matchDetail.rejectedNote")}{" "}
               <Link href="/matches" className="underline">
-                Match-Browser
+                {t("matchDetail.matchBrowser")}
               </Link>
               .
             </CardContent>
@@ -210,7 +205,7 @@ export default async function MatchDetailPage({
             <WithdrawRequestButton matchId={match.id} />
           )}
           <Button asChild variant="outline">
-            <Link href="/matches">Weitere Treffer ansehen</Link>
+            <Link href="/matches">{t("matchDetail.viewMore")}</Link>
           </Button>
         </div>
       </section>
@@ -222,24 +217,26 @@ function StatusLine({
   status,
   decidedAt,
   ownerDecidedAt,
+  t,
 }: {
   status: Status;
   decidedAt: string | null;
   ownerDecidedAt: string | null;
+  t: T;
 }) {
-  const sentAgo = formatDateRel(decidedAt);
-  const ownerAgo = formatDateRel(ownerDecidedAt);
+  const sentAgo = formatDateRel(decidedAt, t);
+  const ownerAgo = formatDateRel(ownerDecidedAt, t);
   return (
     <p className="text-xs text-[var(--muted-foreground)] mt-1">
       {status === "connected" ? (
         <>
-          Verbunden{ownerAgo ? ` · ${ownerAgo}` : ""}
+          {t("matchDetail.statusConnected")}{ownerAgo ? ` · ${ownerAgo}` : ""}
         </>
       ) : status === "rejected" ? (
-        <>Abgelehnt{ownerAgo ? ` · ${ownerAgo}` : ""}</>
+        <>{t("matchDetail.statusRejected")}{ownerAgo ? ` · ${ownerAgo}` : ""}</>
       ) : (
         <>
-          Anfrage gesendet{sentAgo ? ` · ${sentAgo}` : ""}
+          {t("matchDetail.statusWaiting")}{sentAgo ? ` · ${sentAgo}` : ""}
           <Loader2 className="inline size-3 ml-1 animate-spin opacity-60" />
         </>
       )}

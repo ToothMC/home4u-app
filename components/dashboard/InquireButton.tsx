@@ -7,41 +7,28 @@ import { Loader2, Send, Hourglass, Handshake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { MatchStatus } from "@/lib/repo/bookmarks";
 import { emitMatchesUpdated } from "@/lib/events/match-events";
+import { useT } from "@/lib/i18n/client";
+import type { TKey } from "@/lib/i18n/dict";
 
-/**
- * Pipeline-Aktion auf einer BookmarkCard.
- * - matchStatus="none"      → "Anfragen" (Primary, immer aktiv)
- * - matchStatus="pending"   → "Wartet auf Anbieter"
- * - matchStatus="connected" → Link "Verbunden →"
- * - matchStatus="rejected"  → "Abgelehnt"
- *
- * Seit Migration 20260430110000 ist search_profile_id auf matches optional —
- * orphan-Bookmarks (ohne Profil-Anker) sind voll anfragbar.
- */
-// Status-Werte, bei denen keine neuen Anfragen mehr Sinn machen — Inserat ist
-// entweder weg oder pausiert. "stale" bleibt anfragbar, weil eine Anfrage genau
-// der Trigger ist, mit dem der Provider die Verfügbarkeit klärt.
-// Farb-Kodierung deckt sich mit ListingStatusBadge, damit der User den Status
-// im Button auf einen Blick wiedererkennt.
-const NON_INQUIRABLE: Record<string, { label: string; cls: string }> = {
+const NON_INQUIRABLE: Record<string, { key: TKey; cls: string }> = {
   reserved: {
-    label: "Reserviert",
+    key: "status.reserved",
     cls: "bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40",
   },
   rented: {
-    label: "Vermietet",
+    key: "status.rented",
     cls: "bg-[var(--destructive)]/15 text-[var(--destructive)] border-[var(--destructive)]/30 font-semibold",
   },
   sold: {
-    label: "Verkauft",
+    key: "status.sold",
     cls: "bg-[var(--destructive)]/15 text-[var(--destructive)] border-[var(--destructive)]/30 font-semibold",
   },
   opted_out: {
-    label: "Nicht verfügbar",
+    key: "status.notAvailable",
     cls: "bg-[var(--muted)] text-[var(--muted-foreground)]",
   },
   archived: {
-    label: "Archiviert",
+    key: "status.archived",
     cls: "bg-[var(--muted)] text-[var(--muted-foreground)]",
   },
 };
@@ -58,18 +45,16 @@ export function InquireButton({
   listingStatus?: string;
 }) {
   const router = useRouter();
+  const { t } = useT();
   const [isPending, startTransition] = useTransition();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Verbundene Anfrage darf der User immer sehen — der Status-Block kommt
-  // erst danach. Sonst verliert man den Match-Link, sobald das Inserat
-  // reserviert/vermietet ist.
   if (matchStatus === "connected" && matchId) {
     return (
       <Button asChild size="sm" variant="outline" className="w-full">
         <Link href={`/matches/${matchId}`}>
-          <Handshake className="size-3.5" /> Verbunden
+          <Handshake className="size-3.5" /> {t("inquire.connected")}
         </Link>
       </Button>
     );
@@ -77,20 +62,18 @@ export function InquireButton({
   if (matchStatus === "pending") {
     return (
       <Button size="sm" variant="outline" className="w-full" disabled>
-        <Hourglass className="size-3.5" /> Wartet auf Anbieter
+        <Hourglass className="size-3.5" /> {t("inquire.waiting")}
       </Button>
     );
   }
   if (matchStatus === "rejected") {
     return (
       <Button size="sm" variant="ghost" className="w-full text-[var(--muted-foreground)]" disabled>
-        Abgelehnt
+        {t("inquire.rejected")}
       </Button>
     );
   }
 
-  // Inserat-Status sticht über Match-Status, sobald Anfrage erstmal nicht
-  // mehr sinnvoll ist (reserviert/vermietet/verkauft/deaktiviert/archiviert).
   if (listingStatus && NON_INQUIRABLE[listingStatus]) {
     const s = NON_INQUIRABLE[listingStatus];
     return (
@@ -100,12 +83,10 @@ export function InquireButton({
         className={`w-full uppercase tracking-wider text-[11px] ${s.cls}`}
         disabled
       >
-        {s.label}
+        {t(s.key)}
       </Button>
     );
   }
-
-  // matchStatus === "none" → "Anfragen" (immer aktiv, profil-unabhängig)
 
   async function inquire(e: React.MouseEvent) {
     e.preventDefault();
@@ -119,19 +100,16 @@ export function InquireButton({
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
+        setError(detail.detail ?? detail.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
         setSubmitting(false);
         return;
       }
-      // Erfolg: Page neu laden (Server-Component) + Client-Event für die
-      // Anfragen-Liste, damit MatchSections sofort re-fetched (sonst sieht
-      // der User die Anfrage erst nach manuellem Refresh).
       emitMatchesUpdated();
       startTransition(() => {
         router.refresh();
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setError(err instanceof Error ? err.message : t("btn.networkError"));
       setSubmitting(false);
     }
   }
@@ -150,7 +128,7 @@ export function InquireButton({
         ) : (
           <Send className="size-3.5" />
         )}
-        Anfragen
+        {t("inquire.cta")}
       </Button>
       {error && <p className="text-[10px] text-[var(--destructive)]">{error}</p>}
     </div>

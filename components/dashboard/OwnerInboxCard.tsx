@@ -17,6 +17,16 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
+
+const NUMBER_LOCALE: Record<string, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 export type SeekerProfile = {
   location: string;
@@ -50,6 +60,13 @@ export type OwnerInboxRow = {
 
 type Status = "pending" | "accepted" | "rejected" | "connected";
 
+const HOUSEHOLD_KEY: Record<string, TKey> = {
+  single: "household.single",
+  couple: "household.couple",
+  family: "household.family",
+  shared: "household.shared",
+};
+
 function deriveStatus(row: OwnerInboxRow): Status {
   if (row.connected_at) return "connected";
   if (row.owner_interest === true) return "accepted";
@@ -64,24 +81,13 @@ function initials(profile: SeekerProfile): string {
   return "?";
 }
 
-function formatBudget(p: SeekerProfile): string | null {
+function formatBudget(p: SeekerProfile, lang: string, t: T): string | null {
   if (!p.budget_max) return null;
+  const loc = NUMBER_LOCALE[lang] ?? "en-GB";
   if (p.budget_min && p.budget_min > 0) {
-    return `${Number(p.budget_min).toLocaleString("de-DE")}–${Number(p.budget_max).toLocaleString("de-DE")} €`;
+    return `${Number(p.budget_min).toLocaleString(loc)}–${Number(p.budget_max).toLocaleString(loc)} €`;
   }
-  return `bis ${Number(p.budget_max).toLocaleString("de-DE")} €`;
-}
-
-function householdLabel(h: string | null): string | null {
-  if (!h) return null;
-  return (
-    {
-      single: "Einzelperson",
-      couple: "Paar",
-      family: "Familie",
-      shared: "WG",
-    }[h] ?? h
-  );
+  return `${t("common.budgetUpTo")} ${Number(p.budget_max).toLocaleString(loc)} €`;
 }
 
 export function OwnerInboxCard({
@@ -93,16 +99,18 @@ export function OwnerInboxCard({
   onRespond: (matchId: string, accept: boolean) => void;
   busyId: string | null;
 }) {
+  const { t, lang } = useT();
   const status = deriveStatus(row);
   const cover = row.listing_media?.[0] ?? null;
   const profile = row.seeker_profile;
-  const budget = formatBudget(profile);
-  const household = householdLabel(profile.household);
+  const budget = formatBudget(profile, lang, t);
+  const householdKey = profile.household ? HOUSEHOLD_KEY[profile.household] : null;
+  const household = householdKey ? t(householdKey) : profile.household;
   const isBusy = busyId === row.match_id;
+  const dateLocale = NUMBER_LOCALE[lang] ?? "en-GB";
 
   return (
     <article className="rounded-xl border bg-[var(--card)] overflow-hidden">
-      {/* Listing header — cover + facts + status badge */}
       <Link
         href={`/dashboard/requests/${row.match_id}`}
         className="group flex items-stretch gap-3 px-3 py-3 hover:bg-[var(--accent)] transition-colors"
@@ -118,7 +126,7 @@ export function OwnerInboxCard({
             />
           ) : (
             <div className="h-full w-full flex items-center justify-center text-[10px] text-[var(--muted-foreground)]">
-              kein Bild
+              {t("match.noImage")}
             </div>
           )}
         </div>
@@ -128,25 +136,25 @@ export function OwnerInboxCard({
               {row.listing_city}
               {row.listing_district ? ` · ${row.listing_district}` : ""}
             </p>
-            <StatusBadge status={status} />
+            <StatusBadge status={status} t={t} />
           </div>
           <p className="text-xs text-[var(--muted-foreground)] truncate">
-            {row.listing_rooms != null ? `${row.listing_rooms} Zi` : ""}
+            {row.listing_rooms != null ? `${row.listing_rooms} ${t("matchCard.roomsShort")}` : ""}
             {row.listing_size_sqm ? ` · ${row.listing_size_sqm} m²` : ""}
             {" · "}
-            {Number(row.listing_price).toLocaleString("de-DE")} €
+            {Number(row.listing_price).toLocaleString(dateLocale)} €
           </p>
           <p className="text-[10px] text-[var(--muted-foreground)] mt-0.5">
-            Anfrage{" "}
             {row.seeker_decided_at
-              ? `vom ${new Date(row.seeker_decided_at).toLocaleDateString("de-DE")}`
-              : ""}
+              ? tFormat(t("ownerInbox.requestFromDate"), {
+                  date: new Date(row.seeker_decided_at).toLocaleDateString(dateLocale),
+                })
+              : t("ownerInbox.requestFrom")}
           </p>
         </div>
         <ChevronRight className="size-4 self-center text-[var(--muted-foreground)] opacity-0 group-hover:opacity-100 transition-opacity" />
       </Link>
 
-      {/* Seeker profile */}
       <div className="border-t px-3 py-3 space-y-2 bg-[var(--accent)]/40">
         <div className="flex items-start gap-2">
           <div className="shrink-0 size-9 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-sm font-semibold">
@@ -156,38 +164,39 @@ export function OwnerInboxCard({
             <p className="text-sm font-medium truncate">
               {status === "connected" && profile.email
                 ? profile.email
-                : "Suchender — Kontakt nach Zustimmung"}
+                : t("ownerInbox.contactAfter")}
             </p>
             <p className="text-xs text-[var(--muted-foreground)] flex items-center gap-1 truncate">
-              <MapPin className="size-3" /> sucht in {profile.location}
+              <MapPin className="size-3" />{" "}
+              {tFormat(t("ownerInbox.searchesIn"), { location: profile.location })}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           {profile.rooms != null && (
-            <Fact icon={null} label="Zimmer" value={`${profile.rooms} Zi`} />
+            <Fact icon={null} label={t("matchCard.rooms")} value={`${profile.rooms} ${t("matchCard.roomsShort")}`} />
           )}
-          {budget && <Fact icon={null} label="Budget" value={budget} />}
+          {budget && <Fact icon={null} label={t("ownerInbox.budget")} value={budget} />}
           {household && (
             <Fact
               icon={<Users2 className="size-3" />}
-              label="Haushalt"
+              label={t("searchEditor.household")}
               value={household}
             />
           )}
           {profile.move_in_date && (
             <Fact
               icon={<CalendarDays className="size-3" />}
-              label="Einzug"
-              value={new Date(profile.move_in_date).toLocaleDateString("de-DE")}
+              label={t("ownerInbox.moveIn")}
+              value={new Date(profile.move_in_date).toLocaleDateString(dateLocale)}
             />
           )}
           {profile.pets != null && (
             <Fact
               icon={<PawPrint className="size-3" />}
-              label="Haustiere"
-              value={profile.pets ? "ja" : "nein"}
+              label={t("searchEditor.pets")}
+              value={profile.pets ? t("searchEditor.pets.yes") : t("searchEditor.pets.no")}
             />
           )}
         </div>
@@ -213,24 +222,23 @@ export function OwnerInboxCard({
         )}
       </div>
 
-      {/* Actions */}
       <div className="px-3 py-3 border-t">
         {status === "connected" && profile.email && (
           <a
             href={`mailto:${profile.email}`}
             className="flex items-center justify-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2.5"
           >
-            <Mail className="size-4" /> Kontakt aufnehmen
+            <Mail className="size-4" /> {t("ownerInbox.contact")}
           </a>
         )}
         {status === "rejected" && (
           <p className="text-xs text-center text-[var(--muted-foreground)] py-2">
-            Du hast diese Anfrage abgelehnt.
+            {t("ownerInbox.rejectedNote")}
           </p>
         )}
         {status === "accepted" && !row.connected_at && (
           <p className="text-xs text-center text-[var(--muted-foreground)] py-2">
-            Wir warten auf den Suchenden.
+            {t("ownerInbox.acceptedWaiting")}
           </p>
         )}
         {status === "pending" && (
@@ -243,7 +251,7 @@ export function OwnerInboxCard({
               className="h-12 rounded-full border-2"
             >
               {isBusy ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
-              Ablehnen
+              {t("ownerInbox.reject")}
             </Button>
             <Button
               size="lg"
@@ -254,7 +262,7 @@ export function OwnerInboxCard({
               )}
             >
               {isBusy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              Annehmen
+              {t("ownerInbox.accept")}
             </Button>
           </div>
         )}
@@ -263,31 +271,31 @@ export function OwnerInboxCard({
   );
 }
 
-function StatusBadge({ status }: { status: Status }) {
+function StatusBadge({ status, t }: { status: Status; t: T }) {
   if (status === "connected") {
     return (
       <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
-        <Handshake className="size-3" /> verbunden
+        <Handshake className="size-3" /> {t("ownerInbox.status.connected")}
       </span>
     );
   }
   if (status === "accepted") {
     return (
       <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-        zugesagt
+        {t("ownerInbox.status.accepted")}
       </span>
     );
   }
   if (status === "rejected") {
     return (
       <span className="shrink-0 rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
-        abgelehnt
+        {t("ownerInbox.status.rejected")}
       </span>
     );
   }
   return (
     <span className="shrink-0 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-medium text-rose-700 animate-pulse">
-      neu
+      {t("ownerInbox.status.new")}
     </span>
   );
 }
