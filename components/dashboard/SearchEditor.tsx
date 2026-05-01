@@ -41,10 +41,23 @@ const LIFESTYLE_OPTIONS = [
   "Pool", "Community-Pool", "Garage", "Parkplatz",
 ];
 
+// Toggle-Felder werden direkt beim Click gespeichert (Instant-Save), nicht
+// batched mit dem Speichern-Button am Ende. UX-Erwartung wie OS-Preferences:
+// Toggle umlegen = sofort persistiert, kein „save erst am Ende".
+const INSTANT_SAVE_FIELDS = new Set<keyof EditableSearchProfile>([
+  "notify_new_matches",
+  "published_as_wanted",
+  "active",
+]);
+
 export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
   const router = useRouter();
   const [form, setForm] = React.useState<Partial<EditableSearchProfile>>({});
-  const [busy, setBusy] = React.useState<"save" | null>(null);
+  // Instant-saved toggles werden hier persistiert, damit das UI nach dem
+  // Server-Roundtrip den neuen Stand anzeigt ohne auf router.refresh() warten
+  // zu müssen (initial-prop bleibt eingefroren, server-state ändert sich).
+  const [instant, setInstant] = React.useState<Partial<EditableSearchProfile>>({});
+  const [busy, setBusy] = React.useState<"save" | keyof EditableSearchProfile | null>(null);
   const [savedAt, setSavedAt] = React.useState<number | null>(null);
   const [matchCount, setMatchCount] = React.useState<number | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -52,14 +65,54 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
   const set = <K extends keyof EditableSearchProfile>(
     key: K,
     value: EditableSearchProfile[K]
-  ) => setForm((prev) => ({ ...prev, [key]: value }));
+  ) => {
+    if (INSTANT_SAVE_FIELDS.has(key)) {
+      void saveInstant(key, value);
+      return;
+    }
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
 
   const get = <K extends keyof EditableSearchProfile>(
     key: K
   ): EditableSearchProfile[K] => {
     if (key in form) return form[key] as EditableSearchProfile[K];
+    if (key in instant) return instant[key] as EditableSearchProfile[K];
     return initial[key];
   };
+
+  // Instant-Save: ein einzelnes Feld direkt PATCHen, optimistic-update
+  // setzen und bei Fehler den Toggle zurückdrehen + Error zeigen.
+  async function saveInstant<K extends keyof EditableSearchProfile>(
+    key: K,
+    value: EditableSearchProfile[K]
+  ): Promise<void> {
+    const previous = get(key);
+    setInstant((prev) => ({ ...prev, [key]: value }));
+    setBusy(key);
+    setError(null);
+    try {
+      const res = await fetch(`/api/searches/${initial.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ [key]: value }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
+        // Rollback der optimistic-update
+        setInstant((prev) => ({ ...prev, [key]: previous }));
+        return;
+      }
+      setSavedAt(Date.now());
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setInstant((prev) => ({ ...prev, [key]: previous }));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const tags = (get("lifestyle_tags") ?? []) as string[];
   const toggleTag = (t: string) => {
@@ -105,13 +158,15 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
       <button
         type="button"
         onClick={() => set("notify_new_matches", !(get("notify_new_matches") as boolean))}
+        disabled={busy === "notify_new_matches"}
         className={cn(
-          "w-full flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm transition-colors",
+          "w-full flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm transition-colors disabled:opacity-60",
           get("notify_new_matches")
             ? "border-emerald-300 bg-emerald-500/10 text-emerald-800"
             : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]"
         )}
         aria-pressed={get("notify_new_matches") as boolean}
+        aria-busy={busy === "notify_new_matches"}
       >
         <span className="flex items-center gap-2">
           {get("notify_new_matches") ? (
@@ -143,13 +198,15 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
       <button
         type="button"
         onClick={() => set("published_as_wanted", !(get("published_as_wanted") as boolean))}
+        disabled={busy === "published_as_wanted"}
         className={cn(
-          "w-full flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm transition-colors",
+          "w-full flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm transition-colors disabled:opacity-60",
           get("published_as_wanted")
             ? "border-sky-300 bg-sky-500/10 text-sky-900"
             : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]"
         )}
         aria-pressed={get("published_as_wanted") as boolean}
+        aria-busy={busy === "published_as_wanted"}
       >
         <span className="flex items-start gap-2 text-left">
           {get("published_as_wanted") ? (
@@ -210,8 +267,9 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
             <button
               type="button"
               onClick={() => set("active", true)}
+              disabled={busy === "active"}
               className={cn(
-                "rounded-full border px-3 py-1 text-xs flex-1",
+                "rounded-full border px-3 py-1 text-xs flex-1 disabled:opacity-60",
                 get("active")
                   ? "bg-emerald-500/15 text-emerald-700 border-emerald-300"
                   : "bg-[var(--background)]"
@@ -222,8 +280,9 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
             <button
               type="button"
               onClick={() => set("active", false)}
+              disabled={busy === "active"}
               className={cn(
-                "rounded-full border px-3 py-1 text-xs flex-1",
+                "rounded-full border px-3 py-1 text-xs flex-1 disabled:opacity-60",
                 !get("active")
                   ? "bg-[var(--muted)] text-[var(--muted-foreground)]"
                   : "bg-[var(--background)]"
