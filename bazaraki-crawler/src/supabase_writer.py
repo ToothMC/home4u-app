@@ -32,6 +32,13 @@ def _build_dedup_hash(external_id: str) -> str:
 def _to_row(item: RawListing) -> dict:
     # Media: Detail-Page-Galerie wenn gedrillt, sonst Listenseiten-Cover
     media = item.media if item.media else ([item.image_url] if item.image_url else [])
+    # extracted_data um source_url erweitern — der Detail-URL-Slug ist auf
+    # Bazaraki Pflicht: /adv/{id}/ ohne Slug redirected auf die Kategorie-
+    # Übersicht. Mit Slug landet der Click auf dem Inserat. detail_url enthält
+    # bereits die volle absolute URL aus dem List-Extractor (LIST_EXTRACT_JS).
+    extracted = dict(item.extracted_data or {})
+    if item.detail_url:
+        extracted["source_url"] = item.detail_url
     row = {
         "external_id": item.external_id,
         "type": item.listing_type,
@@ -57,7 +64,7 @@ def _to_row(item: RawListing) -> dict:
         "property_type": item.property_type,
         # Spec §2.2: confidence + extracted_data
         "confidence": item.confidence,
-        "extracted_data": item.extracted_data,
+        "extracted_data": extracted or None,
         # Score-Felder bewusst NICHT — Worker setzt scam_checked_at später.
         "dedup_hash": _build_dedup_hash(item.external_id),
     }

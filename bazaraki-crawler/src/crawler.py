@@ -185,14 +185,29 @@ LIST_EXTRACT_JS = r"""
               || card.querySelector('.advert__content-title')?.innerText?.trim()
               || null;
 
-    // Cover-Bild (best-effort): swiper-slide[data-background] hat das echte
-    // hi-res Bild; <img> ist oft nur Placeholder. Detail-Drill liefert die
-    // volle Galerie, hier reicht ein Fallback.
+    // Cover-Bild: PRIO — das ERSTE swiper-slide hat das Cover, auch wenn
+    // [data-background] erst nach Lazy-Load gesetzt wird. Vorgängerversion
+    // querySelectorte direkt auf [data-background*="bazaraki"] und fiel bei
+    // lazy-Slides auf Slide-N (random Bild aus Galerie, z.B. Bad statt Front-
+    // Ansicht) zurück. Reihenfolge:
+    //   1. <img itemprop="image"> (schema.org Cover, wenn vorhanden)
+    //   2. erstes .swiper-slide mit data-background
+    //   3. erstes <img src> in der Card
     let img = null;
-    const slideBg = card.querySelector('.swiper-slide[data-background*="bazaraki"]');
-    if (slideBg) {
-      img = slideBg.getAttribute('data-background');
-    } else {
+    const schemaImg = card.querySelector('img[itemprop="image"]');
+    if (schemaImg) {
+      img = schemaImg.getAttribute('src') || schemaImg.getAttribute('data-src') || null;
+    }
+    if (!img) {
+      const firstSlide = card.querySelector('.swiper-slide');
+      if (firstSlide) {
+        img = firstSlide.getAttribute('data-background') ||
+              firstSlide.querySelector('img')?.getAttribute('data-src') ||
+              firstSlide.querySelector('img')?.src ||
+              null;
+      }
+    }
+    if (!img) {
       const imgEl = card.querySelector('img[src*="bazaraki"], img[data-src*="bazaraki"]');
       img = imgEl?.getAttribute('data-src') || imgEl?.src || null;
     }
