@@ -1,0 +1,20 @@
+[project]
+name = "home4u-dev-crawler"
+version = "0.1.0"
+description = "CY-Großentwickler-Bundle (Aristo, Pafilia, Cybarco, Leptos, Korantina, Imperio) für Home4U"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28,<1",
+    "selectolax>=0.3.21,<1",
+    "python-dotenv>=1.0,<2",
+    "tenacity>=9.0,<10",
+    "imagehash>=4.3,<5",
+    "Pillow>=10.4,<12",
+]
+
+[project.scripts]
+crawl-dev = "src.main:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
