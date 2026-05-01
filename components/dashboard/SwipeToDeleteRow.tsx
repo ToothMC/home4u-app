@@ -3,6 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
+import { useT } from "@/lib/i18n/client";
+import { tFormat } from "@/lib/i18n/dict";
 
 const OPEN_OFFSET = 88;
 const CONFIRM_OFFSET = 176;
@@ -16,6 +18,7 @@ type Props = {
 
 export function SwipeToDeleteRow({ endpoint, what, children }: Props) {
   const router = useRouter();
+  const { t } = useT();
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const startXRef = React.useRef<number | null>(null);
   const startOffsetRef = React.useRef(0);
@@ -97,13 +100,13 @@ export function SwipeToDeleteRow({ endpoint, what, children }: Props) {
       const res = await fetch(endpoint, { method: "DELETE" });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
+        setError(detail.detail ?? detail.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
         setSubmitting(false);
         return;
       }
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setError(err instanceof Error ? err.message : t("btn.networkError"));
       setSubmitting(false);
     }
   }
@@ -132,21 +135,21 @@ export function SwipeToDeleteRow({ endpoint, what, children }: Props) {
             onClick={doDelete}
             disabled={submitting}
             className="flex w-[176px] items-center justify-center gap-1.5 bg-red-700 text-sm font-medium text-white px-3 disabled:opacity-70"
-            aria-label={`${what} wirklich löschen`}
+            aria-label={tFormat(t("swipe.confirmAria"), { what })}
           >
             {submitting ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Trash2 className="size-4" />
             )}
-            Wirklich löschen?
+            {t("swipe.confirmLabel")}
           </button>
         ) : (
           <button
             type="button"
             onClick={expandConfirm}
             className="flex w-[88px] items-center justify-center bg-red-600 text-white"
-            aria-label={`${what} löschen`}
+            aria-label={tFormat(t("swipe.deleteAria"), { what })}
           >
             <Trash2 className="size-5" />
           </button>
@@ -171,7 +174,7 @@ export function SwipeToDeleteRow({ endpoint, what, children }: Props) {
         <button
           type="button"
           onClick={open ? close : expandConfirm}
-          aria-label={open ? "Schließen" : `${what} löschen`}
+          aria-label={open ? t("swipe.closeAria") : tFormat(t("swipe.deleteAria"), { what })}
           className="shrink-0 px-2 self-center text-[var(--muted-foreground)] hover:text-red-600"
         >
           <Trash2 className="size-4" />

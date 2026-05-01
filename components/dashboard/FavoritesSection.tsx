@@ -4,32 +4,39 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getUserBookmarks } from "@/lib/repo/bookmarks";
 import { InquireButton } from "./InquireButton";
 import { SwipeToDeleteRow } from "./SwipeToDeleteRow";
+import { getT } from "@/lib/i18n/server";
+import { tFormat } from "@/lib/i18n/dict";
+import type { SupportedLang } from "@/lib/lang/preferred-language";
+
+const NUMBER_LOCALE: Record<SupportedLang, string> = {
+  de: "de-DE",
+  en: "en-GB",
+  ru: "ru-RU",
+  el: "el-GR",
+  zh: "zh-CN",
+};
 
 const PREVIEW_LIMIT = 3;
 
-/**
- * Pipeline-Stufe 2 auf der Dashboard-Übersicht.
- * Zeigt nur Bookmarks ohne Match-Status (matchStatus="none") — bereits
- * angefragte sind eine Stufe weiter und stehen unten in "Meine Anfragen".
- */
 export async function FavoritesSection({ userId }: { userId: string }) {
   const all = await getUserBookmarks(userId, { limit: 50 });
   const open = all.filter((b) => b.matchStatus === "none");
   const preview = open.slice(0, PREVIEW_LIMIT);
+  const { t, lang } = await getT();
 
   return (
     <section className="mt-8">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Heart className="size-4 fill-rose-500 stroke-rose-500" />
-          Meine Favoriten ({open.length})
+          {t("bookmarks.heading")} ({open.length})
         </h2>
         {all.length > 0 && (
           <Link
             href="/dashboard/bookmarks"
             className="text-xs text-[var(--muted-foreground)] hover:underline inline-flex items-center gap-0.5"
           >
-            Alle ansehen <ChevronRight className="size-3" />
+            {t("favs.viewAll")} <ChevronRight className="size-3" />
           </Link>
         )}
       </div>
@@ -37,8 +44,7 @@ export async function FavoritesSection({ userId }: { userId: string }) {
       {preview.length === 0 ? (
         <Card>
           <CardContent className="py-6 text-sm text-[var(--muted-foreground)]">
-            Noch keine Favoriten — wisch im Suchergebnis nach rechts oder klick
-            das Herz auf einer Listing-Seite.
+            {t("favs.empty")}
           </CardContent>
         </Card>
       ) : (
@@ -49,7 +55,7 @@ export async function FavoritesSection({ userId }: { userId: string }) {
               <SwipeToDeleteRow
                 key={b.bookmarkId}
                 endpoint={`/api/bookmarks/${b.listing.id}`}
-                what="Diesen Favoriten"
+                what={t("favs.deleteWhat")}
               >
                 <div className="flex items-stretch gap-3 border bg-[var(--card)] p-2">
                   <Link
@@ -65,7 +71,7 @@ export async function FavoritesSection({ userId }: { userId: string }) {
                       />
                     ) : (
                       <div className="h-full w-full flex items-center justify-center text-[10px] text-[var(--muted-foreground)]">
-                        kein Bild
+                        {t("match.noImage")}
                       </div>
                     )}
                   </Link>
@@ -81,8 +87,8 @@ export async function FavoritesSection({ userId }: { userId: string }) {
                           : ""}
                       </p>
                       <p className="truncate text-xs text-[var(--muted-foreground)]">
-                        {b.listing.rooms ?? "?"} Zi ·{" "}
-                        {Number(b.listing.price).toLocaleString("de-DE")} €
+                        {b.listing.rooms ?? "?"} {t("matchCard.roomsShort")} ·{" "}
+                        {Number(b.listing.price).toLocaleString(NUMBER_LOCALE[lang])} €
                         {b.listing.size_sqm ? ` · ${b.listing.size_sqm} m²` : ""}
                       </p>
                     </Link>
@@ -104,7 +110,7 @@ export async function FavoritesSection({ userId }: { userId: string }) {
               href="/dashboard/bookmarks"
               className="block text-center text-sm text-[var(--muted-foreground)] hover:underline py-2"
             >
-              Alle {open.length} Favoriten ansehen →
+              {tFormat(t("favs.viewAllN"), { n: open.length })}
             </Link>
           )}
         </div>

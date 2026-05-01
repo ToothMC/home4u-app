@@ -4,24 +4,18 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/client";
+import { tFormat } from "@/lib/i18n/dict";
 
 type Props = {
-  /**
-   * URL des DELETE-Endpoints, z. B. /api/listings/abc oder /api/searches/abc
-   */
   endpoint: string;
-  /**
-   * Wo soll der Browser nach erfolgreichem Delete hin?
-   */
   redirectTo: string;
-  /**
-   * Was wird gelöscht? Erscheint im Confirm-Text.
-   */
   what: string;
 };
 
 export function DeleteRecordButton({ endpoint, redirectTo, what }: Props) {
   const router = useRouter();
+  const { t } = useT();
   const [state, setState] = React.useState<"idle" | "confirm" | "submitting">("idle");
   const [error, setError] = React.useState<string | null>(null);
 
@@ -32,14 +26,14 @@ export function DeleteRecordButton({ endpoint, redirectTo, what }: Props) {
       const res = await fetch(endpoint, { method: "DELETE" });
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
-        setError(detail.detail ?? detail.error ?? `Fehler ${res.status}`);
+        setError(detail.detail ?? detail.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
         setState("confirm");
         return;
       }
       router.replace(redirectTo);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Netzwerkfehler");
+      setError(err instanceof Error ? err.message : t("btn.networkError"));
       setState("confirm");
     }
   }
@@ -48,7 +42,7 @@ export function DeleteRecordButton({ endpoint, redirectTo, what }: Props) {
     return (
       <div className="rounded-md border border-red-200 bg-red-50/70 p-3 space-y-2">
         <p className="text-sm">
-          {what} wirklich löschen? Das kann nicht rückgängig gemacht werden.
+          {tFormat(t("delete.confirmIrrev"), { what })}
         </p>
         <div className="flex gap-2">
           <Button
@@ -57,7 +51,7 @@ export function DeleteRecordButton({ endpoint, redirectTo, what }: Props) {
             onClick={() => setState("idle")}
             disabled={state === "submitting"}
           >
-            Doch nicht
+            {t("delete.dismiss")}
           </Button>
           <Button
             size="sm"
@@ -70,7 +64,7 @@ export function DeleteRecordButton({ endpoint, redirectTo, what }: Props) {
             ) : (
               <Trash2 className="size-3" />
             )}
-            Ja, löschen
+            {t("delete.confirmYes")}
           </Button>
         </div>
         {error && <p className="text-xs text-red-700">{error}</p>}
@@ -84,7 +78,7 @@ export function DeleteRecordButton({ endpoint, redirectTo, what }: Props) {
       onClick={() => setState("confirm")}
       className="text-red-700 hover:bg-red-50 hover:text-red-800 border-red-300"
     >
-      <Trash2 className="size-4" /> Löschen
+      <Trash2 className="size-4" /> {t("delete.cta")}
     </Button>
   );
 }
