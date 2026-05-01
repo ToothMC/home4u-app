@@ -14,8 +14,10 @@
 //   - Sucher sieht die Anfrage in seinem bestehenden Matches-Inbox + bekommt
 //     eine Trigger-Mail „Du hast ein neues Wohnungs-Angebot" via Resend.
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowLeft, MapPin, Bed, Wallet, PawPrint, Users2 } from "lucide-react";
 import { AuthMenu } from "@/components/auth/AuthMenu";
+import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +74,16 @@ export default async function GesuchePage({
 }: {
   searchParams: Promise<{ type?: string; city?: string }>;
 }) {
+  // Auth-Gate: Such-Inserate sind nur für eingeloggte User sichtbar.
+  // Verhindert anonymes Scraping der Sucher-Profile + macht klar, dass die
+  // ganze Plattform inkl. Wanted-Ads ein Logged-in-Kontext ist (Owner-Offer
+  // funktioniert eh nur eingeloggt, also wäre Public-View wertlos für
+  // Conversion).
+  const user = await getAuthUser();
+  if (!user) {
+    redirect("/?auth=required&next=/gesuche");
+  }
+
   const params = await searchParams;
   const filterType = params.type === "rent" || params.type === "sale" ? params.type : null;
   const filterCity = (params.city ?? "").trim() || null;

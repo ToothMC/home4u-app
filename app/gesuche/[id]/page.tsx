@@ -4,7 +4,7 @@
 // get_wanted_profile (eligible_listings filtert auf caller-owned + active +
 // passender Type).
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, MapPin, Wallet, Bed, PawPrint, Users2, CalendarDays } from "lucide-react";
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { OfferToSeekerPicker } from "@/components/wanted/OfferToSeekerPicker";
@@ -72,13 +72,17 @@ export default async function GesucheDetailPage({
 }) {
   const { id } = await params;
   const user = await getAuthUser();
+  // Auth-Gate konsistent zur Liste — Such-Inserate insgesamt nur eingeloggt
+  // sichtbar (verhindert anonymes Scrapen).
+  if (!user) {
+    redirect(`/?auth=required&next=/gesuche/${id}`);
+  }
 
-  // Wenn eingeloggt: Server-Client damit auth.uid() im RPC sichtbar ist und
-  // eligible_listings korrekt befüllt wird. Sonst Service-Client (eligible
-  // bleibt leer Array — kein Picker für anonyme Besucher).
+  // Server-Client damit auth.uid() im RPC sichtbar ist und eligible_listings
+  // korrekt befüllt wird.
   let supabase;
   try {
-    supabase = user ? await createSupabaseServerClient() : createSupabaseServiceClient();
+    supabase = await createSupabaseServerClient();
   } catch {
     supabase = createSupabaseServiceClient();
   }
@@ -184,16 +188,7 @@ export default async function GesucheDetailPage({
           ) : null}
         </div>
 
-        {!user ? (
-          <div className="rounded-md border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-            <Link href={`/?auth=required&next=/gesuche/${p.id}`} className="font-medium underline">
-              Melde dich an
-            </Link>
-            {" "}um diesem Sucher eine deiner Wohnungen anzubieten. Email
-            bleibt für beide Seiten unsichtbar — Kontakt läuft ausschließlich
-            über das Home4U-Postfach.
-          </div>
-        ) : eligible.length === 0 ? (
+        {eligible.length === 0 ? (
           <div className="rounded-md border bg-[var(--muted)] px-4 py-3 text-sm text-[var(--muted-foreground)]">
             Du hast noch kein aktives Inserat vom Typ &bdquo;{p.type === "rent" ? "Miete" : "Verkauf"}&ldquo;.
             Lege erst eines an um dieses Such-Inserat zu beantworten.{" "}
