@@ -9,7 +9,7 @@ import { StatsStrip } from "@/components/landing/StatsStrip";
 import { AuthMenu } from "@/components/auth/AuthMenu";
 import { BrandLockup } from "@/components/brand/Logo";
 import { LanguageFlagPicker } from "@/components/lang/LanguageFlagPicker";
-import { getPreferredLanguage } from "@/lib/lang/preferred-language";
+import { getT } from "@/lib/i18n/server";
 
 export default async function LandingPage({
   searchParams,
@@ -17,7 +17,7 @@ export default async function LandingPage({
   searchParams?: Promise<{ region?: string }>;
 }) {
   const sp = (await searchParams) ?? {};
-  const lang = await getPreferredLanguage();
+  const { t, lang } = await getT();
   return (
     <main className="flex-1">
       {/* Header — minimal, viel Luft, mobile = nur Logo+Auth */}
@@ -25,18 +25,21 @@ export default async function LandingPage({
         <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between gap-4">
           <BrandLockup iconSize={36} />
           <nav className="hidden lg:flex items-center gap-7 text-sm text-[var(--brand-navy)]">
-            <ChatLink flow="seeker" className="hover:text-[var(--brand-gold)] transition-colors">Suchen</ChatLink>
-            <Link href="/chat?flow=owner" className="hover:text-[var(--brand-gold)] transition-colors">Vermieten</Link>
-            <Link href="/chat?flow=owner&intent=sale" className="hover:text-[var(--brand-gold)] transition-colors">Verkaufen</Link>
-            <Link href="/gesuche" className="hover:text-[var(--brand-gold)] transition-colors">Such-Inserate</Link>
-            <Link href="/chat?flow=agent" className="hover:text-[var(--brand-gold)] transition-colors">Für Makler</Link>
-            <Link href="/scam-check" className="hover:text-[var(--brand-gold)] transition-colors">Scam-Check</Link>
+            <ChatLink flow="seeker" className="hover:text-[var(--brand-gold)] transition-colors">{t("nav.search")}</ChatLink>
+            <Link href="/chat?flow=owner" className="hover:text-[var(--brand-gold)] transition-colors">{t("nav.rentOut")}</Link>
+            <Link href="/chat?flow=owner&intent=sale" className="hover:text-[var(--brand-gold)] transition-colors">{t("nav.sell")}</Link>
+            <Link href="/gesuche" className="hover:text-[var(--brand-gold)] transition-colors">{t("nav.wantedAds")}</Link>
+            <Link href="/chat?flow=agent" className="hover:text-[var(--brand-gold)] transition-colors">{t("nav.forAgents")}</Link>
+            <Link href="/scam-check" className="hover:text-[var(--brand-gold)] transition-colors">{t("nav.scamCheck")}</Link>
           </nav>
           <div className="flex items-center gap-3">
-            <LanguageFlagPicker initial={lang} />
+            <LanguageFlagPicker
+              initial={lang}
+              labels={{ title: t("lang.label"), choose: t("lang.choose") }}
+            />
             <Link
               href="/dashboard/bookmarks"
-              aria-label="Meine Favoriten"
+              aria-label={t("nav.favorites")}
               className="hidden sm:inline-flex size-9 items-center justify-center rounded-full text-[var(--brand-navy)] hover:bg-[var(--brand-gold-50)] hover:text-[var(--brand-gold)] transition-colors"
             >
               <Heart className="size-5" />
@@ -53,7 +56,7 @@ export default async function LandingPage({
         <div className="absolute inset-0">
           <Image
             src="/hero/home4u-hero.png"
-            alt="Moderne Villa-Terrasse mit Meerblick"
+            alt={t("hero.image.alt")}
             fill
             priority
             sizes="100vw"
@@ -79,31 +82,31 @@ export default async function LandingPage({
         <div className="relative mx-auto max-w-6xl px-6 pt-16 pb-24 sm:pt-28 sm:pb-32 min-h-[560px] sm:min-h-[640px]">
           <div className="max-w-xl sm:max-w-lg">
             <h1 className="font-display text-5xl sm:text-7xl leading-[1.05] text-[var(--brand-navy)]">
-              Hier finde ich
+              {t("hero.title.line1")}
               <br />
-              mein <span className="text-[var(--brand-gold)]">Zuhause.</span>
+              {t("hero.title.line2.prefix")}{" "}
+              <span className="text-[var(--brand-gold)]">{t("hero.title.line2.accent")}</span>
             </h1>
             <p className="mt-6 text-base sm:text-lg text-[var(--warm-bark)] leading-relaxed max-w-md">
-              Home4U verbindet dich mit passenden Immobilien — persönlich,
-              einfach und modern.
+              {t("hero.subtitle")}
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <Suspense
                 fallback={
                   <Button size="lg" disabled>
-                    Jetzt suchen
+                    {t("hero.cta.search")}
                   </Button>
                 }
               >
                 <Button asChild size="lg">
                   <ChatLink>
-                    Jetzt suchen
+                    {t("hero.cta.search")}
                     <ArrowRight />
                   </ChatLink>
                 </Button>
               </Suspense>
               <Button asChild size="lg" variant="outline" className="bg-white/85 backdrop-blur">
-                <Link href="/scam-check">Inserat prüfen</Link>
+                <Link href="/scam-check">{t("hero.cta.check")}</Link>
               </Button>
             </div>
           </div>
@@ -113,33 +116,33 @@ export default async function LandingPage({
       {/* "Warum Home4U?" — drei stille Spalten, kein Gold-Wash */}
       <section id="warum" className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <h2 className="font-display text-3xl sm:text-4xl text-center text-[var(--brand-navy)] mb-12 sm:mb-16">
-          Warum Home4U?
+          {t("why.heading")}
         </h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10 sm:gap-12">
           <Pillar
             badge={
               <span className="inline-flex rounded-full bg-white border border-emerald-300 px-2 py-0.5 text-[11px] font-semibold leading-none text-emerald-700">
-                92 % Match
+                {t("why.match.badge")}
               </span>
             }
-            title="Kein endloses Suchen"
-            text="Kein stundenlanges Scrollen durch Social-Media-Gruppen und Inserate-Portale. Unsere KI-Technologie und unser Netzwerk zeigen dir nur Immobilien, die wirklich zu dir passen."
+            title={t("why.match.title")}
+            text={t("why.match.text")}
           />
           <Pillar
             badge={
               <span className="inline-flex items-center gap-1 rounded-full bg-white border border-emerald-300 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-emerald-700">
                 <span className="inline-block size-1.5 rounded-full bg-emerald-500" aria-hidden />
-                Kein Scam
+                {t("why.scam.badge")}
               </span>
             }
-            title="Keine Scam-Anzeige"
-            text="Kennst du das? „Dieses schöne Haus ist leider weg, aber ich habe noch andere Objekte.“ Bei uns findest du nur echte, geprüfte Inserate."
+            title={t("why.scam.title")}
+            text={t("why.scam.text")}
           />
           <Pillar
             badge={
               <span
                 className="inline-flex items-center gap-1 rounded-full bg-white border border-emerald-300 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-emerald-700"
-                aria-label="Sehr guter Preis"
+                aria-label={t("why.price.aria")}
               >
                 <span className="inline-flex items-end gap-[1px]" aria-hidden>
                   {[1, 2, 3, 4, 5].map((i) => (
@@ -150,22 +153,22 @@ export default async function LandingPage({
                     />
                   ))}
                 </span>
-                Sehr guter Preis
+                {t("why.price.badge")}
               </span>
             }
-            title="Aktuelle Marktpreis-Bewertung"
-            text="Von „sehr guter Preis“ bis „sehr hoher Preis“ – ist die Miete wirklich angemessen? Wir zeigen dir, wie sich der Preis im Vergleich zu ähnlichen Objekten in der Gegend schlägt."
+            title={t("why.price.title")}
+            text={t("why.price.text")}
           />
           <Pillar
             badge={
               <span className="inline-flex items-center gap-1 rounded-full bg-white border border-emerald-300 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-emerald-700">
                 <Lock className="size-3" aria-hidden />
-                100 % anonym
+                {t("why.anon.badge")}
               </span>
             }
-            title="Gefunden werden — statt zu suchen"
-            text="Eigenes Such-Inserat aufgeben wie früher in der Zeitung: „Junges Paar sucht 3-Zimmer Villa mit Pool im Raum Paphos.“ Makler mit passenden Angeboten dürfen Kontakt aufnehmen — ohne Preisgabe deiner Email-Adresse."
-            cta={{ href: "/gesuche", label: "Such-Inserate ansehen →" }}
+            title={t("why.anon.title")}
+            text={t("why.anon.text")}
+            cta={{ href: "/gesuche", label: t("why.anon.cta") }}
           />
         </div>
       </section>
@@ -178,12 +181,12 @@ export default async function LandingPage({
       {/* Vier Wege */}
       <section id="pfade" className="mx-auto max-w-6xl px-6 pb-16 sm:pb-24">
         <h2 className="font-display text-3xl sm:text-4xl text-center text-[var(--brand-navy)] mb-10">
-          Vier Wege zu Home4U
+          {t("paths.heading")}
         </h2>
         <Suspense
           fallback={
             <div className="text-center text-sm text-[var(--muted-foreground)]">
-              Lädt…
+              {t("common.loading")}
             </div>
           }
         >
@@ -197,7 +200,7 @@ export default async function LandingPage({
         <div className="absolute inset-x-0 top-0 h-72 sm:inset-y-0 sm:right-1/2 sm:h-auto sm:left-0">
           <Image
             src="/hero/home4u-hero-sunset.png"
-            alt="Paar auf Terrasse beim Sonnenuntergang"
+            alt={t("closing.image.alt")}
             fill
             sizes="(min-width: 640px) 50vw, 100vw"
             className="object-cover"
@@ -222,17 +225,16 @@ export default async function LandingPage({
         <div className="relative mx-auto max-w-6xl px-6 pt-72 pb-20 sm:pt-24 sm:pb-28 min-h-[480px]">
           <div className="sm:ml-[55%] sm:max-w-md">
             <h3 className="font-display text-3xl sm:text-4xl text-[var(--brand-navy)] leading-tight">
-              Bereit, dein Zuhause zu finden?
+              {t("closing.heading")}
             </h3>
             <p className="mt-4 text-[var(--warm-bark)] leading-relaxed">
-              Lass uns gemeinsam den richtigen Ort für dich finden. Persönlich.
-              Einfach. Home4U.
+              {t("closing.text")}
             </p>
             <div className="mt-8">
-              <Suspense fallback={<Button size="lg" disabled>Jetzt suchen</Button>}>
+              <Suspense fallback={<Button size="lg" disabled>{t("hero.cta.search")}</Button>}>
                 <Button asChild size="lg">
                   <ChatLink>
-                    Jetzt suchen
+                    {t("hero.cta.search")}
                     <ArrowRight />
                   </ChatLink>
                 </Button>
@@ -253,12 +255,12 @@ export default async function LandingPage({
               Home<span className="text-[var(--brand-gold)]">4</span>U
             </span>
             <span className="text-white/30">·</span>
-            <span>© {new Date().getFullYear()} Dein Zuhause auf Zypern</span>
+            <span>© {new Date().getFullYear()} {t("footer.tagline")}</span>
           </div>
           <div className="flex items-center gap-5 text-white/50">
-            <ChatLink flow="seeker" className="hover:text-white">Suchen</ChatLink>
-            <Link href="/gesuche" className="hover:text-white">Such-Inserate</Link>
-            <a href="#pfade" className="hover:text-white">Vier Wege</a>
+            <ChatLink flow="seeker" className="hover:text-white">{t("nav.search")}</ChatLink>
+            <Link href="/gesuche" className="hover:text-white">{t("nav.wantedAds")}</Link>
+            <a href="#pfade" className="hover:text-white">{t("footer.fourPaths")}</a>
           </div>
         </div>
       </footer>

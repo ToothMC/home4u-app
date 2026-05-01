@@ -43,10 +43,14 @@ function writeCookie(name: string, value: string) {
 export function LanguageFlagPicker({
   initial,
   className,
+  labels,
 }: {
   initial?: Lang | null;
   className?: string;
+  labels?: { title?: string; choose?: string };
 }) {
+  const titleLabel = labels?.title ?? "Sprache";
+  const chooseLabel = labels?.choose ?? "Sprache wählen";
   const router = useRouter();
   const [current, setCurrent] = React.useState<Lang>(initial ?? DEFAULT_LANG);
   const [open, setOpen] = React.useState(false);
@@ -116,7 +120,7 @@ export function LanguageFlagPicker({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`Sprache: ${active.label}`}
+        aria-label={`${titleLabel}: ${active.label}`}
         title={active.label}
         className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-white/60 backdrop-blur px-2 py-1 hover:bg-white transition-colors"
       >
@@ -129,7 +133,7 @@ export function LanguageFlagPicker({
       {open && (
         <ul
           role="listbox"
-          aria-label="Sprache wählen"
+          aria-label={chooseLabel}
           className="absolute right-0 mt-1 w-44 rounded-xl border border-[var(--border)] bg-white shadow-lg overflow-hidden z-50"
         >
           {LANGS.map((l) => {
