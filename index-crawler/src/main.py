@@ -3,16 +3,21 @@
 Flow:
   1. Sitemap-Discovery: alle aktiven Listing-URLs aus 20+ Sub-Sitemaps
   2. Inkrementell: bereits in DB indexierte external_ids ausfiltern
-  3. Detail-Fetch + Parse für die NEUEN Listings (httpx, kein Browser)
-  4. pHash-Compute für Cover-Bilder
-  5. Bulk-Upsert via bulk_upsert_external_listings RPC
-     (mit automatischem canonical-Match gegen Bazaraki und alle
-     anderen Sources — Cross-Source-Dedup ist da geschenkt)
+  3. Detail-Fetch + Parse + pHash + Streaming-Upsert pro BATCH_SIZE Listings
+  4. mark_stale am Ende — nur wenn vollständig durchgelaufen
+
+Watchdog (MAX_RUNTIME_S, default 90min): stoppt vor dem nächsten Listing,
+sobald die Wall-Clock das Budget reißt. Workflow-timeout sollte +10min
+Headroom bieten, dann liefert Python sauber exit 0 statt SIGTERM. Vorteil:
+mehrere kürzere Runs pro Tag (cron alle paar Stunden) decken den Backfill
+inkrementell ab — jeder Run grün, Daten landen, kein 5h-Job-der-cancelled-wird.
 
 Env:
   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: Pflicht
   RATE_LIMIT_S: Sekunden Pause pro Detail-Fetch (default 1.0)
   MAX_LISTINGS: Cap für Smoke-Tests (default 0 = unbegrenzt)
+  MAX_RUNTIME_S: Wall-Clock-Budget bevor sauberer Stopp (default 5400 = 90min)
+  STREAM_BATCH_SIZE: Batch-Size für Streaming-Upsert (default 50)
   DRY_RUN=1: kein DB-Write, nur loggen
   SKIP_PHASH=1: pHash-Phase überspringen (5x schneller, kein Cross-Source-Match)
   FORCE_REFETCH=1: auch bereits indexierte Listings nochmal fetchen
@@ -57,6 +62,9 @@ def main() -> int:
     dry_run = os.getenv("DRY_RUN") == "1"
     skip_phash = os.getenv("SKIP_PHASH") == "1"
     force_refetch = os.getenv("FORCE_REFETCH") == "1"
+    # Watchdog: sauberer Stopp vor Wall-Clock-Cap. Workflow setzt timeout-
+    # minutes auf MAX_RUNTIME_S/60 + ~10 für SIGTERM-freien exit 0.
+    max_runtime_s = int(os.getenv("MAX_RUNTIME_S", "5400").strip() or "5400")
 
     started = time.time()
     headers = {"User-Agent": "Home4U-Aggregator/0.1 (+https://home4u.ai/about)"}
@@ -102,8 +110,8 @@ def main() -> int:
         # Bei Timeout sind alle bis dahin geflushten Batches in der DB.
         BATCH_SIZE = int(os.getenv("STREAM_BATCH_SIZE", "50").strip() or "50")
         log.info(
-            "Phase 2: detail-fetch + streaming-upsert (rate-limit %.1fs, batch %d) …",
-            rate_limit, BATCH_SIZE,
+            "Phase 2: detail-fetch + streaming-upsert (rate-limit %.1fs, batch %d, watchdog %ds) …",
+            rate_limit, BATCH_SIZE, max_runtime_s,
         )
         detail_started = time.time()
         batch: list[ParsedListing] = []
@@ -112,6 +120,8 @@ def main() -> int:
         total_updated = 0
         total_deduped = 0
         total_failed = 0
+        aborted_reason: str | None = None
+        all_done = True
 
         def flush_batch() -> None:
             nonlocal batch, total_inserted, total_updated, total_deduped, total_failed
@@ -146,6 +156,15 @@ def main() -> int:
             batch = []
 
         for idx, sitemap_listing in enumerate(todo, start=1):
+            elapsed = time.time() - started
+            if elapsed > max_runtime_s:
+                aborted_reason = (
+                    f"MAX_RUNTIME_S={max_runtime_s}s erreicht nach {elapsed:.0f}s "
+                    f"— sauberer Stopp bei Listing {idx}/{len(todo)}"
+                )
+                log.warning(aborted_reason)
+                all_done = False
+                break
             p = fetch_and_parse(client, sitemap_listing)
             if p is not None:
                 batch.append(p)
@@ -159,7 +178,7 @@ def main() -> int:
                 )
             time.sleep(rate_limit)
 
-        # Final flush für den Rest
+        # Final flush für den Rest (auch bei Watchdog-Stopp — Batch persistieren)
         flush_batch()
         log.info(
             "Detail+Upsert-Phase fertig: %d parsed, %d inserted, %d updated, "
@@ -168,12 +187,24 @@ def main() -> int:
             total_failed, time.time() - detail_started,
         )
 
-    if not dry_run:
+    # mark_stale nur wenn ALLE todo-Listings erreicht — sonst markieren wir
+    # Listings als stale, die der nächste Run noch nicht abarbeiten konnte.
+    if dry_run:
+        log.info("DRY_RUN — kein mark_stale.")
+    elif all_done:
         log.info("Mark stale (>3d unseen) …")
         stale = mark_stale_old_listings(stale_days=3)
         log.info("Stale-marked: %d", stale)
+    else:
+        log.warning("mark_stale übersprungen — Lauf nicht vollständig (%s)", aborted_reason or "siehe Errors")
 
-    log.info("Crawl-Ende: %.1fs total", time.time() - started)
+    log.info(
+        "RESULT: ok=%s parsed=%d inserted=%d updated=%d deduped=%d failed=%d elapsed=%.1fs aborted=%s",
+        "true" if all_done else "partial",
+        total_parsed, total_inserted, total_updated, total_deduped, total_failed,
+        time.time() - started,
+        aborted_reason or "",
+    )
     return 0
 
 

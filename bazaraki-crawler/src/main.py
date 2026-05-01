@@ -1,4 +1,18 @@
-"""Entry-Point: orchestriert robots.txt → Crawl aller Cities → Bulk-Upsert."""
+"""Entry-Point: orchestriert robots.txt → Crawl pro (city, type, subtype) → Streaming-Upsert.
+
+Streaming-Architektur (analog index-crawler/cre-crawler):
+
+  Pro Subtype-Tupel: List → Drill (nur neue) → pHash (nur neue) → Upsert direkt.
+  Keine "alles am Ende"-Phase mehr — bei Job-Timeout sind alle bis dahin
+  abgearbeiteten Subtypes persistiert. Vorgängerversion verlor bei 5h50min-
+  Timeout den kompletten Lauf, weil der Bulk-Upsert das letzte Statement war.
+
+Watchdog: MAX_RUNTIME_S (default 4h) stoppt vor dem Subtype-Loop, sobald die
+Wall-Clock das Budget überschreitet. Workflow-timeout sollte MAX_RUNTIME_S +
+~10min sein, damit Python sauber exit 0 liefert statt SIGTERM. mark_stale
+läuft nur wenn ALLE Subtypes durch sind — ein abgebrochener Lauf darf nicht
+27k Listings als stale markieren, nur weil Famagusta nicht mehr erreicht wurde.
+"""
 from __future__ import annotations
 
 import logging
@@ -9,7 +23,7 @@ from collections import defaultdict
 
 from dotenv import load_dotenv
 
-from .config import PROPERTY_SUBTYPES_BY_TYPE, RATE_LIMIT_SECONDS, selected_cities, selected_types
+from .config import PROPERTY_SUBTYPES_BY_TYPE, RATE_LIMIT_SECONDS, env_int, selected_cities, selected_types
 from .crawler import RawListing, crawl_city, crawl_detail, fetch_disallowed_paths, with_browser
 from .supabase_writer import (
     fetch_already_drilled_external_ids,
@@ -51,149 +65,187 @@ def main() -> int:
     disallowed = fetch_disallowed_paths()
     log.info("Disallow-Pfade: %d", len(disallowed))
 
-    started = time.time()
-    all_items: list[RawListing] = []
-    per_city_counts: dict[tuple[str, str], int] = defaultdict(int)
-
     skip_details = os.getenv("SKIP_DETAILS") == "1"
     force_full_drill = os.getenv("FORCE_FULL_DRILL") == "1"
+    skip_phash = os.getenv("SKIP_PHASH") == "1"
+    force_rephash = os.getenv("FORCE_REPHASH") == "1"
+    dry_run = os.getenv("DRY_RUN") == "1"
+
+    # Watchdog: stoppt vor dem nächsten Subtype, wenn Wall-Clock das Budget
+    # überschreitet. Default 4h — gibt dem Workflow 240min Headroom unter dem
+    # GH-Free-Cap (350) für sauberen exit 0.
+    max_runtime_s = env_int("MAX_RUNTIME_S", 240 * 60)
+    log.info("MAX_RUNTIME_S=%ds (~%.1fh)", max_runtime_s, max_runtime_s / 3600.0)
+
+    # Sets einmal am Anfang ziehen — danach lokal mitführen, damit nachfolgende
+    # Subtypes nicht doppelt drillen/hashen wenn ein Listing in mehreren City-
+    # Subtype-Buckets auftaucht (passiert bei border-Locations selten, schadet
+    # aber nicht).
+    if skip_details or force_full_drill:
+        drilled_ids: set[str] = set()
+    else:
+        log.info("Frage bereits gedrillte external_ids ab …")
+        drilled_ids = fetch_already_drilled_external_ids()
+        log.info("Schon gedrillt: %d", len(drilled_ids))
+
+    if skip_phash or force_rephash:
+        phashed_ids: set[str] = set()
+    else:
+        log.info("Frage bereits gehashte external_ids ab …")
+        phashed_ids = fetch_already_phashed_external_ids()
+        log.info("Schon gehasht: %d", len(phashed_ids))
+
+    started = time.time()
+    grand_totals = {"inserted": 0, "updated": 0, "deduped": 0, "failed": 0, "subtypes": 0, "items": 0}
+    per_city_counts: dict[tuple[str, str], int] = defaultdict(int)
+    all_subtypes_done = True
+    aborted_reason: str | None = None
+
+    plan = [(c, t, s) for c in cities for t in types for s in PROPERTY_SUBTYPES_BY_TYPE[t]]
+    log.info("Streaming-Plan: %d (city, type, subtype)-Tupel", len(plan))
 
     with with_browser() as p:
         browser = p.chromium.launch(headless=True)
         try:
-            for city in cities:
-                for listing_type in types:
-                    for subtype in PROPERTY_SUBTYPES_BY_TYPE[listing_type]:
-                        items = list(crawl_city(browser, city, listing_type, subtype, disallowed))
-                        per_city_counts[(city.display, listing_type)] += len(items)
-                        all_items.extend(items)
-
-            list_done = time.time() - started
-            log.info("List-Phase fertig: %d items in %.1fs", len(all_items), list_done)
-
-            # Detail-Drilling: pro Listing district + size_sqm + Bilder + chars holen.
-            # Inkrementell: nur Listings drillen, deren external_id noch NICHT in der
-            # DB als "drilled" markiert ist (district oder size_sqm gesetzt).
-            # Spart bei 30k bestehenden Listings ~25h pro Lauf.
-            # FORCE_FULL_DRILL=1 → ignoriert die Filter, drillt alles (für Reparatur-
-            # Läufe oder wenn Bazaraki-Felder sich geändert haben).
-            if skip_details:
-                log.info("SKIP_DETAILS=1 — Detail-Drilling übersprungen.")
-            else:
-                if force_full_drill:
-                    items_to_drill = all_items
-                    log.info(
-                        "FORCE_FULL_DRILL=1 — drille alle %d Listings ohne Skip.",
-                        len(items_to_drill),
+            for city, listing_type, subtype in plan:
+                elapsed = time.time() - started
+                if elapsed > max_runtime_s:
+                    aborted_reason = (
+                        f"MAX_RUNTIME_S={max_runtime_s}s erreicht nach {elapsed:.0f}s "
+                        f"— sauberer Stopp vor {city.display}/{listing_type}/{subtype}"
                     )
+                    log.warning(aborted_reason)
+                    all_subtypes_done = False
+                    break
+
+                tag = f"{city.display}/{listing_type}/{subtype}"
+                log.info("=== Subtype %s (elapsed %.0fs) ===", tag, elapsed)
+                try:
+                    items = list(crawl_city(browser, city, listing_type, subtype, disallowed))
+                except Exception as e:
+                    log.exception("List-Phase für %s gecrasht: %s — überspringe Subtype", tag, e)
+                    all_subtypes_done = False
+                    continue
+
+                per_city_counts[(city.display, listing_type)] += len(items)
+                grand_totals["items"] += len(items)
+                if not items:
+                    log.info("  %s: 0 items", tag)
+                    grand_totals["subtypes"] += 1
+                    continue
+
+                # Drill: nur neue (oder force_full_drill)
+                if not skip_details:
+                    if force_full_drill:
+                        to_drill = items
+                    else:
+                        to_drill = [it for it in items if it.external_id not in drilled_ids]
+                    if to_drill:
+                        log.info("  drill: %d/%d neue (rate-limit %ds)", len(to_drill), len(items), RATE_LIMIT_SECONDS)
+                        drill_started = time.time()
+                        ok = 0
+                        for idx, it in enumerate(to_drill, start=1):
+                            try:
+                                crawl_detail(browser, it)
+                            except Exception as e:
+                                log.warning("    drill-fail %s: %s", it.external_id, e)
+                                continue
+                            if it.district or it.size_sqm:
+                                ok += 1
+                            drilled_ids.add(it.external_id)
+                            if idx % 25 == 0:
+                                log.info(
+                                    "    drill-progress %d/%d (ok %d, %.1fs)",
+                                    idx, len(to_drill), ok, time.time() - drill_started,
+                                )
+                            time.sleep(RATE_LIMIT_SECONDS)
+                        log.info("  drill: %d/%d enriched in %.1fs", ok, len(to_drill), time.time() - drill_started)
+
+                # pHash: nur neue (oder force_rephash)
+                if not skip_phash:
+                    from .dedup import compute_phash_from_url
+                    if force_rephash:
+                        phash_candidates = [it for it in items if it.cover_phash is None]
+                    else:
+                        phash_candidates = [
+                            it for it in items
+                            if it.cover_phash is None and it.external_id not in phashed_ids
+                        ]
+                    if phash_candidates:
+                        phash_started = time.time()
+                        phash_ok = 0
+                        for it in phash_candidates:
+                            cover = (it.media[0] if it.media else it.image_url)
+                            if not cover:
+                                continue
+                            try:
+                                ph = compute_phash_from_url(cover)
+                            except Exception as e:
+                                log.warning("    phash-fail %s: %s", it.external_id, e)
+                                continue
+                            if ph is not None:
+                                it.cover_phash = ph
+                                phashed_ids.add(it.external_id)
+                                phash_ok += 1
+                        log.info(
+                            "  phash: %d/%d in %.1fs",
+                            phash_ok, len(phash_candidates), time.time() - phash_started,
+                        )
+
+                # Streaming-Upsert: dieses Subtype sofort persistieren
+                if dry_run:
+                    log.info("  DRY_RUN — kein Upsert (sample %s)", items[0].external_id)
                 else:
-                    log.info("Frage bereits gedrillte external_ids ab …")
-                    drilled_ids = fetch_already_drilled_external_ids()
-                    log.info("Schon gedrillt: %d", len(drilled_ids))
-                    items_to_drill = [
-                        item for item in all_items if item.external_id not in drilled_ids
-                    ]
-                    log.info(
-                        "Detail-Drill: %d neue von %d Items (Rest schon enriched)",
-                        len(items_to_drill), len(all_items),
-                    )
+                    try:
+                        result = upsert_listings(items)
+                        grand_totals["inserted"] += int(result.get("inserted", 0))
+                        grand_totals["updated"] += int(result.get("updated", 0))
+                        grand_totals["deduped"] += int(result.get("deduped", 0))
+                        grand_totals["failed"] += len(result.get("failed", []) or [])
+                        log.info(
+                            "  flush: ins=%d upd=%d dedup=%d fail=%d (cum %d/%d/%d/%d)",
+                            result.get("inserted", 0), result.get("updated", 0),
+                            result.get("deduped", 0), len(result.get("failed", []) or []),
+                            grand_totals["inserted"], grand_totals["updated"],
+                            grand_totals["deduped"], grand_totals["failed"],
+                        )
+                    except Exception as e:
+                        log.exception("Upsert für %s gecrasht: %s", tag, e)
+                        all_subtypes_done = False
+                        continue
 
-                if not items_to_drill:
-                    log.info("Keine neuen Listings zu drillen — überspringe Detail-Phase.")
-                else:
-                    log.info(
-                        "Detail-Drilling für %d Listings (rate-limit %ds) …",
-                        len(items_to_drill), RATE_LIMIT_SECONDS,
-                    )
-                    detail_started = time.time()
-                    ok = 0
-                    for idx, item in enumerate(items_to_drill, start=1):
-                        crawl_detail(browser, item)
-                        if item.district or item.size_sqm:
-                            ok += 1
-                        if idx % 25 == 0:
-                            log.info(
-                                "  detail-progress %d/%d (ok %d, %.1fs)",
-                                idx, len(items_to_drill), ok, time.time() - detail_started,
-                            )
-                        time.sleep(RATE_LIMIT_SECONDS)
-                    log.info(
-                        "Detail-Phase fertig: %d/%d enriched in %.1fs",
-                        ok, len(items_to_drill), time.time() - detail_started,
-                    )
+                grand_totals["subtypes"] += 1
         finally:
             browser.close()
 
-    log.info("Crawl-Ende: %d items in %.1fs", len(all_items), time.time() - started)
+    log.info("Crawl-Ende: %d items in %.1fs (subtypes %d/%d)",
+             grand_totals["items"], time.time() - started,
+             grand_totals["subtypes"], len(plan))
     for (city, t), n in sorted(per_city_counts.items()):
         log.info("  %s/%s: %d", city, t, n)
 
-    if not all_items:
-        log.warning("Keine Items gefunden — DB nicht geändert.")
-        return 0
-
-    # pHash-Berechnung für Cover-Bilder (Dedup-Signal). INKREMENTELL:
-    # nur für Items deren external_id noch keinen image_hashes-Eintrag hat.
-    # Ohne diesen Filter würde der Daily-Crawl bei 27k bestehenden Items
-    # ~4h reine Image-Downloads verursachen → Job-Timeout.
-    # FORCE_REPHASH=1 ignoriert den Filter (für Reparatur-Läufe).
-    skip_phash = os.getenv("SKIP_PHASH") == "1"
-    force_rephash = os.getenv("FORCE_REPHASH") == "1"
-    if skip_phash:
-        log.info("SKIP_PHASH=1 — pHash-Berechnung übersprungen.")
+    # mark_stale nur bei vollständigem Lauf — sonst markieren wir Cities als
+    # stale, die im aktuellen Run nie erreicht wurden (Watchdog-Stop, Crash).
+    if dry_run:
+        log.info("DRY_RUN — kein mark_stale.")
+    elif all_subtypes_done:
+        log.info("Mark stale (>3d unseen) …")
+        stale = mark_stale_old_listings(stale_days=3)
+        log.info("Stale-marked: %d", stale)
     else:
-        from .dedup import compute_phash_from_url
-        if force_rephash:
-            phash_candidates = [it for it in all_items if it.cover_phash is None]
-            log.info("FORCE_REPHASH=1 — pHash für alle %d Items", len(phash_candidates))
-        else:
-            log.info("Frage bereits gehashte external_ids ab …")
-            phashed_ids = fetch_already_phashed_external_ids()
-            log.info("Schon gehasht: %d", len(phashed_ids))
-            phash_candidates = [
-                it for it in all_items
-                if it.cover_phash is None and it.external_id not in phashed_ids
-            ]
-            log.info(
-                "pHash: %d neue von %d Items (Rest schon gehasht)",
-                len(phash_candidates), len(all_items),
-            )
+        log.warning(
+            "mark_stale übersprungen — Lauf nicht vollständig (%s)",
+            aborted_reason or "siehe Subtype-Errors oben",
+        )
 
-        if not phash_candidates:
-            log.info("Keine Items für pHash — überspringe Phase.")
-        else:
-            phash_started = time.time()
-            phash_ok = 0
-            for idx, item in enumerate(phash_candidates, start=1):
-                cover = (item.media[0] if item.media else item.image_url)
-                if not cover:
-                    continue
-                ph = compute_phash_from_url(cover)
-                if ph is not None:
-                    item.cover_phash = ph
-                    phash_ok += 1
-                if idx % 100 == 0:
-                    log.info(
-                        "  phash-progress %d/%d (ok %d, %.1fs)",
-                        idx, len(phash_candidates), phash_ok, time.time() - phash_started,
-                    )
-            log.info(
-                "pHash-Phase fertig: %d/%d in %.1fs",
-                phash_ok, len(phash_candidates), time.time() - phash_started,
-            )
-
-    if os.getenv("DRY_RUN") == "1":
-        log.info("DRY_RUN=1 — kein Supabase-Write.")
-        return 0
-
-    log.info("Bulk-Upsert nach Supabase …")
-    result = upsert_listings(all_items)
-    log.info("Upsert: %s", result)
-
-    log.info("Mark stale (>3d unseen) …")
-    stale = mark_stale_old_listings(stale_days=3)
-    log.info("Stale-marked: %d", stale)
-
+    log.info(
+        "RESULT: ok=%s items=%d inserted=%d updated=%d deduped=%d failed=%d subtypes=%d/%d aborted=%s",
+        "true" if all_subtypes_done else "partial",
+        grand_totals["items"], grand_totals["inserted"], grand_totals["updated"],
+        grand_totals["deduped"], grand_totals["failed"],
+        grand_totals["subtypes"], len(plan),
+        aborted_reason or "",
+    )
     return 0
 
 
