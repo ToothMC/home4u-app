@@ -230,31 +230,4 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: "escalate_to_human",
-    description:
-      "WARNUNG: Es gibt aktuell KEIN aktives Moderations-Team — dieses Tool ist nur ein Audit-Eintrag in der Queue. NIEMALS für technische Probleme nutzen (Foto-Upload, Listing-Erstellung, Suchprofil, Match-Anfrage, Login-Probleme — die löst du selbst mit deinen anderen Tools, oder du sagst dem User klar dass es gerade nicht geht). NUR aufrufen bei: (a) Betrug/Scam-Verdacht, (b) Diskriminierungs-Verdacht, (c) Belästigung, (d) rechtlichen Fragen die du nicht beantworten darfst, oder (e) wenn der Nutzer explizit nach einem Menschen fragt. Antwort an den User danach NICHT als 'Team meldet sich' framen — sondern ehrlich: 'Ich habe das markiert, einer der Gründer schaut drauf.'",
-    input_schema: {
-      type: "object",
-      properties: {
-        reason: {
-          type: "string",
-          enum: [
-            "user_request",
-            "scam_suspicion",
-            "discrimination",
-            "legal_question",
-            "out_of_scope",
-            "other",
-          ],
-        },
-        notes: {
-          type: "string",
-          description: "Kurze Zusammenfassung für den Moderator",
-        },
-      },
-      required: ["reason"],
-      additionalProperties: false,
-    },
-  },
 ];
