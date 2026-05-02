@@ -98,10 +98,13 @@ export type MatchCardData = {
    *  City/Type/Property-Type-Gruppe. Wenn ≥2 → Karte zeigt einen Hinweis
    *  „+N weitere ähnliche". Vermutete Re-Listings vom selben Broker. */
   clusterSize?: number;
-  /** Variante A: günstigster Preis im Cluster (= dieselbe Wohnung von
-   *  mehreren Anbietern). Wenn < price → Card zeigt „ab €X · N Anbieter". */
+  /** Variante B (Transparent Cluster): günstigster Preis im pHash-Cluster
+   *  (= vermutlich gleiche Wohnung über mehrere Quellen). Wenn < price
+   *  → kleiner Hint „günstiger ab €X bei N anderen". Hauptpreis bleibt
+   *  IMMER der eigene Preis dieses Listings — kein Hiding mehr. */
   minClusterPrice?: number;
-  /** Anzahl Anbieter desselben Cluster-Masters. ≥2 → Mehrfach-Anbieter-Badge. */
+  /** Anzahl Listings im selben pHash-Cluster (eigenes Listing inkl.).
+   *  ≥2 → Hint anzeigen ("auch bei N anderen Anbietern"). */
   clusterOffersCount?: number;
 };
 
@@ -450,17 +453,23 @@ export function MatchCard({
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-2xl font-semibold leading-none">
-                  {data.minClusterPrice != null &&
-                  data.minClusterPrice < data.price
-                    ? `${t("matchCard.fromPrice")} ${formatPrice(data.minClusterPrice)}`
-                    : formatPrice(data.price)}
+                  {formatPrice(data.price)}
                   {data.type === "rent" && (
                     <span className="text-sm font-normal opacity-80"> {t("listing.price.perMonth")}</span>
                   )}
                 </div>
+                {/* Variante B: kein Hiding. Wenn dieses Listing NICHT der
+                    günstigste in seinem Cluster ist → "günstiger ab €X"-Hint.
+                    Wenn es DER günstigste ist und es weitere Anbieter gibt →
+                    "auch bei N anderen"-Hint. */}
                 {data.clusterOffersCount && data.clusterOffersCount > 1 && (
                   <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-500/90 text-amber-950 text-[10px] font-medium px-2 py-0.5">
-                    {tFormat(t("matchCard.providers"), { n: data.clusterOffersCount })}
+                    {data.minClusterPrice != null && data.minClusterPrice < data.price
+                      ? tFormat(t("matchCard.cheaperElsewhere"), {
+                          price: formatPrice(data.minClusterPrice),
+                          n: data.clusterOffersCount - 1,
+                        })
+                      : tFormat(t("matchCard.providers"), { n: data.clusterOffersCount })}
                   </div>
                 )}
                 <div className="mt-1 flex items-center gap-1 text-sm opacity-95">
