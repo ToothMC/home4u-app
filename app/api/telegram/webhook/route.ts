@@ -208,7 +208,10 @@ async function handleMessage(msg: Message): Promise<void> {
   // === Sophie blocking ======================================================
   // History aus DB laden, damit Sophie den Konversationsverlauf sieht
   // (sonst hält sie jeden Turn für den ersten und wiederholt den Disclaimer).
+  // Plus: alle Photos aus früheren Turns einsammeln, damit Sophie sie auch
+  // turn-übergreifend für create_listing / add_photos_to_listing nutzen kann.
   let history: { role: "user" | "assistant"; content: string }[] = [];
+  const historyPhotoUrls: string[] = [];
   if (identity.lastConversationId) {
     const loaded = await loadLastConversation({
       anonymousId: identity.anonymousId ?? undefined,
@@ -218,6 +221,9 @@ async function handleMessage(msg: Message): Promise<void> {
       history = loaded.messages
         .filter((m) => m.content && m.content.trim().length > 0)
         .map((m) => ({ role: m.role, content: m.content }));
+      for (const m of loaded.messages) {
+        if (m.mediaUrls?.length) historyPhotoUrls.push(...m.mediaUrls);
+      }
     }
   }
 
@@ -236,6 +242,11 @@ async function handleMessage(msg: Message): Promise<void> {
     { role: "user", content: userTurn },
   ];
 
+  // Alle bisher gesendeten Photos kombiniert (Cross-Turn-Memory) — dedup.
+  const allPhotoUrls = Array.from(
+    new Set([...historyPhotoUrls, ...mediaUrls])
+  );
+
   const result = await runSophieBlocking({
     channel: "telegram",
     userId: identity.userId ?? undefined,
@@ -243,7 +254,7 @@ async function handleMessage(msg: Message): Promise<void> {
     conversationId: identity.lastConversationId ?? undefined,
     messages: sophieMessages,
     preferredLanguage: locale,
-    attachedMedia: mediaUrls.map((url, i) => ({
+    attachedMedia: allPhotoUrls.map((url, i) => ({
       url,
       kind: "image" as const,
       name: `telegram-${i + 1}`,

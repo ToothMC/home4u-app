@@ -4,6 +4,8 @@ import { SOPHIE_PROMPT_VERSION } from "@/lib/sophie/system-prompt";
 export type HistoryMessage = {
   role: "user" | "assistant";
   content: string;
+  /** Media-URLs aus dem User-Turn (z.B. Telegram-Foto-Uploads in Supabase Storage). */
+  mediaUrls?: string[];
   toolCalls?: { id: string; name: string; input: string; result?: { ok: boolean; error?: string } }[];
 };
 
@@ -118,7 +120,7 @@ export async function loadLastConversation(params: {
 
   const { data: rows, error: msgErr } = await supabase
     .from("messages")
-    .select("role, content, tool_name, tool_input, tool_result, created_at")
+    .select("role, content, tool_name, tool_input, tool_result, media_urls, created_at")
     .eq("conversation_id", conv.id)
     .order("created_at", { ascending: true });
   if (msgErr) {
@@ -130,7 +132,12 @@ export async function loadLastConversation(params: {
   const messages: HistoryMessage[] = [];
   for (const r of rows ?? []) {
     if (r.role === "user") {
-      messages.push({ role: "user", content: r.content ?? "" });
+      const media = Array.isArray(r.media_urls) ? r.media_urls : [];
+      messages.push({
+        role: "user",
+        content: r.content ?? "",
+        mediaUrls: media.length > 0 ? media : undefined,
+      });
     } else if (r.role === "assistant") {
       messages.push({ role: "assistant", content: r.content ?? "" });
     } else if (r.role === "tool") {
