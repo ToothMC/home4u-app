@@ -560,14 +560,24 @@ def crawl_city(
     subtype: str,
     disallowed: list[str],
     max_pages: int = MAX_PAGES_PER_CITY,
+    deadline_at: float | None = None,
 ) -> Iterator[RawListing]:
     """Iteriert Pages für eine City+Type+Subtype-Kombination, yieldet RawListings.
 
     Liefert nur die Listenseiten-Daten — Detail-Drilling macht der Caller.
+
+    Wenn `deadline_at` (epoch-Sekunden) gesetzt ist, bricht die Pagination ab
+    sobald `time.time() > deadline_at`. Caller bekommt dann nur die bis dahin
+    extrahierten Items — Watchdog-Konsistenz mit drill/phash-Loops.
     """
     seen_external_ids: set[str] = set()
 
     for page_num in range(1, max_pages + 1):
+        if deadline_at is not None and time.time() > deadline_at:
+            log.warning("  list %s %s %s p%d: budget reached — stop pagination",
+                        city.display, listing_type, subtype, page_num)
+            return
+
         url = build_listing_url(city, listing_type, subtype, page=page_num)
         path = urllib.parse.urlparse(url).path
         if not is_path_allowed(path, disallowed):
