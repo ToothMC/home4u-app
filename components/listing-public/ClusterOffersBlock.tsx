@@ -54,7 +54,7 @@ export async function ClusterOffersBlock({
   const otherCount = offers.length - 1;
 
   return (
-    <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-3">
+    <section id="cluster-offers" className="rounded-2xl border bg-[var(--card)] p-4 space-y-3 scroll-mt-20">
       <div>
         <h2 className="text-base font-semibold">
           {otherCount === 1
