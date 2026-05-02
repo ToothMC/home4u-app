@@ -240,22 +240,31 @@ async function handleMessage(msg: Message): Promise<void> {
   });
 
   // === Telegram-spezifische Felder auf den persistierten User-Turn schreiben
-  // (run.ts kennt external_id/media/location nicht). Update statt Insert →
-  // keine Doppelung.
+  // (run.ts kennt external_id/media/location nicht). Two-Step:
+  // 1) jüngsten User-Turn ohne external_id finden
+  // 2) den per id updaten (.update().eq("id", …) ist garantiert supported,
+  //    .update().order().limit() ist es nicht)
   if (supabase && result.conversationId) {
-    await supabase
+    const { data: targetRow } = await supabase
       .from("messages")
-      .update({
-        external_id: externalId,
-        media_urls: mediaUrls,
-        location_lat: locationLat,
-        location_lng: locationLng,
-      })
+      .select("id")
       .eq("conversation_id", result.conversationId)
       .eq("role", "user")
       .is("external_id", null)
       .order("created_at", { ascending: false })
-      .limit(1);
+      .limit(1)
+      .maybeSingle();
+    if (targetRow?.id) {
+      await supabase
+        .from("messages")
+        .update({
+          external_id: externalId,
+          media_urls: mediaUrls,
+          location_lat: locationLat,
+          location_lng: locationLng,
+        })
+        .eq("id", targetRow.id);
+    }
   }
 
   // === Outbound an Telegram =================================================
