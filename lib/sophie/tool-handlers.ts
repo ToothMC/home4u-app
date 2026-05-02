@@ -502,13 +502,46 @@ const handlers: Record<string, Handler> = {
   },
 
   async escalate_to_human(input, ctx) {
+    // Server-Side Tool-Routing: technische Probleme (Foto, Listing, Match,
+    // Profil, Login) werden NICHT eskaliert — Sophie soll die richtigen
+    // Tools nutzen. Das Modell ignoriert manchmal die Prompt-Regel, daher
+    // wird hier hart abgewiesen.
+    const reason = String(input.reason ?? "");
+    const notes = String(input.notes ?? "").toLowerCase();
+    const technicalKeywords = [
+      "foto", "photo", "bild", "picture", "image",
+      "inserat", "listing", "anzeige",
+      "match", "treffer", "suche", "search profile", "suchprofil",
+      "login", "account", "passwort", "password",
+      "duplikat", "duplicate",
+    ];
+    const looksTechnical =
+      reason === "other" &&
+      technicalKeywords.some((k) => notes.includes(k));
+    const allowedReasons = ["scam_suspicion", "discrimination", "legal_question"];
+    const hardLockedTechnical =
+      !allowedReasons.includes(reason) &&
+      reason !== "user_request" &&
+      looksTechnical;
+
+    if (hardLockedTechnical) {
+      return {
+        ok: false,
+        error: "not_a_human_escalation_topic",
+        data: {
+          message:
+            "Foto-/Listing-/Match-/Profil-/Login-Themen sind keine Eskalations-Fälle. Nutze stattdessen create_listing (idempotent — bei Duplikat mergt es Fotos automatisch in das bestehende Listing) oder add_photos_to_listing (wenn du eine listing_id hast). Wenn ein Tool hart fehlschlägt: ehrlich an den User kommunizieren, NICHT eskalieren.",
+        },
+      };
+    }
+
     const supabase = createSupabaseServiceClient();
     if (supabase && ctx.conversationId) {
       const { error } = await supabase.from("moderation_queue").insert({
         conversation_id: ctx.conversationId,
         sophie_draft: JSON.stringify(input),
         prompt_version: "escalation",
-        tags: ["escalation", String(input.reason ?? "other")],
+        tags: ["escalation", reason || "other"],
       });
       if (error) console.error("[escalate] insert failed", error);
     }
@@ -517,7 +550,7 @@ const handlers: Record<string, Handler> = {
       data: {
         escalated: true,
         message:
-          "Ein Mensch meldet sich sobald das Moderations-Team im Co-Pilot-Modus live ist.",
+          "Ich habe das markiert — einer der Gründer schaut drauf. (Es gibt aktuell kein 24/7-Moderations-Team, also bitte dem Nutzer nicht 'Team meldet sich' sagen — sondern ehrlich 'ich hab's notiert'.)",
       },
     };
   },
