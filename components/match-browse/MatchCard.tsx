@@ -462,20 +462,11 @@ export function MatchCard({
                     günstigste in seinem Cluster ist → "günstiger ab €X"-Hint.
                     Wenn es DER günstigste ist und es weitere Anbieter gibt →
                     "auch bei N anderen"-Hint. */}
-                {data.clusterOffersCount && data.clusterOffersCount > 1 && (
-                  <Link
-                    href={`/listings/${data.id}#cluster-offers`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="pointer-events-auto mt-1 inline-flex items-center gap-1 rounded-full bg-amber-500/90 text-amber-950 text-[10px] font-medium px-2 py-0.5 hover:bg-amber-400 active:bg-amber-600 transition-colors"
-                  >
-                    {data.minClusterPrice != null && data.minClusterPrice < data.price
-                      ? tFormat(t("matchCard.cheaperElsewhere"), {
-                          price: formatPrice(data.minClusterPrice),
-                          n: data.clusterOffersCount - 1,
-                        })
-                      : tFormat(t("matchCard.providers"), { n: data.clusterOffersCount - 1 })}
-                  </Link>
-                )}
+                {/* Cluster-Annotation deaktiviert — pHash-Cluster waren
+                    unzuverlässig (Stockfotos matchen verschiedene Apartments,
+                    Legacy-Cluster spannen sogar mehrere Städte). Reaktivieren
+                    erst wenn Match-Signal verlässlich (Phone+Size oder
+                    identischer Title), nicht pHash-only. */}
                 <div className="mt-1 flex items-center gap-1 text-sm opacity-95">
                   <MapPin className="size-3" />
                   {data.location_district

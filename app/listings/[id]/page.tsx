@@ -20,7 +20,6 @@ import {
   SourceLinkButton,
   NoContactFallback,
 } from "@/components/listing-public/SourceLinkButton";
-import { ClusterOffersBlock } from "@/components/listing-public/ClusterOffersBlock";
 import { loadPublicListing } from "@/lib/repo/public-listing";
 import { getT } from "@/lib/i18n/server";
 import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
@@ -219,7 +218,7 @@ export default async function PublicListingPage({
             </section>
           )}
 
-          <ClusterOffersBlock canonicalListingId={listing.id} />
+          {/* ClusterOffersBlock deaktiviert — pHash-Cluster waren unzuverlässig. */}
 
           {listing.features.length > 0 && (
             <section id="features" className="space-y-2">
