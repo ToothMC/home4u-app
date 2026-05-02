@@ -34,6 +34,7 @@ import { TG_TEXT } from "@/lib/telegram/i18n";
 import { languagePickerKeyboard, parseCallbackData } from "@/lib/telegram/keyboards";
 import { downloadAndStoreTelegramFile } from "@/lib/telegram/media";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { loadLastConversation } from "@/lib/repo/conversations";
 import type { Update, Message } from "grammy/types";
 
 export const runtime = "nodejs";
@@ -205,21 +206,35 @@ async function handleMessage(msg: Message): Promise<void> {
   }
 
   // === Sophie blocking ======================================================
-  const sophieMessages = text
-    ? [{ role: "user" as const, content: text }]
-    : mediaUrls.length > 0
-      ? [
-          {
-            role: "user" as const,
-            content:
-              locale === "de"
-                ? `(Der Nutzer hat ${mediaUrls.length} Foto(s) geschickt.)`
-                : `(User sent ${mediaUrls.length} photo(s).)`,
-          },
-        ]
-      : [];
+  // History aus DB laden, damit Sophie den Konversationsverlauf sieht
+  // (sonst hält sie jeden Turn für den ersten und wiederholt den Disclaimer).
+  let history: { role: "user" | "assistant"; content: string }[] = [];
+  if (identity.lastConversationId) {
+    const loaded = await loadLastConversation({
+      anonymousId: identity.anonymousId ?? undefined,
+      userId: identity.userId ?? undefined,
+    });
+    if (loaded) {
+      history = loaded.messages
+        .filter((m) => m.content && m.content.trim().length > 0)
+        .map((m) => ({ role: m.role, content: m.content }));
+    }
+  }
 
-  if (sophieMessages.length === 0) return;
+  const userTurn = text
+    ? text
+    : mediaUrls.length > 0
+      ? locale === "de"
+        ? `(Der Nutzer hat ${mediaUrls.length} Foto(s) geschickt.)`
+        : `(User sent ${mediaUrls.length} photo(s).)`
+      : null;
+
+  if (!userTurn) return;
+
+  const sophieMessages: { role: "user" | "assistant"; content: string }[] = [
+    ...history,
+    { role: "user", content: userTurn },
+  ];
 
   const result = await runSophieBlocking({
     channel: "telegram",

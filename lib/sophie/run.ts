@@ -93,12 +93,18 @@ const CHANNEL_CONTEXT_HINT: Record<SophieChannel, string> = {
 - Plain text with Telegram-Markdown (* bold, _ italic) — NO Markdown tables
 - Max ~1000 chars per message
 - Buttons are rendered by the Telegram adapter from your tool results (match cards, quick replies)
-- If this is the FIRST assistant message in the conversation (no previous assistant turn in history), start with an AI disclaimer in the USER'S LANGUAGE. Examples by language:
+
+AI DISCLAIMER (ONLY ONCE per conversation — read carefully):
+- Look at the message history below. Count assistant turns.
+- If there is ZERO previous assistant message → this IS the first reply → start with the AI disclaimer in the user's language.
+- If there is at least one previous assistant message → DO NOT include the disclaimer again. NEVER. Just answer the user's question directly.
+- Disclaimer phrasings:
     EN: "I'm Sophie, the AI assistant from Home4U."
     DE: "Ich bin Sophie, die KI-Assistentin von Home4U."
     RU: "Я Sophie, AI-ассистент Home4U."
     EL: "Είμαι η Sophie, η ΑΙ βοηθός της Home4U."
-- LANGUAGE PRIORITY: the language of the LAST USER TURN wins absolutely. Even if <user_language> says otherwise, respond in the language the user just wrote in. The user_language hint is only a fallback for the very first turn when the user hasn't written anything yet.`,
+
+LANGUAGE PRIORITY: the language of the LAST USER TURN wins absolutely. Even if <user_language> says otherwise, respond in the language the user just wrote in. The user_language hint is only a fallback for the very first turn when the user hasn't written anything yet.`,
 };
 
 export async function runSophieBlocking(
