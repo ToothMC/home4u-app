@@ -469,7 +469,7 @@ export function MatchCard({
                           price: formatPrice(data.minClusterPrice),
                           n: data.clusterOffersCount - 1,
                         })
-                      : tFormat(t("matchCard.providers"), { n: data.clusterOffersCount })}
+                      : tFormat(t("matchCard.providers"), { n: data.clusterOffersCount - 1 })}
                   </div>
                 )}
                 <div className="mt-1 flex items-center gap-1 text-sm opacity-95">

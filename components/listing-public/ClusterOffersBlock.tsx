@@ -43,7 +43,7 @@ export async function ClusterOffersBlock({
   if (!supabase) return null;
 
   const { data, error } = await supabase.rpc("get_cluster_offers", {
-    p_canonical_id: canonicalListingId,
+    p_listing_id: canonicalListingId,
   });
   if (error || !data) return null;
 
