@@ -186,27 +186,19 @@ async function handleMessage(msg: Message): Promise<void> {
     locationLng = msg.location.longitude;
   }
 
-  // === Inbound persistieren =================================================
-  // (vor Sophie-Call, damit DB die Idempotenz über external_id sicherstellen kann)
+  // === Inbound-Idempotenz ===================================================
+  // Telegram retried bei Webhook-Failures. Wir prüfen VOR dem Sophie-Call,
+  // ob dieser external_id schon mal verarbeitet wurde — so verbrennen wir
+  // bei Retries kein Sonnet-Token und antworten nicht doppelt.
   const supabase = createSupabaseServiceClient();
   const externalId = `${msg.chat.id}:${msg.message_id}`;
-  if (supabase && identity.lastConversationId) {
-    const inserted = await supabase
+  if (supabase) {
+    const { data: existing } = await supabase
       .from("messages")
-      .insert({
-        conversation_id: identity.lastConversationId,
-        role: "user",
-        content: text,
-        external_id: externalId,
-        media_urls: mediaUrls,
-        location_lat: locationLat,
-        location_lng: locationLng,
-      })
       .select("id")
+      .eq("external_id", externalId)
       .maybeSingle();
-    // Wenn unique-Constraint greift (Telegram-Retry), dedup durch fehlende
-    // Insert-Zeile sichtbar — wir antworten nicht doppelt.
-    if (!inserted.data && inserted.error?.code === "23505") {
+    if (existing) {
       console.info("[telegram-webhook] dedup", externalId);
       return;
     }
@@ -241,17 +233,37 @@ async function handleMessage(msg: Message): Promise<void> {
       kind: "image" as const,
       name: `telegram-${i + 1}`,
     })),
+    // run.ts legt die Conversation an + persistiert User+Assistant. Wir
+    // ergänzen nur Telegram-spezifische Felder (external_id, media, location)
+    // im Update-Schritt unten.
+    persistUserTurn: true,
   });
+
+  // === Telegram-spezifische Felder auf den persistierten User-Turn schreiben
+  // (run.ts kennt external_id/media/location nicht). Update statt Insert →
+  // keine Doppelung.
+  if (supabase && result.conversationId) {
+    await supabase
+      .from("messages")
+      .update({
+        external_id: externalId,
+        media_urls: mediaUrls,
+        location_lat: locationLat,
+        location_lng: locationLng,
+      })
+      .eq("conversation_id", result.conversationId)
+      .eq("role", "user")
+      .is("external_id", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+  }
 
   // === Outbound an Telegram =================================================
   if (result.assistantText) {
     await sendText(msg.chat.id, result.assistantText);
-  } else if (!result.assistantText) {
+  } else {
     await sendText(msg.chat.id, TG_TEXT.errorGeneric(locale));
   }
-
-  // Persist outbound external_id (eigene Telegram-Message-ID kommt zurück
-  // von sendMessage; wir loggen das später bei Bedarf)
 }
 
 // ============================================================================

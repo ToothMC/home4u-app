@@ -52,6 +52,13 @@ export type SophieRunInput = {
 
   /** Optional: Anhänge (URLs, Telegram lädt vorher zu Storage). */
   attachedMedia?: { url: string; kind: "image" | "video"; name: string }[];
+
+  /**
+   * Default true. Setze auf false, wenn der Caller den User-Turn bereits
+   * selbst persistiert hat (z.B. Telegram-Webhook mit external_id für
+   * Idempotenz) — verhindert Doppel-Inserts.
+   */
+  persistUserTurn?: boolean;
 };
 
 export type SophieToolCallSummary = {
@@ -81,12 +88,17 @@ const LANG_NAME: Record<string, string> = {
 };
 
 const CHANNEL_CONTEXT_HINT: Record<SophieChannel, string> = {
-  web: `Du antwortest auf Kanal: web. Voller Markdown, Tool-Cards, längere Antworten OK.`,
-  telegram: `Du antwortest auf Kanal: telegram.
-- Plain-Text mit Telegram-Markdown (* fett, _ kursiv) — KEINE Markdown-Tabellen
-- Maximal ~1000 Zeichen pro Nachricht
-- Buttons rendert der Telegram-Adapter aus deinen Tool-Results (Match-Karten, Quick-Replies)
-- Wenn dies die ERSTE Sophie-Nachricht in dieser Konversation ist (keine vorherige assistant-Nachricht im Verlauf), beginne mit einem KI-Disclaimer: "Ich bin Sophie, die KI-Assistentin von Home4U." (in der User-Sprache)`,
+  web: `Channel: web. Full Markdown, tool cards, longer responses OK.`,
+  telegram: `Channel: telegram.
+- Plain text with Telegram-Markdown (* bold, _ italic) — NO Markdown tables
+- Max ~1000 chars per message
+- Buttons are rendered by the Telegram adapter from your tool results (match cards, quick replies)
+- If this is the FIRST assistant message in the conversation (no previous assistant turn in history), start with an AI disclaimer in the USER'S LANGUAGE. Examples by language:
+    EN: "I'm Sophie, the AI assistant from Home4U."
+    DE: "Ich bin Sophie, die KI-Assistentin von Home4U."
+    RU: "Я Sophie, AI-ассистент Home4U."
+    EL: "Είμαι η Sophie, η ΑΙ βοηθός της Home4U."
+- LANGUAGE PRIORITY: the language of the LAST USER TURN wins absolutely. Even if <user_language> says otherwise, respond in the language the user just wrote in. The user_language hint is only a fallback for the very first turn when the user hasn't written anything yet.`,
 };
 
 export async function runSophieBlocking(
@@ -118,9 +130,11 @@ export async function runSophieBlocking(
     }
   }
 
-  // 2) Letzte User-Message persistieren
+  // 2) Letzte User-Message persistieren — außer der Caller hat sie schon selbst
+  // gespeichert (Telegram-Webhook mit external_id). Default an für Web-Pfad.
+  const persistUser = input.persistUserTurn !== false;
   const lastUser = [...input.messages].reverse().find((m) => m.role === "user");
-  if (conversationId && lastUser) {
+  if (persistUser && conversationId && lastUser) {
     await appendMessage(conversationId, {
       role: "user",
       content: lastUser.content,
