@@ -7,11 +7,17 @@ Streaming-Architektur (analog index-crawler/cre-crawler):
   abgearbeiteten Subtypes persistiert. Vorgängerversion verlor bei 5h50min-
   Timeout den kompletten Lauf, weil der Bulk-Upsert das letzte Statement war.
 
-Watchdog: MAX_RUNTIME_S (default 4h) stoppt vor dem Subtype-Loop, sobald die
-Wall-Clock das Budget überschreitet. Workflow-timeout sollte MAX_RUNTIME_S +
-~10min sein, damit Python sauber exit 0 liefert statt SIGTERM. mark_stale
-läuft nur wenn ALLE Subtypes durch sind — ein abgebrochener Lauf darf nicht
-27k Listings als stale markieren, nur weil Famagusta nicht mehr erreicht wurde.
+Watchdog: MAX_RUNTIME_S (default 4h) wird via `deadline_at` an alle inneren
+Loops weitergereicht — List-Pagination, Drill und pHash brechen ab sobald die
+Wall-Clock das Budget überschreitet, NICHT erst zwischen Subtypes. Ein einzelner
+Subtype kann sonst 15-20min laufen und das Budget um Stunden sprengen, bevor
+die äußere Schleife wieder ans Steuer kommt → GH-timeout-minutes killt SIGTERM
+statt sauberem exit 0 → Run rot. Mit Inner-Loop-Watchdog: Abbruch innerhalb
+weniger Sekunden, partielles Flush, exit 0 → Run grün (auch wenn ok=partial).
+
+mark_stale läuft nur wenn ALLE Subtypes durch sind — ein abgebrochener Lauf
+darf nicht 27k Listings als stale markieren, nur weil Famagusta nicht mehr
+erreicht wurde.
 """
 from __future__ import annotations
 
@@ -96,6 +102,7 @@ def main() -> int:
         log.info("Schon gehasht: %d", len(phashed_ids))
 
     started = time.time()
+    deadline_at = started + max_runtime_s
     grand_totals = {"inserted": 0, "updated": 0, "deduped": 0, "failed": 0, "subtypes": 0, "items": 0}
     per_city_counts: dict[tuple[str, str], int] = defaultdict(int)
     all_subtypes_done = True
@@ -109,7 +116,7 @@ def main() -> int:
         try:
             for city, listing_type, subtype in plan:
                 elapsed = time.time() - started
-                if elapsed > max_runtime_s:
+                if time.time() > deadline_at:
                     aborted_reason = (
                         f"MAX_RUNTIME_S={max_runtime_s}s erreicht nach {elapsed:.0f}s "
                         f"— sauberer Stopp vor {city.display}/{listing_type}/{subtype}"
@@ -119,9 +126,11 @@ def main() -> int:
                     break
 
                 tag = f"{city.display}/{listing_type}/{subtype}"
-                log.info("=== Subtype %s (elapsed %.0fs) ===", tag, elapsed)
+                log.info("=== Subtype %s (elapsed %.0fs, budget left %.0fs) ===",
+                         tag, elapsed, deadline_at - time.time())
                 try:
-                    items = list(crawl_city(browser, city, listing_type, subtype, disallowed))
+                    items = list(crawl_city(browser, city, listing_type, subtype, disallowed,
+                                            deadline_at=deadline_at))
                 except Exception as e:
                     log.exception("List-Phase für %s gecrasht: %s — überspringe Subtype", tag, e)
                     all_subtypes_done = False
@@ -132,8 +141,17 @@ def main() -> int:
                 if not items:
                     log.info("  %s: 0 items", tag)
                     grand_totals["subtypes"] += 1
+                    # List-Phase brach möglicherweise wegen Budget ab — nicht weitermachen.
+                    if time.time() > deadline_at:
+                        aborted_reason = (
+                            f"MAX_RUNTIME_S={max_runtime_s}s während List-Phase {tag}"
+                        )
+                        log.warning(aborted_reason)
+                        all_subtypes_done = False
+                        break
                     continue
 
+                drill_aborted = False
                 # Drill: nur neue (oder force_full_drill)
                 if not skip_details:
                     if force_full_drill:
@@ -145,6 +163,16 @@ def main() -> int:
                         drill_started = time.time()
                         ok = 0
                         for idx, it in enumerate(to_drill, start=1):
+                            if time.time() > deadline_at:
+                                drill_aborted = True
+                                aborted_reason = (
+                                    f"MAX_RUNTIME_S={max_runtime_s}s während Drill {tag} "
+                                    f"({idx - 1}/{len(to_drill)} drilled)"
+                                )
+                                log.warning("  drill: budget reached at %d/%d — break, flush partial",
+                                            idx - 1, len(to_drill))
+                                all_subtypes_done = False
+                                break
                             try:
                                 crawl_detail(browser, it)
                             except Exception as e:
@@ -161,8 +189,10 @@ def main() -> int:
                             time.sleep(RATE_LIMIT_SECONDS)
                         log.info("  drill: %d/%d enriched in %.1fs", ok, len(to_drill), time.time() - drill_started)
 
-                # pHash: nur neue (oder force_rephash)
-                if not skip_phash:
+                # pHash: nur neue (oder force_rephash) — auch bei drill_aborted noch durchziehen
+                # für die items die wir schon haben (cheap, nur HTTP-GET der Cover-URL).
+                phash_aborted = False
+                if not skip_phash and not drill_aborted:
                     from .dedup import compute_phash_from_url
                     if force_rephash:
                         phash_candidates = [it for it in items if it.cover_phash is None]
@@ -175,6 +205,14 @@ def main() -> int:
                         phash_started = time.time()
                         phash_ok = 0
                         for it in phash_candidates:
+                            if time.time() > deadline_at:
+                                phash_aborted = True
+                                aborted_reason = aborted_reason or (
+                                    f"MAX_RUNTIME_S={max_runtime_s}s während pHash {tag}"
+                                )
+                                log.warning("    phash: budget reached — break")
+                                all_subtypes_done = False
+                                break
                             cover = (it.media[0] if it.media else it.image_url)
                             if not cover:
                                 continue
@@ -192,7 +230,10 @@ def main() -> int:
                             phash_ok, len(phash_candidates), time.time() - phash_started,
                         )
 
-                # Streaming-Upsert: dieses Subtype sofort persistieren
+                # Streaming-Upsert: dieses Subtype sofort persistieren — auch bei
+                # drill_aborted/phash_aborted, damit die bereits angereicherten
+                # Items nicht verloren gehen. Nicht-gedrillte Items werden mit
+                # ihren List-Page-Feldern upgeserted; die DB-RPC merged via COALESCE.
                 if dry_run:
                     log.info("  DRY_RUN — kein Upsert (sample %s)", items[0].external_id)
                 else:
@@ -215,6 +256,12 @@ def main() -> int:
                         continue
 
                 grand_totals["subtypes"] += 1
+
+                # Wenn drill/phash wegen Budget abgebrochen sind, partielles Flush
+                # ist passiert — jetzt sauber raus aus der Plan-Schleife, nicht
+                # noch einen Subtype anfangen.
+                if drill_aborted or phash_aborted:
+                    break
         finally:
             browser.close()
 
