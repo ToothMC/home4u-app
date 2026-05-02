@@ -7,6 +7,36 @@ import type {
 } from "@/components/listing-public/types";
 import { buildSourceUrl } from "@/lib/listings/source-url";
 
+export async function countActiveListings(): Promise<number> {
+  const supabase = createSupabaseServiceClient();
+  if (!supabase) return 0;
+  const { count, error } = await supabase
+    .from("listings")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "active");
+  if (error) return 0;
+  return count ?? 0;
+}
+
+export async function listActiveListingIds(
+  offset: number,
+  limit: number,
+): Promise<Array<{ id: string; updated_at: string | null }>> {
+  const supabase = createSupabaseServiceClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("listings")
+    .select("id, updated_at")
+    .eq("status", "active")
+    .order("updated_at", { ascending: false, nullsFirst: false })
+    .range(offset, offset + limit - 1);
+  if (error) return [];
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    updated_at: (r.updated_at as string | null) ?? null,
+  }));
+}
+
 export async function loadPublicListing(
   id: string
 ): Promise<PublicListingData | null> {

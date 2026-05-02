@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MapPin } from "lucide-react";
@@ -27,6 +28,52 @@ import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
 import type { SupportedLang } from "@/lib/lang/preferred-language";
 
 export const dynamic = "force-dynamic";
+
+const SITE_URL = (
+  process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai"
+).replace(/\/$/, "");
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const listing = await loadPublicListing(id);
+  if (!listing) return { title: "Listing nicht gefunden — Home4U" };
+
+  const cityPart = [listing.location_district, listing.location_city]
+    .filter(Boolean)
+    .join(", ");
+  const title = listing.title
+    ? `${listing.title} — Home4U`
+    : `${listing.property_type ?? "Immobilie"} in ${cityPart || "Zypern"} — Home4U`;
+  const description = (listing.description ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
+  const cover = listing.photos[0]?.url ?? listing.media[0];
+  const canonical = `/listings/${listing.id}`;
+
+  return {
+    title,
+    description: description || undefined,
+    alternates: { canonical },
+    openGraph: {
+      type: "website",
+      url: `${SITE_URL}${canonical}`,
+      title,
+      description: description || undefined,
+      images: cover ? [{ url: cover, alt: title }] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: description || undefined,
+      images: cover ? [cover] : undefined,
+    },
+  };
+}
 
 const NUMBER_LOCALE: Record<SupportedLang, string> = {
   de: "de-DE",
@@ -121,8 +168,87 @@ export default async function PublicListingPage({
     ? tFormat(t("listing.shareTextOf"), { title: listing.title })
     : tFormat(t("listing.shareTextIn"), { city: listing.location_city });
 
+  const jsonLdImages = listing.photos
+    .map((p) => p.url)
+    .filter(Boolean)
+    .slice(0, 6);
+  const jsonLdAddress: Record<string, string> = {
+    "@type": "PostalAddress",
+    addressCountry: "CY",
+  };
+  if (listing.location_city) jsonLdAddress.addressLocality = listing.location_city;
+  if (listing.location_district)
+    jsonLdAddress.addressRegion = listing.location_district;
+
+  const jsonLdAdditional: Array<{
+    "@type": "PropertyValue";
+    name: string;
+    value: string | number;
+    unitCode?: string;
+  }> = [];
+  if (listing.rooms != null)
+    jsonLdAdditional.push({
+      "@type": "PropertyValue",
+      name: "rooms",
+      value: listing.rooms,
+    });
+  if (listing.bathrooms != null)
+    jsonLdAdditional.push({
+      "@type": "PropertyValue",
+      name: "bathrooms",
+      value: listing.bathrooms,
+    });
+  if (listing.size_sqm != null)
+    jsonLdAdditional.push({
+      "@type": "PropertyValue",
+      name: "floorSize",
+      value: listing.size_sqm,
+      unitCode: "MTK",
+    });
+  if (listing.year_built != null)
+    jsonLdAdditional.push({
+      "@type": "PropertyValue",
+      name: "yearBuilt",
+      value: listing.year_built,
+    });
+
+  const offerPrice = listing.price_warm ?? listing.price;
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "@id": `${SITE_URL}/listings/${listing.id}`,
+    name: listing.title ?? fallbackTitleStr,
+    description: (listing.description ?? "").slice(0, 500) || undefined,
+    image: jsonLdImages.length > 0 ? jsonLdImages : undefined,
+    category: listing.property_type ?? undefined,
+    additionalProperty:
+      jsonLdAdditional.length > 0 ? jsonLdAdditional : undefined,
+    offers: offerPrice
+      ? {
+          "@type": "Offer",
+          price: offerPrice,
+          priceCurrency: listing.currency ?? "EUR",
+          availability:
+            listing.status === "active"
+              ? "https://schema.org/InStock"
+              : listing.status === "reserved"
+                ? "https://schema.org/PreOrder"
+                : "https://schema.org/SoldOut",
+          url: `${SITE_URL}/listings/${listing.id}`,
+          ...(listing.type === "rent"
+            ? { priceSpecification: { "@type": "UnitPriceSpecification", referenceQuantity: { "@type": "QuantitativeValue", unitCode: "MON", value: 1 } } }
+            : {}),
+        }
+      : undefined,
+    address: jsonLdAddress,
+  };
+
   return (
     <main className="bg-[var(--background)]">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+      />
       {unavailable && (
         <div className="mx-auto max-w-7xl w-full px-4 pt-4">
           {listing.status === "reserved" ? (
