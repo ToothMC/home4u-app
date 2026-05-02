@@ -326,6 +326,65 @@ const handlers: Record<string, Handler> = {
     };
   },
 
+  async add_photos_to_listing(input, ctx) {
+    if (!ctx.userId) {
+      return {
+        ok: false,
+        error: "not_authenticated",
+        data: { message: "Bitte oben rechts anmelden, dann kann ich Fotos hinzufügen." },
+      };
+    }
+    const supabase = createSupabaseServiceClient();
+    if (!supabase) return { ok: false, error: "supabase_not_configured" };
+
+    const listingId = asString(input.listing_id);
+    const photoUrls = asStringArray(input.photo_urls)?.filter((u) =>
+      u.startsWith("http")
+    );
+    if (!listingId) return { ok: false, error: "missing_listing_id" };
+    if (!photoUrls || photoUrls.length === 0) {
+      return { ok: false, error: "no_photo_urls" };
+    }
+
+    const { data: listing, error: loadErr } = await supabase
+      .from("listings")
+      .select("id, owner_user_id, media")
+      .eq("id", listingId)
+      .maybeSingle();
+    if (loadErr || !listing) {
+      return {
+        ok: false,
+        error: "listing_not_found",
+        data: { detail: loadErr?.message },
+      };
+    }
+    if (listing.owner_user_id !== ctx.userId) {
+      return { ok: false, error: "not_listing_owner" };
+    }
+
+    const existing = Array.isArray(listing.media) ? listing.media : [];
+    // Dedup, Reihenfolge: vorhandene zuerst, neue dahinter
+    const merged = Array.from(new Set([...existing, ...photoUrls]));
+
+    const { error: updErr } = await supabase
+      .from("listings")
+      .update({ media: merged })
+      .eq("id", listingId);
+    if (updErr) {
+      return { ok: false, error: "update_failed", data: { detail: updErr.message } };
+    }
+
+    return {
+      ok: true,
+      data: {
+        listing_id: listingId,
+        added: photoUrls.length,
+        total_photos: merged.length,
+        message: `${photoUrls.length} Foto(s) zum Inserat hinzugefügt — jetzt ${merged.length} insgesamt.`,
+      },
+    };
+  },
+
   async find_matches(input, ctx) {
     if (!ctx.anonymousId && !ctx.userId) {
       return { ok: false, error: "missing_session" };

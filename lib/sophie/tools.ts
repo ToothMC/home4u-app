@@ -177,6 +177,29 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "add_photos_to_listing",
+    description:
+      "Fügt Fotos zu einem BEREITS BESTEHENDEN Inserat des Nutzers hinzu. Nutze dies, wenn der Nutzer Fotos schickt, NACHDEM create_listing schon erfolgreich gelaufen ist (z.B. weil er sie zuerst nicht zur Hand hatte). NIEMALS create_listing erneut für dasselbe Inserat aufrufen — das löst einen Duplikat-Fehler aus. Die Foto-URLs sind im <attached_media>-Block im System-Kontext aufgeführt.",
+    input_schema: {
+      type: "object",
+      properties: {
+        listing_id: {
+          type: "string",
+          description:
+            "ID des bestehenden Inserats. Bekommst du als Tool-Result von einem früheren create_listing-Call in dieser Konversation.",
+        },
+        photo_urls: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Vollständige URLs der Fotos (aus <attached_media>). Reihenfolge bestimmt die Anzeige; erste URL = Cover. Erfinde nie URLs.",
+        },
+      },
+      required: ["listing_id", "photo_urls"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "find_matches",
     description:
       "Sucht passende Wohnungsangebote für das zuletzt angelegte Suchprofil des Nutzers. Ruft den Matching-Job in der Datenbank auf und liefert die Top-Treffer zurück (Stadt, Lage, Preis, Zimmer, Größe). Nutze dieses Tool, sobald genug Informationen für ein Profil erfasst sind — idealerweise direkt nach create_search_profile oder wenn der Nutzer nach 'was hast du für mich?' fragt.",
