@@ -1,0 +1,47 @@
+name: Mark Stale Listings (Daily)
+
+# Markiert Listings die der Crawler seit N Tagen (default 7) nicht mehr
+# gesehen hat als 'archived'. Entkoppelt vom Crawler-Run, der wegen
+# Watchdog-Cap selten alle Cities erreicht und mark_stale daher nie
+# triggert. Gelöschte Bazaraki/INDEX/CRE-Listings würden sonst dauerhaft
+# als 'active' sichtbar bleiben → User-404 beim Klick auf Source-Link.
+#
+# Läuft 03:00 UTC täglich, ein Block für alle Sources (~5 sec total).
+# Manueller Dispatch erlaubt.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      stale_days:
+        description: "Cutoff in Tagen (default 7)"
+        required: false
+        default: "7"
+
+concurrency:
+  group: mark-stale-daily
+  cancel-in-progress: false
+
+jobs:
+  mark-stale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Run mark-stale
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          STALE_DAYS: ${{ inputs.stale_days || '7' }}
+        run: npx tsx scripts/run-mark-stale.ts

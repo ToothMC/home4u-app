@@ -34,6 +34,7 @@ from .crawler import RawListing, crawl_city, crawl_detail, fetch_disallowed_path
 from .supabase_writer import (
     fetch_already_drilled_external_ids,
     fetch_already_phashed_external_ids,
+    fetch_city_last_seen,
     mark_stale_old_listings,
     upsert_listings,
 )
@@ -108,7 +109,21 @@ def main() -> int:
     all_subtypes_done = True
     aborted_reason: str | None = None
 
-    plan = [(c, t, s) for c in cities for t in types for s in PROPERTY_SUBTYPES_BY_TYPE[t]]
+    # Plan nach Freshness sortieren: Cities mit ältestem last_seen zuerst.
+    # Wenn Watchdog mid-run kappt, werden die wichtigsten Lücken (= Cities
+    # die seit längstem nicht gecrawlt wurden) zuerst geschlossen.
+    # Cities ohne Daten (noch nie gecrawlt) → ältest = "epoch", erste Position.
+    log.info("Hole City-Freshness für Plan-Sortierung …")
+    city_last_seen = fetch_city_last_seen()
+    cities_sorted = sorted(
+        cities,
+        key=lambda c: city_last_seen.get(c.display) or "1970-01-01T00:00:00+00",
+    )
+    log.info(
+        "City-Reihenfolge nach Freshness: %s",
+        [(c.display, city_last_seen.get(c.display) or "never") for c in cities_sorted],
+    )
+    plan = [(c, t, s) for c in cities_sorted for t in types for s in PROPERTY_SUBTYPES_BY_TYPE[t]]
     log.info("Streaming-Plan: %d (city, type, subtype)-Tupel", len(plan))
 
     with with_browser() as p:

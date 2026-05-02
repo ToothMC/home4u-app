@@ -298,3 +298,42 @@ def mark_stale_old_listings(stale_days: int = 7) -> int:
     except Exception as e:
         log.warning("mark_stale_listings failed: %s", e)
         return 0
+
+
+def fetch_city_last_seen() -> dict[str, str | None]:
+    """Pro Stadt das MAX(last_seen) für source='bazaraki' AND status='active'.
+
+    Wird in main.py genutzt um den Plan nach Freshness zu sortieren —
+    Cities mit ältestem last_seen werden zuerst gecrawlt. Bei Watchdog-
+    Cap werden so die wichtigsten Lücken zuerst geschlossen.
+
+    Returns: {"Famagusta": "2026-04-28T13:28:32+00", "Paphos": "...", ...}
+    Cities ohne Active-Listings → fehlen im Dict (= MAX(last_seen) NULL,
+    Caller behandelt das als „älteste, sofort crawlen").
+    """
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Content-Type": "application/json",
+    }
+    # PostgREST aggregat: source=eq.bazaraki + select=location_city,last_seen.max()
+    # mit „order=last_seen.max.asc" sortiert Server-side. Aggregat braucht 'columns' Header.
+    url = (
+        f"{url_base}/rest/v1/listings"
+        f"?source=eq.bazaraki&status=eq.active"
+        f"&select=location_city,last_seen.max()"
+    )
+    out: dict[str, str | None] = {}
+    try:
+        resp = httpx.get(url, headers=headers, timeout=20)
+        resp.raise_for_status()
+        for row in resp.json() or []:
+            city = row.get("location_city")
+            ls = row.get("max")
+            if city:
+                out[str(city)] = ls
+    except Exception as e:
+        log.warning("fetch_city_last_seen failed: %s — fallback unsortiert", e)
+    return out
