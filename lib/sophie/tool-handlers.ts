@@ -284,6 +284,48 @@ const handlers: Record<string, Handler> = {
       .single();
 
     if (error) {
+      // Idempotenter Pfad: Duplikat-Hash → bestehendes Listing finden + ggf. Fotos mergen
+      const isDup =
+        error.code === "23505" ||
+        /duplicate key|unique constraint/i.test(error.message ?? "");
+      if (isDup) {
+        const { data: existing } = await supabase
+          .from("listings")
+          .select("id, owner_user_id, media")
+          .eq("source", "direct")
+          .eq("dedup_hash", dedupHash)
+          .maybeSingle();
+        if (existing && existing.owner_user_id === ctx.userId) {
+          // Optional: Fotos in bestehendes Listing mergen
+          let mediaAdded = 0;
+          let totalPhotos = Array.isArray(existing.media) ? existing.media.length : 0;
+          if (mediaUrls && mediaUrls.length > 0) {
+            const before = Array.isArray(existing.media) ? existing.media : [];
+            const merged = Array.from(new Set([...before, ...mediaUrls]));
+            mediaAdded = merged.length - before.length;
+            totalPhotos = merged.length;
+            if (mediaAdded > 0) {
+              await supabase
+                .from("listings")
+                .update({ media: merged })
+                .eq("id", existing.id);
+            }
+          }
+          return {
+            ok: true,
+            data: {
+              listing_id: existing.id,
+              already_existed: true,
+              media_added: mediaAdded,
+              total_photos: totalPhotos,
+              message:
+                mediaAdded > 0
+                  ? `Inserat existierte bereits — ${mediaAdded} Foto(s) hinzugefügt (jetzt ${totalPhotos} insgesamt).`
+                  : `Inserat existierte bereits, keine neuen Fotos zum Anhängen.`,
+            },
+          };
+        }
+      }
       console.error("[create_listing] insert failed", error);
       return {
         ok: false,
@@ -318,6 +360,7 @@ const handlers: Record<string, Handler> = {
       ok: true,
       data: {
         listing_id: data.id,
+        already_existed: false,
         message: `Inserat angelegt: ${city}${district ? " · " + district : ""}, ${rooms} Zimmer, ${price} €. Übersetzung in DE/EN/RU/EL läuft im Hintergrund.`,
         notes_ack: notes ? true : false,
         media_count: mediaUrls?.length ?? 0,
