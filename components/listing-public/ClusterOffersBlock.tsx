@@ -32,6 +32,8 @@ type Offer = {
   is_canonical: boolean;
   last_seen?: string;
   days_since_seen?: number;
+  source_url?: string | null;
+  title?: string | null;
 };
 
 export async function ClusterOffersBlock({
@@ -68,10 +70,15 @@ export async function ClusterOffersBlock({
       <div className="space-y-2">
         {offers.map((o) => {
           const label = SOURCE_LABELS[o.source] ?? o.source;
-          const url = buildSourceUrl({
+          // source_url aus DB hat Vorrang (vom Crawler beim Detail-Drill
+          // gespeichert, hat den richtigen Bazaraki-Slug). Fallback nutzt
+          // title-basierten Slug-Build, sonst bare /adv/{id}/ → Bazaraki-
+          // Redirect zur Suche statt aufs Inserat.
+          const url = o.source_url ?? buildSourceUrl({
             source: o.source,
             external_id: o.external_id,
             extracted_data: null,
+            title: o.title ?? null,
           });
           const fmtPrice = new Intl.NumberFormat(NUMBER_LOCALE[lang], {
             style: "currency",
