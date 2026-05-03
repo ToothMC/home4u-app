@@ -264,18 +264,33 @@ export async function analyzeListing(
     };
   }
 
-  // Per-Bild-Klassifizierung parallel: 1 Haiku-Call pro Foto. Sonnets
-  // photos[]-Antwort wird IGNORIERT, weil sie bei vielen Bildern Indices
-  // verschlampt. Ein fokussierter Call pro Bild trifft fast immer richtig.
+  // Kostenoptimierung: nur Bilder klassifizieren, die noch KEIN room_type
+  // haben (oder noch gar nicht in listing_photos sind). So zahlt der User
+  // die ~0,2¢ pro Bild nur einmal, nicht bei jedem Re-Analyze.
+  const { data: existingPhotos } = await supabase
+    .from("listing_photos")
+    .select("url, room_type")
+    .eq("listing_id", listing.id);
+  const alreadyClassified = new Set(
+    (existingPhotos ?? [])
+      .filter((p) => p.room_type != null && p.room_type !== "")
+      .map((p) => p.url as string)
+  );
+  const toClassify = imageUrls.filter((u) => !alreadyClassified.has(u));
+
+  // Per-Bild-Klassifizierung parallel: 1 Haiku-Call pro NEUEM Foto.
+  // Sonnets photos[]-Antwort wird ignoriert (Index-Drift bei vielen Bildern).
   const classifications = await Promise.all(
-    imageUrls.map((url) => classifyRoom(client, url))
+    toClassify.map((url) => classifyRoom(client, url))
   );
   const photoRows = classifications
-    .map((c, idx) => {
+    .map((c, i) => {
       if (!c) return null;
+      const url = toClassify[i];
+      const idx = imageUrls.indexOf(url);
       return {
         listing_id: listing.id,
-        url: imageUrls[idx],
+        url,
         room_type: c.room_type,
         caption: c.caption ?? null,
         position: idx,
