@@ -197,6 +197,11 @@ export function ListingEditor({
   const [roomTypes, setRoomTypes] = React.useState<Record<string, string | null>>(
     roomTypeByUrl ?? {}
   );
+  // Wenn Server-Daten sich ändern (z.B. nach AnalyzeWithSophie + router.refresh),
+  // sync auf den neuen Stand — useState init läuft nur einmal, daher der Effect.
+  React.useEffect(() => {
+    if (roomTypeByUrl) setRoomTypes(roomTypeByUrl);
+  }, [roomTypeByUrl]);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
