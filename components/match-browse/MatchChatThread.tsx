@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 type Message = {
   id: string;
@@ -42,7 +42,8 @@ export function MatchChatThread({
   const [error, setError] = React.useState<string | null>(null);
   const [input, setInput] = React.useState("");
   const [sending, setSending] = React.useState(false);
-  const endRef = React.useRef<HTMLDivElement | null>(null);
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  const lastCountRef = React.useRef(0);
 
   const load = React.useCallback(async () => {
     try {
@@ -55,7 +56,19 @@ export function MatchChatThread({
         return;
       }
       const json = await res.json();
-      setMessages((json.messages as Message[]) ?? []);
+      const next = (json.messages as Message[]) ?? [];
+      // Nur State updaten wenn sich Anzahl ODER neueste ID geändert hat —
+      // sonst triggert das 5s-Polling jedes Mal Re-Render + Scroll-Effekt,
+      // auch wenn keine neue Nachricht da ist (Mobile-Bildschirm springt).
+      setMessages((prev) => {
+        if (
+          prev.length === next.length &&
+          prev[prev.length - 1]?.id === next[next.length - 1]?.id
+        ) {
+          return prev;
+        }
+        return next;
+      });
       setError(null);
     } catch {
       setError("Netzwerkfehler beim Laden");
@@ -71,9 +84,20 @@ export function MatchChatThread({
     return () => clearInterval(t);
   }, [load]);
 
-  // Auto-Scroll zum Ende, wenn neue Nachrichten kommen
+  // Auto-Scroll: NUR den inneren Container scrollen, nie scrollIntoView
+  // (das würde die ganze Seite mit-scrollen → Layout springt auf Mobile).
+  // Außerdem nur scrollen wenn (a) eine Nachricht dazu kam und (b) der User
+  // sowieso schon nahe am Ende ist (sonst zerreißt das die Lese-Position).
   React.useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = scrollRef.current;
+    if (!el) return;
+    const grew = messages.length > lastCountRef.current;
+    lastCountRef.current = messages.length;
+    if (!grew) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 120) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [messages]);
 
   async function send() {
@@ -121,17 +145,20 @@ export function MatchChatThread({
   }
 
   return (
-    <div className="rounded-2xl border bg-[var(--card)] overflow-hidden flex flex-col h-[480px]">
-      <div className="px-4 py-3 border-b text-sm font-medium flex items-center justify-between">
-        <span>Direkt-Chat mit {counterpartyLabel}</span>
-        <span className="text-[10px] text-[var(--muted-foreground)]">
+    <div className="rounded-2xl border bg-[var(--card)] overflow-hidden flex flex-col">
+      <div className="px-4 py-3 border-b text-sm font-medium flex items-center justify-between shrink-0">
+        <span className="truncate">Direkt-Chat mit {counterpartyLabel}</span>
+        <span className="text-[10px] text-[var(--muted-foreground)] shrink-0 ml-2">
           {messages.length > 0
             ? `${messages.length} ${messages.length === 1 ? "Nachricht" : "Nachrichten"}`
             : ""}
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-[var(--background)]">
+      <div
+        ref={scrollRef}
+        className="overflow-y-auto overscroll-contain px-4 py-3 space-y-2 bg-[var(--background)] max-h-[50dvh] min-h-[140px]"
+      >
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
             <Loader2 className="size-3 animate-spin" /> Lädt…
@@ -143,7 +170,6 @@ export function MatchChatThread({
         ) : (
           messages.map((m) => <Bubble key={m.id} message={m} />)
         )}
-        <div ref={endRef} />
       </div>
 
       <form
@@ -151,21 +177,19 @@ export function MatchChatThread({
           e.preventDefault();
           send();
         }}
-        className="border-t p-2 bg-[var(--card)]"
+        className="border-t p-2 bg-[var(--card)] shrink-0"
       >
-        <div className="flex items-end gap-2">
-          <Textarea
+        <div className="flex items-center gap-2">
+          <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Nachricht schreiben…"
-            rows={1}
-            className="resize-none min-h-[40px] max-h-32"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
+            // text-base = 16px → verhindert iOS-Auto-Zoom beim Focus.
+            className="text-base"
+            inputMode="text"
+            enterKeyHint="send"
+            autoComplete="off"
+            autoCorrect="on"
             disabled={sending}
           />
           <Button
