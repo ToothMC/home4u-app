@@ -425,17 +425,21 @@ async function handleDeeplinkPayload(args: {
  * damit verhindert wird, dass der Text danach an Sophie geschickt wird.
  */
 async function tryHandleAdminFeedbackReply(msg: Message): Promise<boolean> {
+  // FEEDBACK_TELEGRAM_ADMIN_CHAT_ID kann sein:
+  //   - Personal-Chat-ID (positiv) → DM mit Admin
+  //   - Gruppen-ID (negativ, oft -100…) → Support-Gruppe mit Admin(s)
+  // Match wird auf msg.chat.id gemacht — das funktioniert für beide Fälle.
   const adminChatId = process.env.FEEDBACK_TELEGRAM_ADMIN_CHAT_ID?.trim();
-  const fromId = String(msg.from?.id ?? "");
+  const chatId = String(msg.chat.id);
   const replied = msg.reply_to_message;
   const originalText = replied?.text ?? replied?.caption ?? "";
   const isFeedbackOriginal = originalText.includes("Neues Feedback");
   console.error(
-    `[feedback-reply] check from=${fromId} admin=${adminChatId ?? "MISSING"} hasReply=${!!replied} isBot=${replied?.from?.is_bot ?? false} isFeedback=${isFeedbackOriginal} origLen=${originalText.length}`
+    `[feedback-reply] check chat=${chatId} admin=${adminChatId ?? "MISSING"} from=${msg.from?.id ?? "?"} hasReply=${!!replied} isBot=${replied?.from?.is_bot ?? false} isFeedback=${isFeedbackOriginal} origLen=${originalText.length}`
   );
 
   if (!adminChatId) return false;
-  if (fromId !== adminChatId) return false;
+  if (chatId !== adminChatId) return false;
   if (!replied?.from?.is_bot) return false;
   if (!isFeedbackOriginal) return false;
 
