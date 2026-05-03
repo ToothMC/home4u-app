@@ -22,6 +22,7 @@ const ROOM_KEY: Record<string, TKey> = {
   parking: "room.parking",
   hallway: "room.hallway",
   utility: "room.utility",
+  office: "room.office",
   other: "room.other",
 };
 

@@ -47,6 +47,7 @@ export const ROOM_TYPES = [
   "parking",
   "hallway",
   "utility",
+  "office",
   "other",
 ] as const;
 

@@ -161,6 +161,7 @@ const ROOM_TYPES = [
   "parking",
   "hallway",
   "utility",
+  "office",
   "other",
 ] as const;
 
@@ -180,6 +181,7 @@ const ROOM_TYPE_LABEL_KEY: Record<RoomType, TKey> = {
   parking: "room.parking",
   hallway: "room.hallway",
   utility: "room.utility",
+  office: "room.office",
   other: "room.other",
 };
 
@@ -479,7 +481,18 @@ export function ListingEditor({
                 </div>
                 <select
                   value={currentRoom}
-                  onChange={(e) => setRoomType(url, e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "__custom__") {
+                      const entered = window.prompt(
+                        t("listingEditor.media.roomCustomPrompt"),
+                        currentRoom || ""
+                      );
+                      if (entered !== null) setRoomType(url, entered.trim());
+                    } else {
+                      setRoomType(url, v);
+                    }
+                  }}
                   className={cn(
                     "h-7 w-full rounded border bg-[var(--background)] px-1 text-[10px]",
                     !currentRoom && "text-[var(--muted-foreground)] italic"
@@ -493,6 +506,15 @@ export function ListingEditor({
                       {t(ROOM_TYPE_LABEL_KEY[rt])}
                     </option>
                   ))}
+                  {currentRoom &&
+                    !(ROOM_TYPES as readonly string[]).includes(currentRoom) && (
+                      <option value={currentRoom}>
+                        {currentRoom} ({t("listingEditor.media.roomCustomTag")})
+                      </option>
+                    )}
+                  <option value="__custom__">
+                    + {t("listingEditor.media.roomCustomAdd")}
+                  </option>
                 </select>
                 </div>
               );
