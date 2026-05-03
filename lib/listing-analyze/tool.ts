@@ -145,7 +145,6 @@ export const ANALYZE_TOOL: Anthropic.Tool = {
       "description",
       "property_type",
       "features",
-      "photos",
       "honest_assessment",
     ],
   },
@@ -159,7 +158,7 @@ export type AnalyzeResult = {
   bathrooms?: number;
   energy_class_estimate?: string;
   features: (typeof FEATURE_VALUES)[number][];
-  photos: { index: number; room_type: (typeof ROOM_TYPES)[number]; caption?: string }[];
+  photos?: { index: number; room_type: (typeof ROOM_TYPES)[number]; caption?: string }[];
   honest_assessment: {
     pros: { title: string; reason: string }[];
     cons: { title: string; reason: string }[];
