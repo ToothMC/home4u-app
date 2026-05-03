@@ -5,6 +5,7 @@ import { AuthMenu } from "@/components/auth/AuthMenu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MatchCard, type MatchCardData } from "@/components/match-browse/MatchCard";
+import { MatchChatThread } from "@/components/match-browse/MatchChatThread";
 import { WithdrawRequestButton } from "@/components/match-browse/WithdrawRequestButton";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { getOrCreateAnonymousSession } from "@/lib/session";
@@ -62,7 +63,7 @@ export default async function MatchDetailPage({
        listings!inner (
          id, type, location_city, location_district, price, currency,
          rooms, size_sqm, media, status, contact_channel, owner_user_id,
-         scam_score, scam_flags, market_position
+         source, scam_score, scam_flags, market_position
        )`
     )
     .eq("id", id)
@@ -94,6 +95,7 @@ export default async function MatchDetailPage({
     status: string;
     contact_channel: string | null;
     owner_user_id: string | null;
+    source: string;
     scam_score: number | null;
     scam_flags: string[] | null;
     market_position: string | null;
@@ -156,7 +158,27 @@ export default async function MatchDetailPage({
           <MatchCard data={cardData} />
         </div>
 
-        {status === "connected" && ownerEmail && (
+        {status === "connected" && listing.source === "direct" && (
+          <Card className="border-emerald-200 bg-emerald-50/50">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Handshake className="size-4" /> {t("matchDetail.connected")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <MatchChatThread
+                matchId={match.id}
+                counterpartyLabel={
+                  listing.location_district
+                    ? `${listing.location_city} · ${listing.location_district}`
+                    : listing.location_city
+                }
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {status === "connected" && listing.source !== "direct" && ownerEmail && (
           <Card className="border-emerald-200 bg-emerald-50/50">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">

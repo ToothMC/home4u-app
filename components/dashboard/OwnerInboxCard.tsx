@@ -223,13 +223,13 @@ export function OwnerInboxCard({
       </div>
 
       <div className="px-3 py-3 border-t">
-        {status === "connected" && profile.email && (
-          <a
-            href={`mailto:${profile.email}`}
+        {status === "connected" && (
+          <Link
+            href={`/dashboard/anfragen/${row.match_id}`}
             className="flex items-center justify-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2.5"
           >
             <Mail className="size-4" /> {t("ownerInbox.contact")}
-          </a>
+          </Link>
         )}
         {status === "rejected" && (
           <p className="text-xs text-center text-[var(--muted-foreground)] py-2">
