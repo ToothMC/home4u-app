@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/send";
+import { getTelegramBot, telegramConfigured } from "@/lib/telegram/bot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -133,16 +134,58 @@ export async function POST(req: NextRequest) {
 
   if (!result.ok) {
     console.warn("[feedback] send failed", result);
+    // Mail fehlgeschlagen → Telegram trotzdem versuchen, damit nichts verloren geht
+  } else {
+    console.info(
+      `[feedback] sent → ${FEEDBACK_TO} (resend_msg_id=${result.messageId}, user=${user?.id ?? "anon"})`
+    );
+  }
+
+  // Telegram-Notification an Admin (best-effort, non-blocking für Response)
+  await notifyTelegramAdmin({
+    message: messageTrimmed,
+    meta,
+    mailOk: result.ok,
+  });
+
+  if (!result.ok) {
     return json(
       { ok: false, error: result.reason, detail: "error" in result ? result.error : undefined },
       result.reason === "not_configured" ? 503 : 502
     );
   }
-
-  console.info(
-    `[feedback] sent → ${FEEDBACK_TO} (resend_msg_id=${result.messageId}, user=${user?.id ?? "anon"})`
-  );
   return json({ ok: true });
+}
+
+async function notifyTelegramAdmin(args: {
+  message: string;
+  meta: Record<string, string>;
+  mailOk: boolean;
+}): Promise<void> {
+  const adminChatId = process.env.FEEDBACK_TELEGRAM_ADMIN_CHAT_ID;
+  if (!adminChatId) {
+    console.info("[feedback] FEEDBACK_TELEGRAM_ADMIN_CHAT_ID nicht gesetzt — skip telegram notify");
+    return;
+  }
+  if (!telegramConfigured()) {
+    console.warn("[feedback] telegram not configured — skip notify");
+    return;
+  }
+  try {
+    const bot = getTelegramBot();
+    const lines = [
+      args.mailOk ? "📬 *Neues Feedback*" : "📬 *Neues Feedback* (⚠️ Mail fehlgeschlagen)",
+      "",
+      args.message.length > 1500 ? args.message.slice(0, 1500) + "…" : args.message,
+      "",
+      "— — —",
+      ...Object.entries(args.meta).map(([k, v]) => `*${k}:* ${v}`),
+    ];
+    const text = lines.join("\n");
+    await bot.api.sendMessage(Number(adminChatId), text, { parse_mode: "Markdown" });
+  } catch (e) {
+    console.warn("[feedback] telegram notify failed", e);
+  }
 }
 
 function escapeHtml(s: string): string {
