@@ -35,7 +35,10 @@ function shrinkSupabaseUrl(url: string): string {
   );
   if (!m) return url;
   const [, host, bucket, path] = m;
-  return `${host}/storage/v1/render/image/public/${bucket}/${path}?width=1920&quality=80`;
+  // resize=contain + width=height=1920 → BEIDE Dimensionen ≤1920, egal ob
+  // Hochkant oder Querformat. Nur width=… reicht NICHT, weil Hochkantbilder
+  // dann in der Höhe noch >2000 sein können (Anthropic-Limit).
+  return `${host}/storage/v1/render/image/public/${bucket}/${path}?width=1920&height=1920&resize=contain&quality=80`;
 }
 
 export type AnalyzeOk = {
