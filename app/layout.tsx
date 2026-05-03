@@ -128,10 +128,10 @@ export default async function RootLayout({
             __html: JSON.stringify(ORGANIZATION_JSONLD),
           }}
         />
-        {/* Plausible Analytics — gleiche Site-ID wie meet-sophie. */}
+        {/* Plausible Analytics — eigene home4u.ai-Site. */}
         <script
           defer
-          src="https://plausible.io/js/pa-1OMRAStrHWUobLDx17XLI.js"
+          src="https://plausible.io/js/pa-BzOPHsLNlhm3yc-YdvUIb.js"
         />
         <script
           dangerouslySetInnerHTML={{
