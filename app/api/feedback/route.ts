@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getAuthUser } from "@/lib/supabase/auth";
+import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/send";
 
 export const runtime = "nodejs";
@@ -55,7 +56,34 @@ export async function POST(req: NextRequest) {
     return json({ ok: false, error: "rate_limited" }, 429);
   }
 
-  const replyTo = user?.email || (body.email && body.email.length > 0 ? body.email : undefined);
+  // Pseudo-Emails von Telegram-Logins (z.B. tg-123@telegram.home4u.local)
+  // sind nicht reply-fähig — niemals als ReplyTo verwenden.
+  const isReplyable = (e: string | null | undefined): e is string =>
+    !!e && !/\.local$/i.test(e) && !/@telegram\./i.test(e);
+
+  const formEmail = body.email && body.email.length > 0 ? body.email : null;
+  const replyTo = isReplyable(user?.email)
+    ? user!.email!
+    : isReplyable(formEmail)
+      ? formEmail!
+      : undefined;
+
+  // Telegram-Profil laden, falls eingeloggt — als Antwortkanal-Hinweis
+  let telegramUserId: string | null = null;
+  let telegramUsername: string | null = null;
+  if (user?.id) {
+    const svc = createSupabaseServiceClient();
+    if (svc) {
+      const { data } = await svc
+        .from("profiles")
+        .select("telegram_user_id, telegram_username")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (data?.telegram_user_id != null) telegramUserId = String(data.telegram_user_id);
+      if (data?.telegram_username) telegramUsername = data.telegram_username;
+    }
+  }
+
   const messageTrimmed = body.message.trim();
   const subject = `[Home4U Feedback] ${messageTrimmed.slice(0, 60)}${
     messageTrimmed.length > 60 ? "…" : ""
@@ -64,7 +92,9 @@ export async function POST(req: NextRequest) {
   const meta: Record<string, string> = {
     "User-ID": user?.id ?? "anon",
     "Auth-Email": user?.email ?? "—",
-    "Reply-To": replyTo ?? "—",
+    "Reply-To": replyTo ?? "— (kein gültiger Mail-Kanal)",
+    "Telegram-User-ID": telegramUserId ?? "—",
+    "Telegram-Username": telegramUsername ? `@${telegramUsername}` : "—",
     Timestamp: new Date().toISOString(),
     IP: ip,
   };
