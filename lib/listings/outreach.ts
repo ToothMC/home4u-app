@@ -20,6 +20,7 @@ import { createHash } from "node:crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/send";
 import { buildInquiryBrokerEmail } from "@/lib/email/templates/inquiry-broker";
+import { buildInquiryChatNotifyEmail } from "@/lib/email/templates/inquiry-chat-notify";
 import {
   hashEmail,
   signActionToken,
@@ -113,8 +114,17 @@ export async function triggerOutreachForMatch(matchId: string): Promise<Outreach
   if (!email) {
     return { channel: "skipped", status: "skipped", reason: "no_email" };
   }
+  // Pseudo-Adressen (Telegram-Login etc.) filtern — sonst Bounce.
+  if (isPseudoEmail(email)) {
+    return { channel: "skipped", status: "skipped", reason: "no_real_email" };
+  }
 
   const recipientHash = await hashEmail(email);
+
+  // Direct-Listing → Chat-Notification-Mail (kein Reply-Pfad).
+  // Bridge-Listing → Reply-fähige Mail mit Action-Tokens (alter Pfad).
+  const isPlatformDirect = listing.source === "direct";
+  const templateKey = isPlatformDirect ? "inquiry_chat_notify_v1" : "inquiry_v1";
 
   // 3) Idempotency-Check + log row anlegen
   const { data: attemptData, error: attemptErr } = await service.rpc(
@@ -124,7 +134,7 @@ export async function triggerOutreachForMatch(matchId: string): Promise<Outreach
       p_listing_id: listing.id,
       p_channel: "email",
       p_recipient_hash: recipientHash,
-      p_template_key: "inquiry_v1",
+      p_template_key: templateKey,
       p_language: listing.language ?? "en",
     }
   );
@@ -140,52 +150,73 @@ export async function triggerOutreachForMatch(matchId: string): Promise<Outreach
     return { channel: "email", status: "skipped", reason: "already_sent_24h" };
   }
 
-  // 4) Tokens signieren + Mail-Inhalt rendern
+  // 4) Mail-Inhalt rendern
   const baseUrl =
     process.env.NEXT_PUBLIC_BASE_URL ??
     process.env.NEXT_PUBLIC_VERCEL_URL ??
     "https://home4u.ai";
+  const baseUrlNorm = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
 
-  const tokenBase: Omit<ActionTokenPayload, "action"> = {
-    match_id: matchId,
-    listing_id: listing.id,
-    recipient_email_hash: recipientHash,
-    log_id: attempt.log_id,
-  };
+  let subject: string;
+  let html: string;
+  let text: string;
 
-  const [replyToken, markReservedToken, markRentedToken, wrongListingToken] =
-    await Promise.all([
-      signActionToken({ ...tokenBase, action: "reply" }),
-      signActionToken({ ...tokenBase, action: "mark_reserved" }),
-      signActionToken({ ...tokenBase, action: "mark_rented" }),
-      signActionToken({ ...tokenBase, action: "wrong_listing" }),
-    ]);
+  if (isPlatformDirect) {
+    // Plattform-Inserat: Info-Mail mit Chat-Link, kein Reply-Pfad.
+    const chatUrl = `${baseUrlNorm}/dashboard/anfragen/${matchId}`;
+    ({ subject, html, text } = buildInquiryChatNotifyEmail({
+      chatUrl,
+      listingTitle: listing.title,
+      listingCity: listing.location_city,
+      listingDistrict: listing.location_district,
+      listingPrice: Number(listing.price),
+      listingCurrency: listing.currency ?? "EUR",
+      listingType: listing.type as "rent" | "sale",
+      language: (listing.language as "en" | "de" | "ru" | "el") ?? "en",
+    }));
+  } else {
+    // Bridge-Inserat: Reply-fähige Mail mit Action-Tokens.
+    const tokenBase: Omit<ActionTokenPayload, "action"> = {
+      match_id: matchId,
+      listing_id: listing.id,
+      recipient_email_hash: recipientHash,
+      log_id: attempt.log_id,
+    };
 
-  const sourceUrl =
-    typeof listing.extracted_data === "object" &&
-    listing.extracted_data !== null &&
-    "source_url" in listing.extracted_data
-      ? (listing.extracted_data as { source_url?: string }).source_url ?? null
-      : null;
+    const [replyToken, markReservedToken, markRentedToken, wrongListingToken] =
+      await Promise.all([
+        signActionToken({ ...tokenBase, action: "reply" }),
+        signActionToken({ ...tokenBase, action: "mark_reserved" }),
+        signActionToken({ ...tokenBase, action: "mark_rented" }),
+        signActionToken({ ...tokenBase, action: "wrong_listing" }),
+      ]);
 
-  const { subject, html, text } = buildInquiryBrokerEmail({
-    baseUrl: baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`,
-    listingTitle: listing.title,
-    listingType: listing.type as "rent" | "sale",
-    listingPrice: Number(listing.price),
-    listingCurrency: listing.currency ?? "EUR",
-    listingCity: listing.location_city,
-    listingDistrict: listing.location_district,
-    listingRooms: listing.rooms,
-    listingSizeSqm: listing.size_sqm,
-    listingSourceUrl: sourceUrl,
-    seekerNote: null,
-    replyToken,
-    markReservedToken,
-    markRentedToken,
-    wrongListingToken,
-    language: (listing.language as "en" | "de" | "ru" | "el") ?? "en",
-  });
+    const sourceUrl =
+      typeof listing.extracted_data === "object" &&
+      listing.extracted_data !== null &&
+      "source_url" in listing.extracted_data
+        ? (listing.extracted_data as { source_url?: string }).source_url ?? null
+        : null;
+
+    ({ subject, html, text } = buildInquiryBrokerEmail({
+      baseUrl: baseUrlNorm,
+      listingTitle: listing.title,
+      listingType: listing.type as "rent" | "sale",
+      listingPrice: Number(listing.price),
+      listingCurrency: listing.currency ?? "EUR",
+      listingCity: listing.location_city,
+      listingDistrict: listing.location_district,
+      listingRooms: listing.rooms,
+      listingSizeSqm: listing.size_sqm,
+      listingSourceUrl: sourceUrl,
+      seekerNote: null,
+      replyToken,
+      markReservedToken,
+      markRentedToken,
+      wrongListingToken,
+      language: (listing.language as "en" | "de" | "ru" | "el") ?? "en",
+    }));
+  }
 
   // 5) Send + log status update
   const sendResult = await sendEmail({
@@ -417,4 +448,19 @@ function normalizeLang(s?: string | null): Lang | null {
   if (!s) return null;
   const short = s.slice(0, 2).toLowerCase();
   return ALLOWED_LANGS.includes(short as Lang) ? (short as Lang) : null;
+}
+
+/**
+ * Pseudo-Adressen, die nicht zustellbar sind:
+ * - tg-XXX@telegram.home4u.local (Telegram-Login)
+ * - alles auf .local (RFC 6762, nicht für E-Mail)
+ * - localhost-Adressen
+ */
+export function isPseudoEmail(email: string): boolean {
+  const lower = email.toLowerCase().trim();
+  return (
+    lower.endsWith(".local") ||
+    lower.endsWith("@localhost") ||
+    lower.includes("@telegram.")
+  );
 }

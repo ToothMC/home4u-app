@@ -5,6 +5,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { type SupabaseClient } from "@supabase/supabase-js";
 import { translate } from "@/lib/translation/translate";
 import type { Lang } from "@/lib/translation/glossary";
+import { notifyTelegramOnNewMessage } from "@/lib/telegram/notify-chat-message";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -201,6 +202,21 @@ export async function POST(
       { error: "insert_failed", detail: error?.message ?? "unknown" },
       { status: 500 }
     );
+  }
+
+  // Telegram-Push an Empfänger (Best-Effort, nicht-blockierend).
+  if (auth.counterpartyId) {
+    const { data: senderProfile } = await auth.supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    void notifyTelegramOnNewMessage({
+      matchId: id,
+      recipientUserId: auth.counterpartyId,
+      senderName: senderProfile?.display_name ?? null,
+      preview: parsed.data.content,
+    }).catch((e) => console.warn("[messages.POST] tg notify threw", e));
   }
 
   return Response.json({
