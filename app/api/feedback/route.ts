@@ -163,28 +163,37 @@ async function notifyTelegramAdmin(args: {
   mailOk: boolean;
 }): Promise<void> {
   const adminChatId = process.env.FEEDBACK_TELEGRAM_ADMIN_CHAT_ID;
+  const tgConfigured = telegramConfigured();
+  console.error(
+    `[feedback-tg] adminChatId=${adminChatId ?? "MISSING"} telegramConfigured=${tgConfigured}`
+  );
   if (!adminChatId) {
-    console.info("[feedback] FEEDBACK_TELEGRAM_ADMIN_CHAT_ID nicht gesetzt — skip telegram notify");
+    console.error("[feedback-tg] FEEDBACK_TELEGRAM_ADMIN_CHAT_ID nicht gesetzt — skip");
     return;
   }
-  if (!telegramConfigured()) {
-    console.warn("[feedback] telegram not configured — skip notify");
+  if (!tgConfigured) {
+    console.error("[feedback-tg] telegram not configured — skip (missing TELEGRAM_BOT_TOKEN/USERNAME)");
     return;
   }
   try {
     const bot = getTelegramBot();
     const lines = [
-      args.mailOk ? "📬 *Neues Feedback*" : "📬 *Neues Feedback* (⚠️ Mail fehlgeschlagen)",
+      args.mailOk ? "📬 Neues Feedback" : "📬 Neues Feedback (⚠️ Mail fehlgeschlagen)",
       "",
       args.message.length > 1500 ? args.message.slice(0, 1500) + "…" : args.message,
       "",
       "— — —",
-      ...Object.entries(args.meta).map(([k, v]) => `*${k}:* ${v}`),
+      ...Object.entries(args.meta).map(([k, v]) => `${k}: ${v}`),
     ];
     const text = lines.join("\n");
-    await bot.api.sendMessage(Number(adminChatId), text, { parse_mode: "Markdown" });
+    const result = await bot.api.sendMessage(Number(adminChatId), text);
+    console.error(
+      `[feedback-tg] sendMessage ok → chat=${adminChatId} msg_id=${result.message_id}`
+    );
   } catch (e) {
-    console.warn("[feedback] telegram notify failed", e);
+    console.error(
+      `[feedback-tg] sendMessage FAILED → chat=${adminChatId}: ${e instanceof Error ? e.message : String(e)}`
+    );
   }
 }
 
