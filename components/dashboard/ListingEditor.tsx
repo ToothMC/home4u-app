@@ -343,6 +343,17 @@ export function ListingEditor({
 
   const dirty = Object.keys(form).length > 0;
 
+  // Alle Custom-Raumtypen aus dem aktuellen State sammeln, damit sie auch
+  // bei anderen Bildern im Dropdown auswählbar sind (User tippt einmal
+  // "Aussenbereich", danach erscheint's überall als Option).
+  const customRooms = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const v of Object.values(roomTypes)) {
+      if (v && !(ROOM_TYPES as readonly string[]).includes(v)) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [roomTypes]);
+
   return (
     <div className="space-y-6">
       <Link
@@ -506,12 +517,15 @@ export function ListingEditor({
                       {t(ROOM_TYPE_LABEL_KEY[rt])}
                     </option>
                   ))}
-                  {currentRoom &&
-                    !(ROOM_TYPES as readonly string[]).includes(currentRoom) && (
-                      <option value={currentRoom}>
-                        {currentRoom} ({t("listingEditor.media.roomCustomTag")})
-                      </option>
-                    )}
+                  {customRooms.length > 0 && (
+                    <optgroup label={t("listingEditor.media.roomCustomTag")}>
+                      {customRooms.map((cr) => (
+                        <option key={cr} value={cr}>
+                          {cr}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                   <option value="__custom__">
                     + {t("listingEditor.media.roomCustomAdd")}
                   </option>
