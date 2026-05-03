@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { Menu, MessageSquare, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
 import type { TKey } from "@/lib/i18n/dict";
@@ -18,7 +18,11 @@ const ITEMS: Item[] = [
   { key: "nav.scamCheck", href: "/scam-check" },
 ];
 
-export function MobileNav() {
+export function MobileNav({
+  onFeedbackClick,
+}: {
+  onFeedbackClick?: () => void;
+} = {}) {
   const { t } = useT();
   const [open, setOpen] = React.useState(false);
 
@@ -98,6 +102,21 @@ export function MobileNav() {
                   </Link>
                 </li>
               ))}
+              {onFeedbackClick && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      onFeedbackClick();
+                    }}
+                    className="flex w-full items-center gap-2 px-5 py-3 text-base text-neutral-800 hover:bg-neutral-100 transition-colors"
+                  >
+                    <MessageSquare className="size-4" />
+                    {t("feedback.button.label")}
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
 

@@ -122,7 +122,7 @@ export default async function DashboardPage({
   return (
     <main className="flex-1">
       <header className="sticky top-0 z-30 backdrop-blur bg-[var(--warm-cream)]/85 border-b border-[var(--border)]">
-        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-3">
+        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-2 sm:gap-3">
           <BrandLockup />
           <div className="flex items-center gap-3">
             <LanguageFlagPicker

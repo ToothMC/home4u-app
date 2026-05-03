@@ -22,7 +22,7 @@ export default async function LandingPage({
     <main className="flex-1">
       {/* Header — minimal, viel Luft, mobile = nur Logo+Auth */}
       <header className="sticky top-0 z-30 backdrop-blur bg-[var(--warm-cream)]/85 border-b border-[var(--border)]">
-        <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between gap-4">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-3.5 flex items-center justify-between gap-2 sm:gap-4">
           <BrandLockup iconSize={36} />
           <nav className="hidden lg:flex items-center gap-7 text-sm text-[var(--brand-navy)]">
             <ChatLink flow="seeker" className="hover:text-[var(--brand-gold)] transition-colors">{t("nav.search")}</ChatLink>

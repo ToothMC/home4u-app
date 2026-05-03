@@ -73,7 +73,7 @@ export function BrandLockup({
     <Link
       href={href}
       className={cn(
-        "inline-flex items-center gap-2.5 group focus-visible:outline-none",
+        "inline-flex items-center gap-2.5 group focus-visible:outline-none flex-shrink-0",
         className
       )}
       aria-label="Home4U Startseite"
@@ -85,7 +85,7 @@ export function BrandLockup({
         className="transition-transform group-hover:-translate-y-px"
       />
       {showWordmark && (
-        <span className="font-semibold tracking-tight text-[var(--brand-navy)] text-lg">
+        <span className="font-semibold tracking-tight text-[var(--brand-navy)] text-lg whitespace-nowrap">
           Home<span className="text-[var(--brand-gold)]">4</span>U
         </span>
       )}

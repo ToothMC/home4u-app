@@ -93,6 +93,8 @@ export function AuthMenu({
     );
   }
 
+  // Feedback-Button (Icon-only) — auf Desktop sichtbar im Header,
+  // auf Mobile via MobileNav-Footer-Eintrag erreichbar.
   const feedbackButton = (
     <Button
       size="sm"
@@ -100,17 +102,20 @@ export function AuthMenu({
       onClick={() => setFeedbackOpen(true)}
       aria-label={t("feedback.button.label")}
       title={t("feedback.button.label")}
+      className="hidden sm:inline-flex"
     >
       <MessageSquare className="size-3" />
     </Button>
   );
+
+  const openFeedback = () => setFeedbackOpen(true);
 
   if (state.status === "user") {
     // Nur Local-Part anzeigen (vor dem @): michael@mmhammer.org → michael
     const label = state.email ? state.email.split("@")[0] : t("auth.menu.account");
     return (
       <div className="flex items-center gap-2">
-        <MobileNav />
+        <MobileNav onFeedbackClick={openFeedback} />
         {feedbackButton}
         {!hideDashboard && (
           <Button asChild size="sm" variant="outline">
@@ -152,11 +157,11 @@ export function AuthMenu({
 
   return (
     <>
-      <MobileNav />
+      <MobileNav onFeedbackClick={openFeedback} />
       {feedbackButton}
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         <LogIn className="size-3" />
-        {t("auth.menu.signin")}
+        <span className="hidden sm:inline">{t("auth.menu.signin")}</span>
       </Button>
       <SignInDialog
         open={open}

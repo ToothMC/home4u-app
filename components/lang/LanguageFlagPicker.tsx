@@ -115,7 +115,7 @@ export function LanguageFlagPicker({
   const active = LANGS.find((l) => l.code === current) ?? LANGS[0];
 
   return (
-    <div ref={wrapRef} className={"relative " + (className ?? "")}>
+    <div ref={wrapRef} className={"relative flex-shrink-0 " + (className ?? "")}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
