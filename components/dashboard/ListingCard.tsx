@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useState } from "react";
 import { Loader2, Trash2, Plus } from "lucide-react";
 import {
@@ -38,14 +39,20 @@ export function ListingCard({
   const [showUploader, setShowUploader] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Ref hält den aktuellen media-State, damit parallele Uploads keine
+  // stale closure haben (sonst gewinnt bei 4 parallelen Uploads der letzte
+  // Call mit nur 1 URL — vermutete Ursache des Foto-Verlusts vom 03.05.).
+  const mediaRef = React.useRef<string[]>(listing.media ?? []);
+  React.useEffect(() => {
+    mediaRef.current = media;
+  }, [media]);
+
   async function appendMedia(m: AttachedMedia) {
     setError(null);
     setBusy("append");
-    const next = Array.from(new Set([...media, m.url]));
+    const next = Array.from(new Set([...mediaRef.current, m.url]));
+    mediaRef.current = next;
     const supabase = createSupabaseBrowserClient();
-    // RPC statt direktem update — synchronisiert listing_photos atomar mit
-    // (Migration 0040). Sonst sieht der Public-View die neuen Uploads nicht,
-    // weil er bevorzugt aus listing_photos liest.
     const { error } = await supabase.rpc("set_listing_media", {
       p_listing_id: listing.id,
       p_media: next,
@@ -59,13 +66,22 @@ export function ListingCard({
   }
 
   async function removeMedia(url: string) {
+    const current = mediaRef.current;
+    const next = current.filter((m) => m !== url);
+    if (next.length === 0 && current.length > 0) {
+      const ok = window.confirm(
+        "Wirklich das letzte Bild entfernen? Das Inserat hätte dann keine Bilder mehr."
+      );
+      if (!ok) return;
+    }
     setError(null);
     setBusy(url);
-    const next = media.filter((m) => m !== url);
+    mediaRef.current = next;
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.rpc("set_listing_media", {
       p_listing_id: listing.id,
       p_media: next,
+      p_allow_empty: next.length === 0,
     });
     setBusy(null);
     if (error) {

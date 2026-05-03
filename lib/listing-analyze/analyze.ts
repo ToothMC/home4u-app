@@ -22,7 +22,7 @@ import { ANALYZE_TOOL, type AnalyzeResult } from "./tool";
 
 export type AnalyzeModel = "haiku" | "sonnet";
 
-const MAX_PHOTOS_PER_CALL = 20;
+const MAX_PHOTOS_PER_CALL = 40;
 
 export type AnalyzeOk = {
   ok: true;
@@ -174,8 +174,11 @@ export async function analyzeListing(
     };
   }
 
-  await supabase.from("listing_photos").delete().eq("listing_id", listing.id);
-
+  // Vorher: erst ALLE listing_photos löschen, dann neu einfügen — das hat
+  // bei >MAX_PHOTOS_PER_CALL Bildern die nicht-analysierten Bilder aus
+  // listing_photos entfernt. Jetzt: gezieltes Upsert pro analysierter URL,
+  // nicht-analysierte Bilder bleiben unangetastet (ihr room_type kann
+  // manuell im Editor gesetzt werden).
   const photoRows = result.photos
     .filter((p) => p.index >= 0 && p.index < imageUrls.length)
     .map((p) => ({
@@ -187,7 +190,9 @@ export async function analyzeListing(
     }));
 
   if (photoRows.length > 0) {
-    await supabase.from("listing_photos").insert(photoRows);
+    await supabase
+      .from("listing_photos")
+      .upsert(photoRows, { onConflict: "listing_id,url" });
   }
 
   return {

@@ -147,11 +147,56 @@ const PROPERTY_TYPE_KEY: Record<string, TKey> = {
 
 type FormState = Partial<EditableListing>;
 
-export function ListingEditor({ initial }: { initial: EditableListing }) {
+const ROOM_TYPES = [
+  "living",
+  "kitchen",
+  "bedroom",
+  "bathroom",
+  "balcony",
+  "terrace",
+  "exterior",
+  "view",
+  "garden",
+  "pool",
+  "parking",
+  "hallway",
+  "utility",
+  "other",
+] as const;
+
+type RoomType = (typeof ROOM_TYPES)[number];
+
+const ROOM_TYPE_LABEL_KEY: Record<RoomType, TKey> = {
+  living: "room.living",
+  kitchen: "room.kitchen",
+  bedroom: "room.bedroom",
+  bathroom: "room.bathroom",
+  balcony: "room.balcony",
+  terrace: "room.terrace",
+  exterior: "room.exterior",
+  view: "room.view",
+  garden: "room.garden",
+  pool: "room.pool",
+  parking: "room.parking",
+  hallway: "room.hallway",
+  utility: "room.utility",
+  other: "room.other",
+};
+
+export function ListingEditor({
+  initial,
+  roomTypeByUrl,
+}: {
+  initial: EditableListing;
+  roomTypeByUrl?: Record<string, string | null>;
+}) {
   const router = useRouter();
   const { t } = useT();
   const [form, setForm] = React.useState<FormState>({});
   const [media, setMedia] = React.useState<string[]>(initial.media ?? []);
+  const [roomTypes, setRoomTypes] = React.useState<Record<string, string | null>>(
+    roomTypeByUrl ?? {}
+  );
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -184,6 +229,12 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
     persistTimer.current = setTimeout(async () => {
       const toSave = persistMediaRef.current;
       if (!toSave) return;
+      // Schutz: schedule-Pfad darf NIE clearen (nur appendMedia/moveMedia
+      // rufen schedule). Leeres Array hier wäre Race/Bug → ignorieren.
+      if (toSave.length === 0) {
+        persistMediaRef.current = null;
+        return;
+      }
       persistMediaRef.current = null;
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.rpc("set_listing_media", {
@@ -218,7 +269,28 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
 
   const [dragIdx, setDragIdx] = React.useState<number | null>(null);
 
+  async function setRoomType(url: string, value: string) {
+    const next = value || null;
+    setError(null);
+    setRoomTypes((prev) => ({ ...prev, [url]: next }));
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.rpc("update_listing_photo_room_type", {
+      p_listing_id: initial.id,
+      p_url: url,
+      p_room_type: next,
+    });
+    if (error) setError(error.message);
+    else router.refresh();
+  }
+
   async function removeMedia(url: string) {
+    // Letztes Bild → Confirm. Verhindert versehentliches Lösch-Cascade,
+    // außerdem braucht der RPC dann das p_allow_empty=true Flag.
+    const isLast = media.length === 1 && media[0] === url;
+    if (isLast) {
+      const ok = window.confirm(t("listingEditor.media.confirmRemoveLast"));
+      if (!ok) return;
+    }
     setError(null);
     setBusy(`media-remove-${url}`);
     const supabase = createSupabaseBrowserClient();
@@ -230,6 +302,7 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
     const { error } = await supabase.rpc("set_listing_media", {
       p_listing_id: initial.id,
       p_media: next,
+      p_allow_empty: next.length === 0,
     });
     setBusy(null);
     if (error) setError(error.message);
@@ -299,9 +372,10 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
               const isCover = idx === 0;
               const isFirst = idx === 0;
               const isLast = idx === media.length - 1;
+              const currentRoom = roomTypes[url] ?? "";
               return (
+                <div key={url} className="space-y-1">
                 <div
-                  key={url}
                   draggable
                   onDragStart={(e) => {
                     setDragIdx(idx);
@@ -397,6 +471,24 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                       <Trash2 className="size-3" />
                     )}
                   </button>
+                </div>
+                <select
+                  value={currentRoom}
+                  onChange={(e) => setRoomType(url, e.target.value)}
+                  className={cn(
+                    "h-7 w-full rounded border bg-[var(--background)] px-1 text-[10px]",
+                    !currentRoom && "text-[var(--muted-foreground)] italic"
+                  )}
+                  aria-label={t("listingEditor.media.roomType")}
+                  title={t("listingEditor.media.roomTypeHint")}
+                >
+                  <option value="">— {t("listingEditor.media.roomNone")} —</option>
+                  {ROOM_TYPES.map((rt) => (
+                    <option key={rt} value={rt}>
+                      {t(ROOM_TYPE_LABEL_KEY[rt])}
+                    </option>
+                  ))}
+                </select>
                 </div>
               );
             })}
