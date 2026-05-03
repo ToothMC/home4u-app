@@ -107,10 +107,6 @@ export async function analyzeListing(
   }
 
   const client = getAnthropic();
-  const imageContent: Anthropic.ImageBlockParam[] = imageUrls.map((url) => ({
-    type: "image",
-    source: { type: "url", url: shrinkSupabaseUrl(url) },
-  }));
 
   const userText = buildUserMessage({
     listingId: listing.id,
@@ -125,6 +121,19 @@ export async function analyzeListing(
     existingDescription: listing.description,
     imageCount: imageUrls.length,
   });
+
+  // Bilder + Index-Labels interleaven, damit Sophie pro Bild eine
+  // unmissverständliche Index-Anker-Zeile sieht. Sonst verliert sie bei
+  // vielen Bildern die Reihenfolge und tagt "Garten" auf ein Schlafzimmer.
+  type Block = Anthropic.TextBlockParam | Anthropic.ImageBlockParam;
+  const interleaved: Block[] = [];
+  for (let i = 0; i < imageUrls.length; i++) {
+    interleaved.push({ type: "text", text: `Foto ${i}:` });
+    interleaved.push({
+      type: "image",
+      source: { type: "url", url: shrinkSupabaseUrl(imageUrls[i]) },
+    });
+  }
 
   let response;
   try {
@@ -143,7 +152,7 @@ export async function analyzeListing(
       messages: [
         {
           role: "user",
-          content: [{ type: "text", text: userText }, ...imageContent],
+          content: [{ type: "text", text: userText }, ...interleaved],
         },
       ],
     });
