@@ -18,7 +18,71 @@ import { getAnthropic, MODEL_HAIKU, MODEL_SONNET } from "@/lib/anthropic";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SupabaseLike = SupabaseClient<any, any, any>;
 import { ANALYZE_SYSTEM_PROMPT, buildUserMessage } from "./prompt";
-import { ANALYZE_TOOL, type AnalyzeResult } from "./tool";
+import { ANALYZE_TOOL, ROOM_TYPES, type AnalyzeResult } from "./tool";
+
+// Per-Bild-Klassifizierung: 1 fokussierter Haiku-Call pro Foto, parallel.
+// Sonnet auf einem Schlag mit 40 Bildern verschlampt zu viele Indices →
+// Foto-Misclassification. Pro-Bild-Call sieht genau EIN Bild und beantwortet
+// genau EINE Frage → nahezu 100% Treffer.
+const ROOM_CLASSIFY_TOOL: Anthropic.Tool = {
+  name: "classify_room",
+  description: "Klassifiziere den Raumtyp des einzelnen Fotos.",
+  input_schema: {
+    type: "object",
+    properties: {
+      room_type: {
+        type: "string",
+        enum: [...ROOM_TYPES],
+        description:
+          "Welcher Raum/Bereich ist auf dem Foto zu sehen? Bei Außenaufnahmen → exterior/garden/pool/parking/terrace/balcony/view je nach Motiv. Bei Innenräumen → living/kitchen/bedroom/bathroom/hallway/utility/office. Wenn unklar → other.",
+      },
+      caption: {
+        type: "string",
+        description: "Sehr kurze Bildunterschrift, max 6 Wörter (z. B. 'Wohnzimmer mit Sofa', 'Bad mit Dusche').",
+      },
+    },
+    required: ["room_type"],
+  },
+};
+
+async function classifyRoom(
+  client: ReturnType<typeof getAnthropic>,
+  url: string
+): Promise<{ room_type: string; caption?: string } | null> {
+  try {
+    const res = await client.messages.create({
+      model: MODEL_HAIKU,
+      max_tokens: 200,
+      tools: [ROOM_CLASSIFY_TOOL],
+      tool_choice: { type: "tool", name: "classify_room" },
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "url", url: shrinkSupabaseUrl(url) },
+            },
+            {
+              type: "text",
+              text: "Welcher Raumtyp ist auf diesem Foto zu sehen? Antworte über das classify_room-Tool.",
+            },
+          ],
+        },
+      ],
+    });
+    const tu = res.content.find(
+      (c): c is Anthropic.ToolUseBlock =>
+        c.type === "tool_use" && c.name === "classify_room"
+    );
+    if (!tu) return null;
+    const input = tu.input as { room_type: string; caption?: string };
+    return input;
+  } catch (err) {
+    console.error("[classify_room] failed", url, err);
+    return null;
+  }
+}
 
 export type AnalyzeModel = "haiku" | "sonnet";
 
@@ -200,20 +264,24 @@ export async function analyzeListing(
     };
   }
 
-  // Vorher: erst ALLE listing_photos löschen, dann neu einfügen — das hat
-  // bei >MAX_PHOTOS_PER_CALL Bildern die nicht-analysierten Bilder aus
-  // listing_photos entfernt. Jetzt: gezieltes Upsert pro analysierter URL,
-  // nicht-analysierte Bilder bleiben unangetastet (ihr room_type kann
-  // manuell im Editor gesetzt werden).
-  const photoRows = result.photos
-    .filter((p) => p.index >= 0 && p.index < imageUrls.length)
-    .map((p) => ({
-      listing_id: listing.id,
-      url: imageUrls[p.index],
-      room_type: p.room_type,
-      caption: p.caption ?? null,
-      position: p.index,
-    }));
+  // Per-Bild-Klassifizierung parallel: 1 Haiku-Call pro Foto. Sonnets
+  // photos[]-Antwort wird IGNORIERT, weil sie bei vielen Bildern Indices
+  // verschlampt. Ein fokussierter Call pro Bild trifft fast immer richtig.
+  const classifications = await Promise.all(
+    imageUrls.map((url) => classifyRoom(client, url))
+  );
+  const photoRows = classifications
+    .map((c, idx) => {
+      if (!c) return null;
+      return {
+        listing_id: listing.id,
+        url: imageUrls[idx],
+        room_type: c.room_type,
+        caption: c.caption ?? null,
+        position: idx,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
 
   if (photoRows.length > 0) {
     await supabase
