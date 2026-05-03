@@ -128,6 +128,17 @@ export default async function RootLayout({
             __html: JSON.stringify(ORGANIZATION_JSONLD),
           }}
         />
+        {/* Plausible Analytics — gleiche Site-ID wie meet-sophie. */}
+        <script
+          defer
+          src="https://plausible.io/js/pa-1OMRAStrHWUobLDx17XLI.js"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()",
+          }}
+        />
         <LangProvider lang={lang}>{children}</LangProvider>
       </body>
     </html>
