@@ -86,6 +86,12 @@ async function handleMessage(msg: Message): Promise<void> {
   const tgUserId = msg.from?.id;
   if (!tgUserId) return;
 
+  // Admin-Reply auf Feedback-Notification → an ursprünglichen User weiterleiten.
+  // Muss VOR identity-resolve laufen, damit es nicht als Sophie-User-Turn endet.
+  if (msg.reply_to_message && (await tryHandleAdminFeedbackReply(msg))) {
+    return;
+  }
+
   // Identity resolve (oder anlegen). language_code für Sprach-Auto-Detection.
   const identity = await resolveChannelIdentity({
     channel: "telegram",
@@ -406,6 +412,65 @@ async function handleDeeplinkPayload(args: {
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Wenn der Admin im Bot-DM auf eine Feedback-Notification antwortet
+ * (Telegram "Reply"-Funktion), leiten wir die Antwort an den ursprünglichen
+ * Feedback-Absender weiter — sofern dieser Telegram-Login hatte.
+ *
+ * Marker für eine Feedback-Notification: Original-Text beginnt mit
+ * "📬 Neues Feedback" und enthält "Telegram-User-ID: <digits>".
+ *
+ * Returnt true, wenn der Reply behandelt wurde (auch im Fehlerfall) —
+ * damit verhindert wird, dass der Text danach an Sophie geschickt wird.
+ */
+async function tryHandleAdminFeedbackReply(msg: Message): Promise<boolean> {
+  const adminChatId = process.env.FEEDBACK_TELEGRAM_ADMIN_CHAT_ID;
+  if (!adminChatId) return false;
+  if (String(msg.from?.id) !== adminChatId) return false;
+
+  const replied = msg.reply_to_message;
+  if (!replied?.from?.is_bot) return false;
+
+  const originalText = replied.text ?? "";
+  if (!originalText.startsWith("📬 Neues Feedback")) return false;
+
+  const replyText = msg.text;
+  if (!replyText) {
+    await sendText(msg.chat.id, "Reply muss reinen Text enthalten.");
+    return true;
+  }
+
+  const tgIdMatch = originalText.match(/Telegram-User-ID:\s*(\d+)/);
+  if (!tgIdMatch) {
+    const replyToMatch = originalText.match(/Reply-To:\s*([^\s\n—]+@[^\s\n]+)/);
+    const email = replyToMatch?.[1];
+    const hint = email
+      ? `Dieser User hat keinen Telegram-Account.\nBitte per E-Mail antworten an: ${email}`
+      : "Dieser User hat weder Telegram noch eine valide Mail-Adresse — keine Antwort möglich.";
+    await sendText(msg.chat.id, hint);
+    return true;
+  }
+
+  const recipientTgId = Number(tgIdMatch[1]);
+  const bot = getTelegramBot();
+  try {
+    const sent = await bot.api.sendMessage(
+      recipientTgId,
+      `💬 Antwort von Home4U:\n\n${replyText}`
+    );
+    await bot.api.sendMessage(
+      msg.chat.id,
+      `✅ Gesendet an ${recipientTgId} (msg ${sent.message_id})`,
+      { reply_to_message_id: msg.message_id }
+    );
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error("[feedback-reply] forward failed", detail);
+    await sendText(msg.chat.id, `❌ Konnte nicht senden: ${detail}`);
+  }
+  return true;
+}
 
 async function sendText(chatId: number, text: string): Promise<void> {
   const bot = getTelegramBot();
