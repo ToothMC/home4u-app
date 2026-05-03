@@ -24,6 +24,20 @@ export type AnalyzeModel = "haiku" | "sonnet";
 
 const MAX_PHOTOS_PER_CALL = 40;
 
+// Anthropic-Limit: bei Many-Image-Requests darf KEINE Dimension >2000 px sein.
+// Unsere Uploads werden auf 2400px komprimiert (compress.ts), also schreiben
+// wir Supabase-Storage-URLs auf den Render-Endpoint um, der serverseitig auf
+// 1920px herunterskaliert. Andere URLs (externe Crawler-Quellen) bleiben
+// unverändert — die sind meist eh kleiner.
+function shrinkSupabaseUrl(url: string): string {
+  const m = url.match(
+    /^(https:\/\/[^/]+\.supabase\.co)\/storage\/v1\/object\/public\/([^/]+)\/(.+?)(\?.*)?$/
+  );
+  if (!m) return url;
+  const [, host, bucket, path] = m;
+  return `${host}/storage/v1/render/image/public/${bucket}/${path}?width=1920&quality=80`;
+}
+
 export type AnalyzeOk = {
   ok: true;
   listing_id: string;
@@ -92,7 +106,7 @@ export async function analyzeListing(
   const client = getAnthropic();
   const imageContent: Anthropic.ImageBlockParam[] = imageUrls.map((url) => ({
     type: "image",
-    source: { type: "url", url },
+    source: { type: "url", url: shrinkSupabaseUrl(url) },
   }));
 
   const userText = buildUserMessage({
