@@ -425,15 +425,19 @@ async function handleDeeplinkPayload(args: {
  * damit verhindert wird, dass der Text danach an Sophie geschickt wird.
  */
 async function tryHandleAdminFeedbackReply(msg: Message): Promise<boolean> {
-  const adminChatId = process.env.FEEDBACK_TELEGRAM_ADMIN_CHAT_ID;
-  if (!adminChatId) return false;
-  if (String(msg.from?.id) !== adminChatId) return false;
-
+  const adminChatId = process.env.FEEDBACK_TELEGRAM_ADMIN_CHAT_ID?.trim();
+  const fromId = String(msg.from?.id ?? "");
   const replied = msg.reply_to_message;
-  if (!replied?.from?.is_bot) return false;
+  const originalText = replied?.text ?? replied?.caption ?? "";
+  const isFeedbackOriginal = originalText.includes("Neues Feedback");
+  console.error(
+    `[feedback-reply] check from=${fromId} admin=${adminChatId ?? "MISSING"} hasReply=${!!replied} isBot=${replied?.from?.is_bot ?? false} isFeedback=${isFeedbackOriginal} origLen=${originalText.length}`
+  );
 
-  const originalText = replied.text ?? "";
-  if (!originalText.startsWith("📬 Neues Feedback")) return false;
+  if (!adminChatId) return false;
+  if (fromId !== adminChatId) return false;
+  if (!replied?.from?.is_bot) return false;
+  if (!isFeedbackOriginal) return false;
 
   const replyText = msg.text;
   if (!replyText) {
