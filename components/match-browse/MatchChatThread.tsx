@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 type Message = {
   id: string;
@@ -144,17 +144,8 @@ export function MatchChatThread({
     }
   }
 
-  // Heuristik "ist Touch-Device": auf Mobile soll Enter NICHT senden (User tippt
-  // mehrzeilig), auf Desktop schon. matchMedia(pointer: coarse) ist der Standard.
-  const isTouchRef = React.useRef(false);
-  React.useEffect(() => {
-    if (typeof window !== "undefined" && window.matchMedia) {
-      isTouchRef.current = window.matchMedia("(pointer: coarse)").matches;
-    }
-  }, []);
-
   return (
-    <div className="rounded-2xl border bg-[var(--card)] overflow-hidden flex flex-col h-[60dvh] sm:h-[480px]">
+    <div className="rounded-2xl border bg-[var(--card)] overflow-hidden flex flex-col">
       <div className="px-4 py-3 border-b text-sm font-medium flex items-center justify-between shrink-0">
         <span className="truncate">Direkt-Chat mit {counterpartyLabel}</span>
         <span className="text-[10px] text-[var(--muted-foreground)] shrink-0 ml-2">
@@ -166,7 +157,7 @@ export function MatchChatThread({
 
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-3 space-y-2 bg-[var(--background)]"
+        className="overflow-y-auto overscroll-contain px-4 py-3 space-y-2 bg-[var(--background)] max-h-[50dvh] min-h-[140px]"
       >
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
@@ -188,31 +179,17 @@ export function MatchChatThread({
         }}
         className="border-t p-2 bg-[var(--card)] shrink-0"
       >
-        <div className="flex items-end gap-2">
-          <Textarea
+        <div className="flex items-center gap-2">
+          <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Nachricht schreiben…"
-            rows={1}
-            // text-base = 16px → verhindert iOS-Auto-Zoom beim Focus,
-            // der sonst die Seite umbricht und den Scroll springen lässt.
-            className="resize-none min-h-[40px] max-h-32 text-base"
+            // text-base = 16px → verhindert iOS-Auto-Zoom beim Focus.
+            className="text-base"
             inputMode="text"
             enterKeyHint="send"
             autoComplete="off"
             autoCorrect="on"
-            onKeyDown={(e) => {
-              // Enter sendet nur auf Desktop. Auf Mobile macht Enter Zeilenumbruch
-              // — der "Senden"-Button ist explizit. Das ist Standard in WhatsApp/iMessage.
-              if (
-                e.key === "Enter" &&
-                !e.shiftKey &&
-                !isTouchRef.current
-              ) {
-                e.preventDefault();
-                send();
-              }
-            }}
             disabled={sending}
           />
           <Button
