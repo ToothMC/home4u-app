@@ -2,14 +2,16 @@
  * Browser-seitige Bild-Kompression vor dem Upload.
  *
  * - HEIC (iPhone) → JPEG (sonst nicht in Chrome anzeigbar)
- * - Resize auf max 2400px lange Kante (genug für Hero-Galerie)
- * - JPEG quality 0.85 → typisch 300-700 KB statt 5-10 MB
+ * - Resize auf max 1920px lange Kante (genug für Hero-Galerie + bleibt
+ *   unter Anthropics 2000-px-Many-Image-Limit, damit der Vision-Analyse-
+ *   Pfad nicht extra herunterskalieren muss)
+ * - JPEG quality 0.85 → typisch 250-500 KB statt 5-10 MB
  * - Web-Worker → blockiert UI nicht
  *
  * Videos werden nicht angefasst (ffmpeg.wasm zu groß für browser-side).
  */
 
-const MAX_DIMENSION = 2400;
+const MAX_DIMENSION = 1920;
 const MAX_OUTPUT_MB = 2;
 const QUALITY = 0.85;
 

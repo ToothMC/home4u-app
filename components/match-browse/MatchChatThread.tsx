@@ -12,6 +12,16 @@ type Message = {
   created_at: string;
   read_at: string | null;
   mine: boolean;
+  original_language: string | null;
+  display_text: string;
+  is_translated: boolean;
+};
+
+const LANG_LABEL: Record<string, string> = {
+  de: "DE",
+  en: "EN",
+  ru: "RU",
+  el: "EL",
 };
 
 /**
@@ -79,6 +89,9 @@ export function MatchChatThread({
       created_at: new Date().toISOString(),
       read_at: null,
       mine: true,
+      original_language: null,
+      display_text: text,
+      is_translated: false,
     };
     setMessages((prev) => [...prev, optimistic]);
     setInput("");
@@ -177,10 +190,15 @@ export function MatchChatThread({
 }
 
 function Bubble({ message }: { message: Message }) {
+  const [showOriginal, setShowOriginal] = React.useState(false);
   const time = new Date(message.created_at).toLocaleTimeString("de-DE", {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const body = showOriginal ? message.content : message.display_text;
+  const sourceLabel = message.original_language
+    ? LANG_LABEL[message.original_language] ?? message.original_language.toUpperCase()
+    : null;
   return (
     <div
       className={
@@ -195,7 +213,23 @@ function Bubble({ message }: { message: Message }) {
             : "bg-[var(--accent)] text-[var(--foreground)] rounded-bl-sm")
         }
       >
-        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        <p className="whitespace-pre-wrap break-words">{body}</p>
+        {message.is_translated && (
+          <button
+            type="button"
+            onClick={() => setShowOriginal((v) => !v)}
+            className={
+              "mt-1 text-[10px] underline-offset-2 hover:underline " +
+              (message.mine ? "text-white/80" : "text-[var(--muted-foreground)]")
+            }
+          >
+            {showOriginal
+              ? "Übersetzung anzeigen"
+              : sourceLabel
+                ? `Übersetzt aus ${sourceLabel} · Original anzeigen`
+                : "Original anzeigen"}
+          </button>
+        )}
         <p
           className={
             "text-[10px] mt-1 " +

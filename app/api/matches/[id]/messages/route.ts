@@ -2,6 +2,9 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { type SupabaseClient } from "@supabase/supabase-js";
+import { translate } from "@/lib/translation/translate";
+import type { Lang } from "@/lib/translation/glossary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +15,30 @@ export const dynamic = "force-dynamic";
  *
  * Auth-only. Erlaubt nur Teilnehmer (Seeker oder Owner) eines connected
  * Matches. Authorisierung doppelt geprüft: server-seitig + RLS.
+ *
+ * Auto-Translation: beim POST wird der Text in die preferred_language des
+ * Empfängers übersetzt (Haiku, mit Cache + Domain-Glossar). GET liefert
+ * `display_text` bereits in Viewer-Sprache plus Original zum Aufklappen.
  */
+
+const TRANSLATABLE_LANGS: ReadonlyArray<Lang> = ["de", "en", "ru", "el"];
+
+function isTranslatableLang(s: string | null | undefined): s is Lang {
+  return !!s && (TRANSLATABLE_LANGS as readonly string[]).includes(s);
+}
+
+async function loadProfileLang(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<Lang | null> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("preferred_language")
+    .eq("id", userId)
+    .maybeSingle();
+  const raw = data?.preferred_language as string | null | undefined;
+  return isTranslatableLang(raw) ? raw : null;
+}
 
 async function authorizeMatch(matchId: string, userId: string) {
   const supabase = createSupabaseServiceClient();
@@ -42,7 +68,8 @@ async function authorizeMatch(matchId: string, userId: string) {
   if (!isSeeker && !isOwner) {
     return { ok: false as const, status: 403, error: "forbidden" };
   }
-  return { ok: true as const, supabase };
+  const counterpartyId = isSeeker ? listing.owner_user_id : profile.user_id;
+  return { ok: true as const, supabase, counterpartyId };
 }
 
 export async function GET(
@@ -62,7 +89,9 @@ export async function GET(
 
   const { data, error } = await auth.supabase
     .from("match_messages")
-    .select("id, sender_user_id, content, created_at, read_at")
+    .select(
+      "id, sender_user_id, content, created_at, read_at, original_language, translations"
+    )
     .eq("match_id", id)
     .order("created_at", { ascending: true })
     .limit(500);
@@ -74,12 +103,30 @@ export async function GET(
     );
   }
 
+  const viewerLang = await loadProfileLang(auth.supabase, user.id);
+
   return Response.json({
     ok: true,
-    messages: (data ?? []).map((m) => ({
-      ...m,
-      mine: m.sender_user_id === user.id,
-    })),
+    viewer_lang: viewerLang,
+    messages: (data ?? []).map((m) => {
+      const mine = m.sender_user_id === user.id;
+      const translations = (m.translations ?? {}) as Partial<Record<Lang, string>>;
+      const translated =
+        !mine && viewerLang && viewerLang !== m.original_language
+          ? translations[viewerLang]
+          : null;
+      return {
+        id: m.id,
+        sender_user_id: m.sender_user_id,
+        content: m.content,
+        created_at: m.created_at,
+        read_at: m.read_at,
+        mine,
+        original_language: (m.original_language as Lang | null) ?? null,
+        display_text: translated ?? m.content,
+        is_translated: !!translated,
+      };
+    }),
     me: user.id,
   });
 }
@@ -112,14 +159,41 @@ export async function POST(
     return Response.json({ error: auth.error }, { status: auth.status });
   }
 
+  // Auto-Translation vorbereiten: Sender + Empfänger-Sprache laden, in
+  // Empfänger-Sprache übersetzen wenn beide bekannt und unterschiedlich.
+  const senderLang = await loadProfileLang(auth.supabase, user.id);
+  const receiverLang = auth.counterpartyId
+    ? await loadProfileLang(auth.supabase, auth.counterpartyId)
+    : null;
+
+  let translations: Partial<Record<Lang, string>> = {};
+  if (senderLang && receiverLang && senderLang !== receiverLang) {
+    const result = await translate({
+      text: parsed.data.content,
+      source_lang: senderLang,
+      target_langs: [receiverLang],
+      context: "chat",
+    });
+    if (!result.error) {
+      translations = result.translations;
+    } else {
+      console.warn("[messages.POST] translate failed", {
+        match_id: id,
+        error: result.error,
+      });
+    }
+  }
+
   const { data, error } = await auth.supabase
     .from("match_messages")
     .insert({
       match_id: id,
       sender_user_id: user.id,
       content: parsed.data.content,
+      original_language: senderLang,
+      translations,
     })
-    .select("id, content, created_at")
+    .select("id, content, created_at, original_language, translations")
     .single();
 
   if (error || !data) {
@@ -129,5 +203,17 @@ export async function POST(
     );
   }
 
-  return Response.json({ ok: true, message: { ...data, mine: true } });
+  return Response.json({
+    ok: true,
+    message: {
+      id: data.id,
+      content: data.content,
+      created_at: data.created_at,
+      original_language: data.original_language,
+      mine: true,
+      // Eigene Nachrichten zeigen immer das Original
+      display_text: data.content,
+      is_translated: false,
+    },
+  });
 }

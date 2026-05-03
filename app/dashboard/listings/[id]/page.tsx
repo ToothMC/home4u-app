@@ -53,6 +53,18 @@ export default async function ListingDetailPage({
     redirect("/dashboard");
   }
 
+  // listing_photos parallel laden — Editor zeigt room_type pro Bild und
+  // erlaubt manuelles Korrigieren / Setzen.
+  const { data: photoRows } = await supabase
+    .from("listing_photos")
+    .select("url, room_type")
+    .eq("listing_id", id);
+
+  const roomTypeByUrl: Record<string, string | null> = {};
+  for (const p of photoRows ?? []) {
+    roomTypeByUrl[p.url as string] = (p.room_type as string | null) ?? null;
+  }
+
   const listing: EditableListing = {
     id: data.id,
     title: data.title ?? null,
@@ -133,7 +145,7 @@ export default async function ListingDetailPage({
           </p>
         </div>
 
-        <ListingEditor initial={listing} />
+        <ListingEditor initial={listing} roomTypeByUrl={roomTypeByUrl} />
       </section>
     </main>
   );

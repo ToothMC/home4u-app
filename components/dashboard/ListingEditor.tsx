@@ -147,11 +147,63 @@ const PROPERTY_TYPE_KEY: Record<string, TKey> = {
 
 type FormState = Partial<EditableListing>;
 
-export function ListingEditor({ initial }: { initial: EditableListing }) {
+const ROOM_TYPES = [
+  "living",
+  "kitchen",
+  "bedroom",
+  "bathroom",
+  "balcony",
+  "terrace",
+  "exterior",
+  "view",
+  "garden",
+  "pool",
+  "parking",
+  "hallway",
+  "utility",
+  "office",
+  "other",
+] as const;
+
+type RoomType = (typeof ROOM_TYPES)[number];
+
+const ROOM_TYPE_LABEL_KEY: Record<RoomType, TKey> = {
+  living: "room.living",
+  kitchen: "room.kitchen",
+  bedroom: "room.bedroom",
+  bathroom: "room.bathroom",
+  balcony: "room.balcony",
+  terrace: "room.terrace",
+  exterior: "room.exterior",
+  view: "room.view",
+  garden: "room.garden",
+  pool: "room.pool",
+  parking: "room.parking",
+  hallway: "room.hallway",
+  utility: "room.utility",
+  office: "room.office",
+  other: "room.other",
+};
+
+export function ListingEditor({
+  initial,
+  roomTypeByUrl,
+}: {
+  initial: EditableListing;
+  roomTypeByUrl?: Record<string, string | null>;
+}) {
   const router = useRouter();
   const { t } = useT();
   const [form, setForm] = React.useState<FormState>({});
   const [media, setMedia] = React.useState<string[]>(initial.media ?? []);
+  const [roomTypes, setRoomTypes] = React.useState<Record<string, string | null>>(
+    roomTypeByUrl ?? {}
+  );
+  // Wenn Server-Daten sich ändern (z.B. nach AnalyzeWithSophie + router.refresh),
+  // sync auf den neuen Stand — useState init läuft nur einmal, daher der Effect.
+  React.useEffect(() => {
+    if (roomTypeByUrl) setRoomTypes(roomTypeByUrl);
+  }, [roomTypeByUrl]);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -184,6 +236,12 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
     persistTimer.current = setTimeout(async () => {
       const toSave = persistMediaRef.current;
       if (!toSave) return;
+      // Schutz: schedule-Pfad darf NIE clearen (nur appendMedia/moveMedia
+      // rufen schedule). Leeres Array hier wäre Race/Bug → ignorieren.
+      if (toSave.length === 0) {
+        persistMediaRef.current = null;
+        return;
+      }
       persistMediaRef.current = null;
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.rpc("set_listing_media", {
@@ -218,22 +276,44 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
 
   const [dragIdx, setDragIdx] = React.useState<number | null>(null);
 
-  async function removeMedia(url: string) {
+  async function setRoomType(url: string, value: string) {
+    const next = value || null;
     setError(null);
-    setBusy(`media-remove-${url}`);
+    setRoomTypes((prev) => ({ ...prev, [url]: next }));
     const supabase = createSupabaseBrowserClient();
-    let next: string[] = [];
-    setMedia((prev) => {
-      next = prev.filter((m) => m !== url);
-      return next;
-    });
-    const { error } = await supabase.rpc("set_listing_media", {
+    const { error } = await supabase.rpc("update_listing_photo_room_type", {
       p_listing_id: initial.id,
-      p_media: next,
+      p_url: url,
+      p_room_type: next,
     });
-    setBusy(null);
     if (error) setError(error.message);
     else router.refresh();
+  }
+
+  async function removeMedia(url: string) {
+    const isLast = media.length === 1 && media[0] === url;
+    if (isLast) {
+      const ok = window.confirm(t("listingEditor.media.confirmRemoveLast"));
+      if (!ok) return;
+    }
+    setError(null);
+    setBusy(`media-remove-${url}`);
+    // Atomares Entfernen via RPC — die DB rechnet die neue Liste selbst aus.
+    // Vorher: setMedia-Callback assignte ein outer `next`, das beim Senden
+    // an den RPC noch [] war (React 18 ruft Functional-Setter beim Render
+    // auf, nicht synchron) → Bug, der ALLE Bilder gelöscht hat.
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.rpc("remove_listing_photo", {
+      p_listing_id: initial.id,
+      p_url: url,
+    });
+    setBusy(null);
+    if (error) {
+      setError(error.message);
+    } else {
+      setMedia((prev) => prev.filter((m) => m !== url));
+      router.refresh();
+    }
   }
 
   async function save() {
@@ -262,6 +342,17 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
   }
 
   const dirty = Object.keys(form).length > 0;
+
+  // Alle Custom-Raumtypen aus dem aktuellen State sammeln, damit sie auch
+  // bei anderen Bildern im Dropdown auswählbar sind (User tippt einmal
+  // "Aussenbereich", danach erscheint's überall als Option).
+  const customRooms = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const v of Object.values(roomTypes)) {
+      if (v && !(ROOM_TYPES as readonly string[]).includes(v)) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [roomTypes]);
 
   return (
     <div className="space-y-6">
@@ -299,9 +390,10 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
               const isCover = idx === 0;
               const isFirst = idx === 0;
               const isLast = idx === media.length - 1;
+              const currentRoom = roomTypes[url] ?? "";
               return (
+                <div key={url} className="space-y-1">
                 <div
-                  key={url}
                   draggable
                   onDragStart={(e) => {
                     setDragIdx(idx);
@@ -397,6 +489,47 @@ export function ListingEditor({ initial }: { initial: EditableListing }) {
                       <Trash2 className="size-3" />
                     )}
                   </button>
+                </div>
+                <select
+                  value={currentRoom}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "__custom__") {
+                      const entered = window.prompt(
+                        t("listingEditor.media.roomCustomPrompt"),
+                        currentRoom || ""
+                      );
+                      if (entered !== null) setRoomType(url, entered.trim());
+                    } else {
+                      setRoomType(url, v);
+                    }
+                  }}
+                  className={cn(
+                    "h-7 w-full rounded border bg-[var(--background)] px-1 text-[10px]",
+                    !currentRoom && "text-[var(--muted-foreground)] italic"
+                  )}
+                  aria-label={t("listingEditor.media.roomType")}
+                  title={t("listingEditor.media.roomTypeHint")}
+                >
+                  <option value="">— {t("listingEditor.media.roomNone")} —</option>
+                  {ROOM_TYPES.map((rt) => (
+                    <option key={rt} value={rt}>
+                      {t(ROOM_TYPE_LABEL_KEY[rt])}
+                    </option>
+                  ))}
+                  {customRooms.length > 0 && (
+                    <optgroup label={t("listingEditor.media.roomCustomTag")}>
+                      {customRooms.map((cr) => (
+                        <option key={cr} value={cr}>
+                          {cr}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <option value="__custom__">
+                    + {t("listingEditor.media.roomCustomAdd")}
+                  </option>
+                </select>
                 </div>
               );
             })}

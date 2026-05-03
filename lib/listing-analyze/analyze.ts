@@ -18,11 +18,92 @@ import { getAnthropic, MODEL_HAIKU, MODEL_SONNET } from "@/lib/anthropic";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SupabaseLike = SupabaseClient<any, any, any>;
 import { ANALYZE_SYSTEM_PROMPT, buildUserMessage } from "./prompt";
-import { ANALYZE_TOOL, type AnalyzeResult } from "./tool";
+import { ANALYZE_TOOL, ROOM_TYPES, type AnalyzeResult } from "./tool";
+
+// Per-Bild-Klassifizierung: 1 fokussierter Haiku-Call pro Foto, parallel.
+// Sonnet auf einem Schlag mit 40 Bildern verschlampt zu viele Indices →
+// Foto-Misclassification. Pro-Bild-Call sieht genau EIN Bild und beantwortet
+// genau EINE Frage → nahezu 100% Treffer.
+const ROOM_CLASSIFY_TOOL: Anthropic.Tool = {
+  name: "classify_room",
+  description: "Klassifiziere den Raumtyp des einzelnen Fotos.",
+  input_schema: {
+    type: "object",
+    properties: {
+      room_type: {
+        type: "string",
+        enum: [...ROOM_TYPES],
+        description:
+          "Welcher Raum/Bereich ist auf dem Foto zu sehen? Bei Außenaufnahmen → exterior/garden/pool/parking/terrace/balcony/view je nach Motiv. Bei Innenräumen → living/kitchen/bedroom/bathroom/hallway/utility/office. Wenn unklar → other.",
+      },
+      caption: {
+        type: "string",
+        description: "Sehr kurze Bildunterschrift, max 6 Wörter (z. B. 'Wohnzimmer mit Sofa', 'Bad mit Dusche').",
+      },
+    },
+    required: ["room_type"],
+  },
+};
+
+async function classifyRoom(
+  client: ReturnType<typeof getAnthropic>,
+  url: string
+): Promise<{ room_type: string; caption?: string } | null> {
+  try {
+    const res = await client.messages.create({
+      model: MODEL_HAIKU,
+      max_tokens: 200,
+      tools: [ROOM_CLASSIFY_TOOL],
+      tool_choice: { type: "tool", name: "classify_room" },
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "url", url: shrinkSupabaseUrl(url) },
+            },
+            {
+              type: "text",
+              text: "Welcher Raumtyp ist auf diesem Foto zu sehen? Antworte über das classify_room-Tool.",
+            },
+          ],
+        },
+      ],
+    });
+    const tu = res.content.find(
+      (c): c is Anthropic.ToolUseBlock =>
+        c.type === "tool_use" && c.name === "classify_room"
+    );
+    if (!tu) return null;
+    const input = tu.input as { room_type: string; caption?: string };
+    return input;
+  } catch (err) {
+    console.error("[classify_room] failed", url, err);
+    return null;
+  }
+}
 
 export type AnalyzeModel = "haiku" | "sonnet";
 
-const MAX_PHOTOS_PER_CALL = 20;
+const MAX_PHOTOS_PER_CALL = 40;
+
+// Anthropic-Limit: bei Many-Image-Requests darf KEINE Dimension >2000 px sein.
+// Unsere Uploads werden auf 2400px komprimiert (compress.ts), also schreiben
+// wir Supabase-Storage-URLs auf den Render-Endpoint um, der serverseitig auf
+// 1920px herunterskaliert. Andere URLs (externe Crawler-Quellen) bleiben
+// unverändert — die sind meist eh kleiner.
+function shrinkSupabaseUrl(url: string): string {
+  const m = url.match(
+    /^(https:\/\/[^/]+\.supabase\.co)\/storage\/v1\/object\/public\/([^/]+)\/(.+?)(\?.*)?$/
+  );
+  if (!m) return url;
+  const [, host, bucket, path] = m;
+  // resize=contain + width=height=1920 → BEIDE Dimensionen ≤1920, egal ob
+  // Hochkant oder Querformat. Nur width=… reicht NICHT, weil Hochkantbilder
+  // dann in der Höhe noch >2000 sein können (Anthropic-Limit).
+  return `${host}/storage/v1/render/image/public/${bucket}/${path}?width=1920&height=1920&resize=contain&quality=80`;
+}
 
 export type AnalyzeOk = {
   ok: true;
@@ -90,10 +171,6 @@ export async function analyzeListing(
   }
 
   const client = getAnthropic();
-  const imageContent: Anthropic.ImageBlockParam[] = imageUrls.map((url) => ({
-    type: "image",
-    source: { type: "url", url },
-  }));
 
   const userText = buildUserMessage({
     listingId: listing.id,
@@ -108,6 +185,19 @@ export async function analyzeListing(
     existingDescription: listing.description,
     imageCount: imageUrls.length,
   });
+
+  // Bilder + Index-Labels interleaven, damit Sophie pro Bild eine
+  // unmissverständliche Index-Anker-Zeile sieht. Sonst verliert sie bei
+  // vielen Bildern die Reihenfolge und tagt "Garten" auf ein Schlafzimmer.
+  type Block = Anthropic.TextBlockParam | Anthropic.ImageBlockParam;
+  const interleaved: Block[] = [];
+  for (let i = 0; i < imageUrls.length; i++) {
+    interleaved.push({ type: "text", text: `Foto ${i}:` });
+    interleaved.push({
+      type: "image",
+      source: { type: "url", url: shrinkSupabaseUrl(imageUrls[i]) },
+    });
+  }
 
   let response;
   try {
@@ -126,7 +216,7 @@ export async function analyzeListing(
       messages: [
         {
           role: "user",
-          content: [{ type: "text", text: userText }, ...imageContent],
+          content: [{ type: "text", text: userText }, ...interleaved],
         },
       ],
     });
@@ -174,20 +264,44 @@ export async function analyzeListing(
     };
   }
 
-  await supabase.from("listing_photos").delete().eq("listing_id", listing.id);
+  // Kostenoptimierung: nur Bilder klassifizieren, die noch KEIN room_type
+  // haben (oder noch gar nicht in listing_photos sind). So zahlt der User
+  // die ~0,2¢ pro Bild nur einmal, nicht bei jedem Re-Analyze.
+  const { data: existingPhotos } = await supabase
+    .from("listing_photos")
+    .select("url, room_type")
+    .eq("listing_id", listing.id);
+  const alreadyClassified = new Set(
+    (existingPhotos ?? [])
+      .filter((p) => p.room_type != null && p.room_type !== "")
+      .map((p) => p.url as string)
+  );
+  const toClassify = imageUrls.filter((u) => !alreadyClassified.has(u));
 
-  const photoRows = result.photos
-    .filter((p) => p.index >= 0 && p.index < imageUrls.length)
-    .map((p) => ({
-      listing_id: listing.id,
-      url: imageUrls[p.index],
-      room_type: p.room_type,
-      caption: p.caption ?? null,
-      position: p.index,
-    }));
+  // Per-Bild-Klassifizierung parallel: 1 Haiku-Call pro NEUEM Foto.
+  // Sonnets photos[]-Antwort wird ignoriert (Index-Drift bei vielen Bildern).
+  const classifications = await Promise.all(
+    toClassify.map((url) => classifyRoom(client, url))
+  );
+  const photoRows = classifications
+    .map((c, i) => {
+      if (!c) return null;
+      const url = toClassify[i];
+      const idx = imageUrls.indexOf(url);
+      return {
+        listing_id: listing.id,
+        url,
+        room_type: c.room_type,
+        caption: c.caption ?? null,
+        position: idx,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
 
   if (photoRows.length > 0) {
-    await supabase.from("listing_photos").insert(photoRows);
+    await supabase
+      .from("listing_photos")
+      .upsert(photoRows, { onConflict: "listing_id,url" });
   }
 
   return {
