@@ -67,8 +67,7 @@ export function ListingCard({
 
   async function removeMedia(url: string) {
     const current = mediaRef.current;
-    const next = current.filter((m) => m !== url);
-    if (next.length === 0 && current.length > 0) {
+    if (current.length === 1 && current[0] === url) {
       const ok = window.confirm(
         "Wirklich das letzte Bild entfernen? Das Inserat hätte dann keine Bilder mehr."
       );
@@ -76,18 +75,18 @@ export function ListingCard({
     }
     setError(null);
     setBusy(url);
-    mediaRef.current = next;
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.rpc("set_listing_media", {
+    const { error } = await supabase.rpc("remove_listing_photo", {
       p_listing_id: listing.id,
-      p_media: next,
-      p_allow_empty: next.length === 0,
+      p_url: url,
     });
     setBusy(null);
     if (error) {
       setError(error.message);
       return;
     }
+    const next = current.filter((m) => m !== url);
+    mediaRef.current = next;
     setMedia(next);
   }
 

@@ -291,8 +291,6 @@ export function ListingEditor({
   }
 
   async function removeMedia(url: string) {
-    // Letztes Bild → Confirm. Verhindert versehentliches Lösch-Cascade,
-    // außerdem braucht der RPC dann das p_allow_empty=true Flag.
     const isLast = media.length === 1 && media[0] === url;
     if (isLast) {
       const ok = window.confirm(t("listingEditor.media.confirmRemoveLast"));
@@ -300,20 +298,22 @@ export function ListingEditor({
     }
     setError(null);
     setBusy(`media-remove-${url}`);
+    // Atomares Entfernen via RPC — die DB rechnet die neue Liste selbst aus.
+    // Vorher: setMedia-Callback assignte ein outer `next`, das beim Senden
+    // an den RPC noch [] war (React 18 ruft Functional-Setter beim Render
+    // auf, nicht synchron) → Bug, der ALLE Bilder gelöscht hat.
     const supabase = createSupabaseBrowserClient();
-    let next: string[] = [];
-    setMedia((prev) => {
-      next = prev.filter((m) => m !== url);
-      return next;
-    });
-    const { error } = await supabase.rpc("set_listing_media", {
+    const { error } = await supabase.rpc("remove_listing_photo", {
       p_listing_id: initial.id,
-      p_media: next,
-      p_allow_empty: next.length === 0,
+      p_url: url,
     });
     setBusy(null);
-    if (error) setError(error.message);
-    else router.refresh();
+    if (error) {
+      setError(error.message);
+    } else {
+      setMedia((prev) => prev.filter((m) => m !== url));
+      router.refresh();
+    }
   }
 
   async function save() {
