@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { LogIn, LogOut, User as UserIcon, Loader2, LayoutDashboard } from "lucide-react";
+import { LogIn, LogOut, User as UserIcon, Loader2, LayoutDashboard, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SignInDialog } from "@/components/auth/SignInDialog";
+import { FeedbackDialog } from "@/components/feedback/FeedbackDialog";
 import { MobileNav } from "@/components/nav/MobileNav";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/client";
@@ -26,6 +27,7 @@ export function AuthMenu({
   const { t } = useT();
   const [state, setState] = useState<AuthState>({ status: "loading" });
   const [open, setOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [nextUrl, setNextUrl] = useState<string | null>(null);
 
   // window.location statt useSearchParams() — Suspense-Boundary-Build-Trap.
@@ -91,12 +93,25 @@ export function AuthMenu({
     );
   }
 
+  const feedbackButton = (
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={() => setFeedbackOpen(true)}
+      aria-label={t("feedback.button.label")}
+      title={t("feedback.button.label")}
+    >
+      <MessageSquare className="size-3" />
+    </Button>
+  );
+
   if (state.status === "user") {
     // Nur Local-Part anzeigen (vor dem @): michael@mmhammer.org → michael
     const label = state.email ? state.email.split("@")[0] : t("auth.menu.account");
     return (
       <div className="flex items-center gap-2">
         <MobileNav />
+        {feedbackButton}
         {!hideDashboard && (
           <Button asChild size="sm" variant="outline">
             <Link href="/dashboard" aria-label={t("common.dashboard")}>
@@ -126,6 +141,11 @@ export function AuthMenu({
         >
           <LogOut className="size-3" />
         </Button>
+        <FeedbackDialog
+          open={feedbackOpen}
+          onOpenChange={setFeedbackOpen}
+          defaultEmail={state.email}
+        />
       </div>
     );
   }
@@ -133,6 +153,7 @@ export function AuthMenu({
   return (
     <>
       <MobileNav />
+      {feedbackButton}
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         <LogIn className="size-3" />
         {t("auth.menu.signin")}
@@ -141,6 +162,11 @@ export function AuthMenu({
         open={open}
         onOpenChange={setOpen}
         redirectAfter={nextUrl ?? undefined}
+      />
+      <FeedbackDialog
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+        defaultEmail={null}
       />
     </>
   );

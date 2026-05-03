@@ -43,7 +43,7 @@ export default async function DatenschutzPage() {
         </p>
 
         <Section title={t("privacy.who.heading")}>
-          <p>{md(t("privacy.who.text").replace("contact@home4u.ai", ""))}<a href="mailto:contact@home4u.ai">contact@home4u.ai</a>).</p>
+          <p>{md(t("privacy.who.text").replace("info@home4u.ai", ""))}<a href="mailto:info@home4u.ai">info@home4u.ai</a>).</p>
         </Section>
 
         <Section title={t("privacy.data.heading")}>
@@ -99,8 +99,8 @@ export default async function DatenschutzPage() {
         </Section>
 
         <p className="text-sm text-[var(--muted-foreground)] mt-12">
-          {t("privacy.questions").replace("contact@home4u.ai", "")}
-          <a href="mailto:contact@home4u.ai">contact@home4u.ai</a>.
+          {t("privacy.questions").replace("info@home4u.ai", "")}
+          <a href="mailto:info@home4u.ai">info@home4u.ai</a>.
         </p>
       </article>
     </main>

@@ -92,7 +92,7 @@ def env_list(key: str) -> list[str] | None:
 # Runtime-Config aus Env
 RATE_LIMIT_SECONDS = env_int("RATE_LIMIT_SECONDS", 3)
 MAX_PAGES_PER_CITY = env_int("MAX_PAGES_PER_CITY", 60)
-USER_AGENT = env_str("USER_AGENT", "Home4U-Indexer/0.1 (contact@home4u.ai)")
+USER_AGENT = env_str("USER_AGENT", "Home4U-Indexer/0.1 (info@home4u.ai)")
 
 
 def selected_cities() -> list[CityConfig]:
