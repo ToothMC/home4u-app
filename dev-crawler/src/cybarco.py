@@ -1,8 +1,8 @@
 """Cybarco — Limassol Marina, Trilogy etc. Flagship-Bauträger.
 
-Discovery via /projects-sitemap.xml. Sitemap enthält viele Sub-Pages pro
-Projekt (/location/, /properties/, /properties/apartments/) sowie /ru/-Locale.
-Wir filtern auf Root-Project-Pages: /project/{slug}/.
+Discovery via /projects-sitemap.xml. Cybarcos CDN blockt Datacenter-IPs
+(GitHub Actions) mit 403 — als Fallback nutzen wir eine hardcoded
+Project-Slug-Liste (15 Flagship-Projekte, ändern sich selten).
 
 Rate-Limit: robots.txt verlangt Crawl-delay: 10s. RATE_LIMIT_S=10 wird vom
 Orchestrator (main.py) per getattr(module, "RATE_LIMIT_S", default) gelesen.
@@ -30,6 +30,17 @@ PROJECTS_SITEMAP = f"{BASE_URL}/projects-sitemap.xml"
 
 _PROJECT_PATH_RE = re.compile(r'^/project/[^/]+/?$')
 
+# Fallback wenn Sitemap geblockt wird (GitHub Actions IPs werden mit 403
+# abgewiesen). Stand 2026-05: 15 Flagship-Projekte. Wenn Cybarco neue Projekte
+# launcht, hier ergänzen — Sitemap ist die Source-of-Truth wenn erreichbar.
+FALLBACK_SLUGS = (
+    "limassol-marina", "limassol-greens", "trilogy-limassol-seafront",
+    "centro-limassol", "the-oval", "thalassa-residences",
+    "seaview-heights-limassol", "naftikos-residences", "attikis-residences",
+    "aktea-residences-2", "aktea-residences-3", "aktea-residences-4",
+    "akamas-bay-villas", "park-residences-nicosia", "sea-gallery-villas",
+)
+
 
 def _is_project_page(url: str) -> bool:
     if not _common.is_english_path(url):
@@ -40,6 +51,9 @@ def _is_project_page(url: str) -> bool:
 def discover(client: httpx.Client) -> Iterable[str]:
     locs = _common.fetch_sitemap_locs(client, PROJECTS_SITEMAP)
     urls = {u.rstrip("/") + "/" for u in locs if _is_project_page(u)}
+    if not urls:
+        log.warning("cybarco sitemap blockt (vermutl. WAF) — fallback auf hardcoded slugs")
+        urls = {f"{BASE_URL}/project/{s}/" for s in FALLBACK_SLUGS}
     log.info("cybarco discover: %d project URLs", len(urls))
     return list(urls)
 
