@@ -1,9 +1,9 @@
 name: Daily CY-Developer Crawl
 
 # Bauträger-Bundle: Aristo + Pafilia + Leptos + Cybarco + Korantina + Imperio.
-# Nur Aristo aktuell live, Rest sind Stubs (siehe dev-crawler/_stubs.py).
-# Streaming-Architektur identisch zu cre/index — Watchdog 90min, exit 0
-# garantiert grün auch bei mid-Listing-Stop.
+# Alle 6 produktiv (Cybarco mit per-Modul RATE_LIMIT_S=10 wegen robots.txt
+# Crawl-delay). Streaming-Architektur identisch zu cre/index — Watchdog 90min,
+# exit 0 garantiert grün auch bei mid-Listing-Stop.
 
 on:
   schedule:
