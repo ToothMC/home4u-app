@@ -1,9 +1,9 @@
 name: Daily CY-Developer Crawl
 
-# Bauträger-Bundle: Aristo + Pafilia + Leptos + Cybarco + Korantina + Imperio.
-# Alle 6 produktiv (Cybarco mit per-Modul RATE_LIMIT_S=10 wegen robots.txt
-# Crawl-delay). Streaming-Architektur identisch zu cre/index — Watchdog 90min,
-# exit 0 garantiert grün auch bei mid-Listing-Stop.
+# Bauträger-Bundle: Aristo + Pafilia + Leptos + Korantina + Imperio (5).
+# Cybarco rausgenommen — WAF blockt GH-Action-IPs. Streaming-Architektur
+# identisch zu cre/index — Watchdog 90min, exit 0 garantiert grün auch bei
+# mid-Listing-Stop.
 
 on:
   schedule:

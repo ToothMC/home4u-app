@@ -31,23 +31,21 @@ from typing import Callable
 import httpx
 from dotenv import load_dotenv
 
-from . import aristo, cybarco, imperio, korantina, leptos, pafilia
+from . import aristo, imperio, korantina, leptos, pafilia
 from .base import ParsedListing
 from .dedup import compute_phash_from_url
 from .writer import fetch_already_indexed, mark_stale_old_listings, upsert_listings
 
 
-# Alle 6 CY-Bauträger live. Reihenfolge orientiert sich an erwartetem Volumen
-# (Aristo+Leptos hoch, Cybarco+Korantina+Imperio niedrig). Cybarco zuletzt
-# wegen 10s Crawl-delay — wenn Watchdog vorher zuschlägt, sind die anderen
-# schon durch.
+# 5 CY-Bauträger live. Cybarco rausgenommen — WAF blockt GH-Action-IPs (Sitemap
+# 403, Project-Pages 403). Lokal mit Wohn-IP würde laufen, aber für ~15
+# Luxus-Limassol-Projekte lohnt sich kein Residential-Proxy.
 DEVELOPER_MODULES: list = [
     aristo,
     pafilia,
     leptos,
     korantina,
     imperio,
-    cybarco,
 ]
 
 
