@@ -31,21 +31,23 @@ from typing import Callable
 import httpx
 from dotenv import load_dotenv
 
-from . import _stubs, aristo
+from . import aristo, cybarco, imperio, korantina, leptos, pafilia
 from .base import ParsedListing
 from .dedup import compute_phash_from_url
 from .writer import fetch_already_indexed, mark_stale_old_listings, upsert_listings
 
 
-# Reihenfolge: erst die implementierten, dann Stubs für Vollständigkeit.
-# Stubs liefern leere Listen → Orchestrator skipped sie ohne Lärm.
+# Alle 6 CY-Bauträger live. Reihenfolge orientiert sich an erwartetem Volumen
+# (Aristo+Leptos hoch, Cybarco+Korantina+Imperio niedrig). Cybarco zuletzt
+# wegen 10s Crawl-delay — wenn Watchdog vorher zuschlägt, sind die anderen
+# schon durch.
 DEVELOPER_MODULES: list = [
     aristo,
-    _stubs.pafilia,
-    _stubs.leptos,
-    _stubs.cybarco,
-    _stubs.korantina,
-    _stubs.imperio,
+    pafilia,
+    leptos,
+    korantina,
+    imperio,
+    cybarco,
 ]
 
 
@@ -184,6 +186,13 @@ def main() -> int:
                     )
                 batch.clear()
 
+            # Per-Module Rate-Limit-Override — Cybarco hat robots.txt Crawl-delay 10s.
+            # Default: globaler RATE_LIMIT_S aus env.
+            mod_rate_limit = float(getattr(module, "RATE_LIMIT_S", rate_limit))
+            if mod_rate_limit != rate_limit:
+                log.info("  %s: rate_limit override %.1fs (default %.1fs)",
+                         developer, mod_rate_limit, rate_limit)
+
             for idx, url in enumerate(todo, start=1):
                 # Watchdog auch innerhalb eines Developers — stoppt mid-Liste sauber
                 if time.time() - started > max_runtime_s:
@@ -207,7 +216,7 @@ def main() -> int:
                 if idx % 50 == 0:
                     log.info("  %s detail-progress %d/%d (parsed %d)",
                              developer, idx, len(todo), dev_parsed)
-                time.sleep(rate_limit)
+                time.sleep(mod_rate_limit)
 
             flush()
             log.info(
