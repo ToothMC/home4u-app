@@ -10,9 +10,15 @@ klassifiziert via Haiku 4.5 und upserted in `listings` (`source='fb'`).
 - **Kein Auto-Login, kein Auto-Scroll, kein Headless** — entspricht
   Whitepaper §2.1 *("Kein automatisches Einloggen, kein Fetch ohne
   User-Scroll")*.
-- **G0-Gate (DSGVO + Meta-ToS-Anwaltsgutachten) noch offen** → nur
-  internes Indexieren, keine Outbound-Kontaktaufnahme. Genauso wie der
-  Bazaraki-Crawler operiert dieser Crawler im Pilot-Modus bis G0 grün ist.
+- **Indexieren + Bridge-Link sind freigegeben.** Strukturell identisch zu
+  bazaraki/index_cy: wir lesen öffentlich sichtbare Inhalte ein, speichern
+  Metadaten (kein Volltext republizieren) und verlinken den Original-Post
+  via `extracted_data.permalink`. Klick öffnet FB im neuen Tab in der
+  eigenen Session des Users — wir treten nie selbst in Kontakt.
+- **G0-Gate (DSGVO + Meta-ToS-Anwaltsgutachten) gilt nur für Outbound** —
+  Auto-DM, Auto-Comment, eigene Kontaktaufnahme an Inserenten. Diese
+  Funktionen sind explizit Out-of-Scope (siehe unten) und kommen erst
+  wenn G0 grün ist.
 - **Profil-Isolation:** Eigenes Chrome-Profil unter
   `~/.home4u-fb-chrome/`, nicht dein Haupt-Profil.
 
@@ -138,7 +144,9 @@ psql "$DATABASE_URL" -c "
 
 ## Out-of-Scope (Phase 0)
 
-- Admin-Review-UI (kommt mit G0 grün)
-- Outbound-Kontaktaufnahme (Spur 2.B, gated)
-- Auto-Scroll / Auto-Navigation (verletzt Compliance)
+- **Outbound-Kontaktaufnahme** (Spur 2.B, G0-gated) — Auto-DM oder
+  Auto-Comment an Inserenten. Frontend zeigt nur Bridge-Link auf den
+  Original-Post, User schreibt selbst manuell.
+- Admin-Review-UI
+- Auto-Scroll / Auto-Navigation (verletzt Whitepaper §2.1)
 - Cron-Trigger (CDP-Attach erfordert User-Browser)
