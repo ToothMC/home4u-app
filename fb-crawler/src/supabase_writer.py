@@ -50,6 +50,13 @@ def _to_row(item: UpsertItem) -> dict:
         extracted_data["llm_extraction"] = e.raw_extraction
     if e.note:
         extracted_data["note"] = e.note
+    # Verlinkungs-Handles fürs Bridge-Pattern auf der Listing-Detail-Seite.
+    # `source_url` = Konvention aller Crawler (siehe memory: reference_source_url),
+    # zusätzlich permalink/group_token/post_id für Reconstruction-Fallbacks.
+    extracted_data["source_url"] = p.permalink
+    extracted_data["permalink"] = p.permalink
+    extracted_data["group_token"] = p.group_token
+    extracted_data["post_id"] = p.post_id
 
     return {
         "external_id": p.post_id,
