@@ -1,0 +1,45 @@
+name: Crawler Health Check (Daily)
+
+# Pre-Sweep-Wächter. Prüft pro Source ob der Crawler in den letzten 24h
+# überhaupt gelaufen ist und genug Listings gesehen hat. Bricht ab und
+# wird rot, wenn nicht — GitHub schickt automatisch Mail an den Repo-Owner.
+#
+# Inzident 2026-05-06: 18.946 Bazaraki-Listings wurden auf einen Schlag
+# gestale-t weil der Crawler 6 Tage lang nur ~100-600/Tag schaffte (statt
+# ~19k) und niemand es gemerkt hat. Dieser Check hätte am 30.04. den
+# ersten Alarm geworfen.
+#
+# Läuft 02:30 UTC, 30 Minuten VOR mark-stale-daily — bei Fail kommt der
+# Sweep ohnehin nicht durch (Guard in mark_stale_listings selbst), aber
+# wir wollen die Mail früher.
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: crawler-health-check
+  cancel-in-progress: false
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Run health check
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/run-crawler-health-check.ts

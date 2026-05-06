@@ -19,7 +19,17 @@
 import { createClient } from "@supabase/supabase-js";
 
 const STALE_DAYS = parseInt(process.env.STALE_DAYS ?? "7", 10);
-const SOURCES = ["bazaraki", "index_cy", "cyprus_real_estate"] as const;
+
+// Pro Source: minimale Anzahl Listings, die der Crawler in den letzten 24h
+// gesehen haben muss, damit der Sweep nicht abbricht. Liegt bei ~25-50% des
+// typischen Tagesdurchsatzes — ein partieller Lauf reicht, ein toter Crawler
+// triggert den Abort. Inzident 2026-05-06: bazaraki schaffte 6 Tage in Folge
+// nur ~100-600/Tag statt ~19k.
+const SOURCES: Array<{ source: string; minRecentSeen: number }> = [
+  { source: "bazaraki", minRecentSeen: 5000 },
+  { source: "index_cy", minRecentSeen: 5000 },
+  { source: "cyprus_real_estate", minRecentSeen: 200 },
+];
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -35,16 +45,23 @@ const supabase = createClient(url, serviceKey, {
 async function main() {
   console.log(`mark_stale_listings: stale_days=${STALE_DAYS}, sources=${SOURCES.join(",")}`);
   let total = 0;
-  for (const source of SOURCES) {
+  let hadError = false;
+  for (const { source, minRecentSeen } of SOURCES) {
     const t0 = Date.now();
     const { data, error } = await supabase.rpc("mark_stale_listings", {
       p_stale_days: STALE_DAYS,
       p_source: source,
+      p_min_recent_seen: minRecentSeen,
+      // p_max_pct default 10 reicht — alle Sources haben genug Volumen.
     });
     const ms = Date.now() - t0;
     if (error) {
+      // Nach Inzident 2026-05-06: Sweep-Guards in der RPC werfen Fehler wenn
+      // der Crawler nicht frisch gelaufen ist oder der Cap überschritten würde.
+      // Wir loggen für ALLE Sources, beenden aber am Ende mit exit 1 —
+      // GitHub-Action wird rot, Mail kommt, niemand übersieht es mehr.
       console.error(`  ${source}: RPC-Fehler nach ${ms}ms — ${error.message}`);
-      // weitermachen für andere Sources
+      hadError = true;
       continue;
     }
     const n = typeof data === "number" ? data : 0;
@@ -52,6 +69,10 @@ async function main() {
     console.log(`  ${source}: ${n} Listings stale-markiert (${ms}ms)`);
   }
   console.log(`Total: ${total} stale-markiert.`);
+  if (hadError) {
+    console.error("Mindestens eine Source hat einen Fehler geliefert — exit 1.");
+    process.exit(1);
+  }
 }
 
 main().catch((e) => {
