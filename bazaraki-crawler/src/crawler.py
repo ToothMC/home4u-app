@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+import struct
 import time
 import urllib.parse
 from dataclasses import dataclass, field
@@ -510,6 +511,62 @@ def _extract_list_page(page: Page, city: str, listing_type: str, subtype: str) -
     return out
 
 
+# Mindest-Bildbreite für media[]. Bazaraki hat zwei Größen-Pools unter dem
+# gleichen /media/cache1/-Prefix: 1600px (Galerie) und 160px (Thumbnail-Strip-
+# Navigation am unteren Lightbox-Rand). Der DOM-Selektor kann sie nicht
+# unterscheiden — beide sind <div style="background-image">. Wir checken nach
+# der Extraktion via Range-Request den WebP-Header. Schwelle bewusst <720px
+# (Test-Schwelle) damit edge-cases (z.B. Portrait-Format) durchkommen.
+MIN_IMAGE_WIDTH = 500
+
+
+def _webp_width(blob: bytes) -> int | None:
+    """Lese die Pixel-Breite aus einem WebP-Header (VP8/VP8L/VP8X). None wenn unparsbar."""
+    if len(blob) < 30 or blob[:4] != b"RIFF" or blob[8:12] != b"WEBP":
+        return None
+    chunk = blob[12:16]
+    if chunk == b"VP8 ":
+        return struct.unpack("<H", blob[26:28])[0] & 0x3FFF
+    if chunk == b"VP8L":
+        bits = struct.unpack("<I", blob[21:25])[0]
+        return (bits & 0x3FFF) + 1
+    if chunk == b"VP8X":
+        return int.from_bytes(blob[24:27], "little") + 1
+    return None
+
+
+def _filter_thumbnails(urls: list[str]) -> list[str]:
+    """Entfernt URLs deren WebP-Breite < MIN_IMAGE_WIDTH ist.
+
+    - urls[0] (Cover, =og:image) wird IMMER behalten — bei Bazaraki ist og:image
+      garantiert hi-res, und der Test in Home4U validiert ihn separat.
+    - Bei Fetch-/Parse-Fehler: URL behalten (Benefit of Doubt). Lieber ein
+      schlechtes Bild als ein verlorenes Listing.
+    - Range-Request bytes 0-99: ~30ms pro URL, fällt ggü. dem 0.5s rate-limit
+      zwischen Detail-Fetches nicht ins Gewicht.
+    """
+    if len(urls) <= 1:
+        return urls
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Range": "bytes=0-99",
+    }
+    out = [urls[0]]
+    with httpx.Client(headers=headers, timeout=8.0, follow_redirects=True) as client:
+        for url in urls[1:]:
+            try:
+                r = client.get(url)
+                r.raise_for_status()
+                w = _webp_width(r.content)
+            except Exception:
+                w = None
+            if w is None or w >= MIN_IMAGE_WIDTH:
+                out.append(url)
+            else:
+                log.debug("filter thumbnail %dpx: %s", w, url)
+    return out
+
+
 def crawl_detail(browser: Browser, item: RawListing) -> None:
     """Drill in die Detail-Page und reichere RawListing in-place an.
 
@@ -586,7 +643,7 @@ def crawl_detail(browser: Browser, item: RawListing) -> None:
         if img and img not in media:
             media.append(img)
     if media:
-        item.media = media[:24]
+        item.media = _filter_thumbnails(media)[:24]
     elif item.image_url:
         item.media = [item.image_url]
 
