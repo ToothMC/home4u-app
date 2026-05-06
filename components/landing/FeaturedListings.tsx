@@ -64,14 +64,17 @@ export async function FeaturedListings({
   const detected = await detectRegion({ urlSlug: regionSlug });
   const region = detected.region;
 
+  // "Neu reingekommen" = sortiert nach created_at (echtes Insert-Datum), NICHT
+  // updated_at — sonst würde nach jedem Crawler-Touch das gleiche alte Listing
+  // wieder oben landen.
   let query = supabase
     .from("listings")
     .select(
-      "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, updated_at"
+      "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, created_at"
     )
     .eq("status", "active")
     .not("media", "is", null)
-    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(region ? 16 : 8);
 
   if (region) {
@@ -83,7 +86,7 @@ export async function FeaturedListings({
 
   let listings = (data ?? [])
     .filter(
-      (l): l is FeaturedListing & { status: string; updated_at: string } =>
+      (l): l is FeaturedListing & { status: string; created_at: string } =>
         Array.isArray(l.media) && l.media.length > 0
     )
     .slice(0, 4);
@@ -93,15 +96,15 @@ export async function FeaturedListings({
     const { data: fallback } = await supabase
       .from("listings")
       .select(
-        "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, updated_at"
+        "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, created_at"
       )
       .eq("status", "active")
       .not("media", "is", null)
-      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(8);
     listings = (fallback ?? [])
       .filter(
-        (l): l is FeaturedListing & { status: string; updated_at: string } =>
+        (l): l is FeaturedListing & { status: string; created_at: string } =>
           Array.isArray(l.media) && l.media.length > 0
       )
       .slice(0, 4);
