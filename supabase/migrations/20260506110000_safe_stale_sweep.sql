@@ -9,20 +9,23 @@
 -- Fix: zwei Guards in mark_stale_listings, die einen kaputten/unvollständigen
 -- Crawler erkennen und den Sweep ABBRECHEN, bevor er Schaden anrichtet:
 --
---   1) Recent-Activity-Guard: in den letzten 24h muss die Source mindestens
---      p_min_recent_seen Listings ge-`last_seen` haben. Sonst → kein Sweep.
---   2) Safety-Cap: der Sweep darf nicht mehr als p_max_pct Prozent der aktuell
---      aktiven Listings auf einmal stale setzen. Sonst → kein Sweep.
+--   1) Recent-Activity-Guard (optional, p_min_recent_seen=NULL → skip): in den
+--      letzten 24h muss die Source mindestens p_min_recent_seen Listings
+--      ge-`last_seen` haben. Sonst → kein Sweep. Der Caller (run-mark-stale.ts)
+--      setzt das pro Source explizit; alte Crawler-internal-Aufrufe ohne den
+--      Param werden nur durch Cap geschützt.
+--   2) Safety-Cap (immer aktiv): der Sweep darf nicht mehr als p_max_pct Prozent
+--      der aktuell aktiven Listings auf einmal stale setzen. Sonst → kein Sweep.
+--      Default 10. Der Inzident hätte 53% gekillt → der Cap allein hätte den
+--      Schaden verhindert.
 --
 -- Bei Verletzung: RAISE EXCEPTION → RPC-Aufruf failed → Caller exit 1 →
 -- GitHub-Action wird rot → wir kriegen Mail.
---
--- Defaults konservativ: 1000 recent / 24h, max 10% Cap. Override pro Call.
 
 create or replace function public.mark_stale_listings(
   p_stale_days int default 7,
   p_source text default 'bazaraki',
-  p_min_recent_seen int default 1000,
+  p_min_recent_seen int default null,
   p_max_pct numeric default 10.0
 )
 returns int
@@ -37,16 +40,18 @@ declare
   v_pct          numeric;
   v_count        int;
 begin
-  -- Guard 1: Recent-Activity. Ohne frischen Crawl ist jeder Sweep blind.
-  select count(*)
-    into v_recent_seen
-    from listings
-   where source::text = p_source
-     and last_seen > now() - interval '24 hours';
+  -- Guard 1: Recent-Activity (optional). Ohne frischen Crawl ist jeder Sweep blind.
+  if p_min_recent_seen is not null then
+    select count(*)
+      into v_recent_seen
+      from listings
+     where source::text = p_source
+       and last_seen > now() - interval '24 hours';
 
-  if v_recent_seen < p_min_recent_seen then
-    raise exception 'mark_stale_listings ABORT (%): nur % listings in letzten 24h gesehen (min %). Crawler-Health prüfen.',
-      p_source, v_recent_seen, p_min_recent_seen;
+    if v_recent_seen < p_min_recent_seen then
+      raise exception 'mark_stale_listings ABORT (%): nur % listings in letzten 24h gesehen (min %). Crawler-Health prüfen.',
+        p_source, v_recent_seen, p_min_recent_seen;
+    end if;
   end if;
 
   -- Kandidaten + aktuellen active-Bestand zählen, vor dem Update.
