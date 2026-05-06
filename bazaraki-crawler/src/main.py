@@ -48,6 +48,7 @@ from .supabase_writer import (
     fetch_already_drilled_external_ids,
     fetch_already_phashed_external_ids,
     fetch_city_last_seen,
+    fetch_listings_below_media,
     mark_stale_old_listings,
     upsert_listings,
 )
@@ -90,6 +91,12 @@ def main() -> int:
     skip_phash = os.getenv("SKIP_PHASH") == "1"
     force_rephash = os.getenv("FORCE_REPHASH") == "1"
     dry_run = os.getenv("DRY_RUN") == "1"
+
+    # Smart-Backfill: nur Listings re-drillen die zu wenig Bilder haben.
+    # 0 (default) = Standard-Verhalten. >0 = Whitelist via DB-Query.
+    # Sinnvoll mit FORCE_FULL_DRILL=1 — sonst greift "schon gedrillt"-Skip
+    # ohnehin und Backfill macht nichts.
+    redrill_below_media = env_int("REDRILL_BELOW_MEDIA", 0)
 
     # Watchdog: stoppt vor dem nächsten Subtype/Drill-Item, wenn Wall-Clock das
     # Budget überschreitet. Default 4h — gibt dem Workflow 240min Headroom unter
@@ -248,6 +255,21 @@ def main() -> int:
             elif not collected:
                 log.info("PASS 2 übersprungen (Pass 1 hat keine items gesammelt).")
             else:
+                # Smart-Backfill-Whitelist: wenn REDRILL_BELOW_MEDIA gesetzt,
+                # nur die external_ids re-drillen, deren media-Array unter der
+                # Schwelle liegt. Sonst (default 0) → leere Whitelist = kein Filter.
+                redrill_whitelist: set[str] | None = None
+                if redrill_below_media > 0:
+                    log.info(
+                        "Smart-Backfill: hole external_ids mit media < %d ...",
+                        redrill_below_media,
+                    )
+                    redrill_whitelist = fetch_listings_below_media(redrill_below_media)
+                    log.info(
+                        "Smart-Backfill: %d Listings sind unter Schwelle — Drill nur für diese",
+                        len(redrill_whitelist),
+                    )
+
                 total_pass2_items = sum(len(v) for v in collected.values())
                 log.info(
                     "=== PASS 2: Drill+pHash (%d Subtypes, %d items, budget left %.0fs) ===",
@@ -276,6 +298,17 @@ def main() -> int:
                             to_drill = items
                         else:
                             to_drill = [it for it in items if it.external_id not in drilled_ids]
+                        # Smart-Backfill: zusätzlich auf Whitelist filtern.
+                        # Greift orthogonal zu force_full_drill — Backfill-Run
+                        # nutzt typisch BEIDE (force_full_drill + redrill_below).
+                        if redrill_whitelist is not None:
+                            before = len(to_drill)
+                            to_drill = [it for it in to_drill if it.external_id in redrill_whitelist]
+                            if before != len(to_drill):
+                                log.info(
+                                    "    smart-backfill: %d → %d (übersprungen: %d schon gut)",
+                                    before, len(to_drill), before - len(to_drill),
+                                )
                         if to_drill:
                             log.info("    drill: %d/%d neue (rate-limit %ds)",
                                      len(to_drill), len(items), RATE_LIMIT_SECONDS)

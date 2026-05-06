@@ -150,6 +150,58 @@ def upsert_listings(items: Iterable[RawListing]) -> dict[str, int]:
     }
 
 
+def fetch_listings_below_media(threshold: int) -> set[str]:
+    """Bazaraki external_ids deren media-Array < threshold Elemente hat.
+
+    Für targeted Backfill nach DOM-Selector-Fix: wir wollen nur Listings
+    re-drillen, die noch broken sind (z.B. 1-Bild aus pre-Fix-Ära), nicht
+    die bereits hi-res-Galerie haben. Sonst würde FORCE_FULL_DRILL 5h lang
+    die 12k schon-guten Listings nochmal drillen ohne Mehrwert.
+    """
+    if threshold <= 0:
+        return set()
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+    }
+    needs_drill: set[str] = set()
+    offset = 0
+    page_size = 1000
+    while True:
+        url = (
+            f"{url_base}/rest/v1/listings"
+            f"?source=eq.bazaraki"
+            f"&status=eq.active"
+            f"&select=external_id,media"
+        )
+        try:
+            resp = httpx.get(
+                url,
+                headers={
+                    **headers,
+                    "Range-Unit": "items",
+                    "Range": f"{offset}-{offset + page_size - 1}",
+                },
+                timeout=60,
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            log.warning("fetch_listings_below_media failed at offset %d: %s", offset, e)
+            return needs_drill  # was wir bis hier haben — besser als alles zu verlieren
+        rows = resp.json() or []
+        for row in rows:
+            ext = row.get("external_id")
+            media = row.get("media") or []
+            if ext and len(media) < threshold:
+                needs_drill.add(str(ext))
+        if len(rows) < page_size:
+            break
+        offset += page_size
+    return needs_drill
+
+
 def fetch_already_drilled_external_ids() -> set[str]:
     """Listings, die bereits Detail-Drilling durchlaufen haben — erkennbar
     daran dass district ODER size_sqm gesetzt wurde.

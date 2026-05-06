@@ -40,6 +40,10 @@ on:
         type: boolean
         required: false
         default: false
+      redrill_below_media:
+        description: "Smart-Backfill: nur Listings re-drillen mit weniger als N Bildern (0 = aus). Nutze mit force_full_drill=true."
+        required: false
+        default: "0"
 
 concurrency:
   group: bazaraki-crawl
@@ -84,4 +88,5 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           SKIP_DETAILS: ${{ inputs.skip_details && '1' || '' }}
           FORCE_FULL_DRILL: ${{ inputs.force_full_drill && '1' || '' }}
+          REDRILL_BELOW_MEDIA: ${{ inputs.redrill_below_media || '0' }}
         run: python -m src.main
