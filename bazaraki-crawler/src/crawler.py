@@ -243,15 +243,16 @@ DETAIL_EXTRACT_JS = r"""
   const charsBlock = document.querySelector('.announcement-characteristics, [class*="chars"]');
   const charsRaw = charsBlock?.innerText?.trim() || null;
 
-  // Galerie-Hauptbilder. Robust gegen DOM-Änderungen — historisch hatte
-  // Bazaraki `img.announcement__images-item` mit data-src=hi-res, aber das
-  // Klassen-Schema bricht ohne Vorwarnung weg (Inzident 2026-05-06: nur 1
-  // Bild statt 16). Wir probieren mehrere Strategien parallel:
-  //   1) Schema.org image[] aus JSON-LD <script type="application/ld+json">
-  //      — das ist die offizielle Liste, immun gegen CSS-Refactors.
-  //   2) Diverse Galerie-Container-Selektoren (alt + plausible neue Pattern).
-  //   3) Pro img-Tag: data-src > srcset (höchste Auflösung) > src — und
-  //      Placeholder/Thumbnail-Pattern explizit aussortieren.
+  // Galerie-Hauptbilder. Bazaraki rendert die Galerie seit 2026-05 als
+  // `<div class="full-image" style="background-image: url(...)">` — KEINE
+  // <img>-Tags mehr. Frühere DOM-Versionen hatten `img.announcement__images-item`
+  // mit data-src. Wir kombinieren mehrere Strategien:
+  //   1) JSON-LD <script type="application/ld+json"> → Schema.org image[].
+  //      Offiziell, immun gegen CSS-Refactors. Erste Wahl.
+  //   2) Divs mit style="background-image: url(...)" — aktueller Bazaraki-DOM.
+  //      Filtert /media/icons/ raus (UI-Buttons wie Zoom/Share, pro Slide 4-5x).
+  //   3) <img>-Tag-Selektoren als Fallback für ältere Listings/Mixed-Layouts.
+  //   4) Pro img: data-src > srcset (höchste Auflösung) > src.
   function pickFromImg(img) {
     const out = [];
     const ds = img.getAttribute('data-src');
@@ -272,8 +273,9 @@ DETAIL_EXTRACT_JS = r"""
   const isProperImage = (s) => {
     if (!s) return false;
     if (!/\.(jpe?g|png|webp)/i.test(s)) return false;
-    if (!/bazaraki\.com\/media/i.test(s)) return false;
-    // Placeholder/Thumbnail-Pattern. 160×104 ist Bazarakis Listing-Thumb.
+    // Property-Bilder liegen unter /media/cache* — UI-Icons (Zoom, Share,
+    // Fullscreen-Buttons) liegen unter /media/icons/ und müssen raus.
+    if (!/bazaraki\.com\/media\/cache/i.test(s)) return false;
     if (/placeholder|160x104|\/cache0\//i.test(s)) return false;
     return true;
   };
@@ -292,7 +294,9 @@ DETAIL_EXTRACT_JS = r"""
     }
   } catch {}
 
-  // Strategy 2: Diverse Galerie-Container, Bilder daraus extrahieren
+  // Strategy 2: <img>-Tags der Hauptgalerie (alter Bazaraki-Layout, vor 2026-05).
+  // Bewusst SPEZIFISCH — generische Selektoren wie `[data-src*=bazaraki/media]`
+  // würden auch Thumbnail-Strip-Bilder (300px) und Sidebar-Previews einfangen.
   const gallerySelectors = [
     'img.announcement__images-item',
     'img.announcement-images-item',
@@ -300,15 +304,23 @@ DETAIL_EXTRACT_JS = r"""
     '.announcement-images img',
     '.announcement__slider img',
     '.announcement-slider img',
-    '.gallery img',
-    '.image-list img',
-    '.swiper-slide img',
-    '.slick-slide img',
-    'img[data-src*="bazaraki.com/media"]',
   ];
   for (const sel of gallerySelectors) {
     const found = Array.from(document.querySelectorAll(sel));
     for (const img of found) candidates.push(...pickFromImg(img));
+  }
+
+  // Strategy 3: <div style="background-image: url(...)"> — der aktuelle
+  // Bazaraki-Galerie-Layout (2026-05+). Wir EXKLUDIEREN bewusst Container
+  // mit Sidebar-Preview-Thumbnails von anderen Listings (advert-grid,
+  // similar-adverts, etc.) — die liegen als 300px webps unter der gleichen
+  // /media/cache1/ Pfadstruktur und würden den ≥720px-Test brechen.
+  const SIDEBAR_EXCLUDE = '.advert-grid, .similar-adverts, .similar-listings, .recommended-listings, .listing-card-grid';
+  const bgDivs = document.querySelectorAll('[style*="background-image"]');
+  for (const el of bgDivs) {
+    if (el.closest(SIDEBAR_EXCLUDE)) continue;
+    const m = (el.getAttribute('style') || '').match(/background-image:\s*url\((["']?)([^"')]+)\1\)/i);
+    if (m && m[2]) candidates.push(m[2]);
   }
 
   const allImages = [...new Set(candidates.filter(isProperImage))];
