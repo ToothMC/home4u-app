@@ -34,7 +34,7 @@ from dotenv import load_dotenv
 from . import aristo, imperio, korantina, leptos, pafilia
 from .base import ParsedListing
 from .dedup import compute_phash_from_url
-from .writer import fetch_already_indexed, mark_stale_old_listings, upsert_listings
+from .writer import fetch_already_indexed, mark_stale_old_listings, touch_last_seen, upsert_listings
 
 
 # 5 CY-Bauträger live. Cybarco rausgenommen — WAF blockt GH-Action-IPs (Sitemap
@@ -130,19 +130,34 @@ def main() -> int:
 
             if force_refetch:
                 todo = all_urls
+                already_seen_ids: list[str] = []
             else:
                 indexed = fetch_already_indexed(developer)
                 # listing_id (= URL-Slug) wird per Modul gemacht; wir matchen
                 # über die letzte Path-Komponente der URL
                 todo = [u for u in all_urls if u.rstrip("/").rsplit("/", 1)[-1] not in indexed]
+                already_seen_ids = [
+                    u.rstrip("/").rsplit("/", 1)[-1] for u in all_urls
+                    if u.rstrip("/").rsplit("/", 1)[-1] in indexed
+                ]
                 log.info("  %s: %d schon indexiert, %d neu zu fetchen",
                          developer, len(indexed), len(todo))
+
+            # Bekannte URLs touchen — wenn wir das nicht tun, rostet last_seen
+            # ein und mark_stale killt nach 7d alle still-existierenden Listings.
+            # Nur wenn discover() überhaupt URLs geliefert hat — bei leerem
+            # discover (kaputte Sitemap) NICHT touchen, sonst maskieren wir
+            # einen toten Crawler.
+            if already_seen_ids and not dry_run:
+                touched = touch_last_seen(developer, already_seen_ids)
+                log.info("  %s: %d/%d known URLs touched (last_seen refreshed)",
+                         developer, touched, len(already_seen_ids))
 
             if max_listings:
                 todo = todo[:max_listings]
 
             if not todo:
-                log.info("  %s: nichts Neues", developer)
+                log.info("  %s: nichts Neues zu fetchen", developer)
                 grand["developers"] += 1
                 continue
 
@@ -205,6 +220,15 @@ def main() -> int:
                     p = module.parse(client, url)
                 except Exception as e:
                     log.warning("parse fail %s: %s", url, e)
+                    p = None
+                # CY-Aggregator: Listings ohne erkannte CY-City verwerfen.
+                # location_city ist NOT NULL in der DB — ein Upsert mit None
+                # crasht den row im RPC. Betrifft v.a. Leptos-Projekte in
+                # Griechenland (Santorini, Athens, Kreta), die wir bewusst
+                # nicht indexieren.
+                if p is not None and not p.location_city:
+                    log.info("  %s skip (kein CY-City erkannt): %s",
+                             developer, url.rsplit("/", 1)[-1] or url)
                     p = None
                 if p is not None:
                     batch.append(p)

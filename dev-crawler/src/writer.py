@@ -110,6 +110,17 @@ def upsert_listings(items: Iterable[ParsedListing], developer: str) -> dict:
         updated += int(result.get("updated", 0))
         deduped += int(result.get("deduped", 0))
         chunk_failed = result.get("failed", []) or []
+        if chunk_failed:
+            # Ohne diese Zeile sieht man nur "fail=N" — ein cy_developer-Inzident
+            # 2026-05-06 hat 28 stille Failures produziert (Leptos GR-Listings
+            # ohne CY-City), niemand wusste warum. Top-3 Reasons reichen für
+            # Pattern-Erkennung; full list bei Bedarf via DRY_RUN.
+            sample = chunk_failed[:3]
+            log.warning(
+                "  chunk %d: %d row failures, sample reasons: %s",
+                chunks, len(chunk_failed),
+                "; ".join(f"#{f.get('index')} {f.get('reason', '?')[:120]}" for f in sample),
+            )
         failed.extend(chunk_failed)
     return {
         "chunks": chunks,
@@ -119,6 +130,37 @@ def upsert_listings(items: Iterable[ParsedListing], developer: str) -> dict:
         "deduped": deduped,
         "failed": failed,
     }
+
+
+def touch_last_seen(developer: str, listing_ids: list[str]) -> int:
+    """Aktualisiert last_seen für bestehende cy_developer-Listings ohne Re-Fetch.
+
+    Wird vom main-Loop für URLs gerufen, die in discover() wieder auftauchen
+    aber bereits vollständig indexiert sind — sonst rostet last_seen ein und
+    mark_stale_old_listings würde sie nach 7d als tot markieren.
+    """
+    if not listing_ids:
+        return 0
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    url = f"{url_base}/rest/v1/rpc/touch_listings_last_seen"
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Content-Type": "application/json",
+    }
+    external_ids = [f"{developer}:{lid}" for lid in listing_ids]
+    try:
+        resp = httpx.post(
+            url, headers=headers,
+            json={"p_source": SOURCE, "p_external_ids": external_ids},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return int(resp.json() or 0)
+    except Exception as e:
+        log.warning("touch_last_seen(%s, %d ids) failed: %s", developer, len(external_ids), e)
+        return 0
 
 
 def fetch_already_indexed(developer: str) -> set[str]:
