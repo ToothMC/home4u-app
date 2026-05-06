@@ -48,11 +48,12 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    # Hard-Cap = MAX_RUNTIME_S/60 + 10min Headroom für SIGTERM-freien exit 0.
-    # Default MAX_RUNTIME_S=5400 (90min) → timeout 100min. Backfill-Läufe via
-    # workflow_dispatch können MAX_RUNTIME_S=20000 (~5h) setzen, dann hier
-    # entsprechend höher. 350 ist GH-Free-Cap.
-    timeout-minutes: 100
+    # 350min = GH-Free-Cap. Script self-stoppt via MAX_RUNTIME_S (Default
+    # 5400s = 90min), das hier ist nur Safety-Net. Hoch setzen schadet nicht
+    # weil GH nach echter Laufzeit billed, nicht nach Timeout. Mit 350min
+    # können Backfill-Läufe (workflow_dispatch mit max_runtime_s=20000, ~5h)
+    # denselben Workflow nutzen ohne Sondertopf.
+    timeout-minutes: 350
     defaults:
       run:
         working-directory: ./bazaraki-crawler
