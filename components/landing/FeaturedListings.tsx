@@ -27,7 +27,33 @@ type FeaturedListing = {
   location_district: string | null;
   property_type: string | null;
   media: string[] | null;
+  canonical_id?: string | null;
+  source?: string | null;
+  title?: string | null;
 };
+
+// Diversity-Filter für die Landing-Page: ein einzelner Bauträger-Bulk-Import
+// (z.B. 8× "Villa Agnades Village V23..V31" am gleichen Timestamp) darf nicht
+// die ganze Section füllen. Greedy: erste N nach created_at, aber nur wenn
+// (a) noch nicht gesehene canonical_id und (b) noch nicht gesehenes
+// (source, title-prefix-30) — letzteres fängt den "selbes Projekt"-Fall.
+function diversify(rows: FeaturedListing[], limit: number): FeaturedListing[] {
+  const seenCanonical = new Set<string>();
+  const seenProject = new Set<string>();
+  const out: FeaturedListing[] = [];
+  for (const r of rows) {
+    const cKey = r.canonical_id ?? r.id;
+    if (seenCanonical.has(cKey)) continue;
+    const titlePrefix = (r.title ?? "").trim().slice(0, 30).toLowerCase();
+    const pKey = `${r.source ?? ""}|${titlePrefix}`;
+    if (titlePrefix && seenProject.has(pKey)) continue;
+    seenCanonical.add(cKey);
+    if (titlePrefix) seenProject.add(pKey);
+    out.push(r);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
 
 function fmt(price: number, currency: string, lang: SupportedLang) {
   return new Intl.NumberFormat(NUMBER_LOCALE[lang], {
@@ -67,15 +93,19 @@ export async function FeaturedListings({
   // "Neu reingekommen" = sortiert nach created_at (echtes Insert-Datum), NICHT
   // updated_at — sonst würde nach jedem Crawler-Touch das gleiche alte Listing
   // wieder oben landen.
+  // Pool absichtlich groß (32/16) damit der diversify-Filter genug Material
+  // hat um Bauträger-Bulk-Imports (z.B. 5× selbe Maisonette in Zephyros
+  // Village mit unterschiedlichen Unit-Nummern) auf 1 Karte zu reduzieren.
+  const SELECT_COLS =
+    "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, created_at, canonical_id, source, title";
+
   let query = supabase
     .from("listings")
-    .select(
-      "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, created_at"
-    )
+    .select(SELECT_COLS)
     .eq("status", "active")
     .not("media", "is", null)
     .order("created_at", { ascending: false })
-    .limit(region ? 16 : 8);
+    .limit(region ? 32 : 16);
 
   if (region) {
     // Prefix-Match deckt "Paphos", "Paphos District", "Paphos – Universal" etc. ab.
@@ -84,30 +114,23 @@ export async function FeaturedListings({
 
   const { data } = await query;
 
-  let listings = (data ?? [])
-    .filter(
-      (l): l is FeaturedListing & { status: string; created_at: string } =>
-        Array.isArray(l.media) && l.media.length > 0
-    )
-    .slice(0, 4);
+  const withMedia = (rows: FeaturedListing[] | null | undefined) =>
+    (rows ?? []).filter(
+      (l): l is FeaturedListing => Array.isArray(l.media) && l.media.length > 0,
+    );
 
-  // Wenn Region-Filter zu wenig liefert (< 2), greift Fallback auf Mix.
+  let listings = diversify(withMedia(data as FeaturedListing[] | null), 4);
+
+  // Wenn Region-Filter zu wenig liefert (< 2 nach Dedup), greift Fallback auf Mix.
   if (region && listings.length < 2) {
     const { data: fallback } = await supabase
       .from("listings")
-      .select(
-        "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, created_at"
-      )
+      .select(SELECT_COLS)
       .eq("status", "active")
       .not("media", "is", null)
       .order("created_at", { ascending: false })
-      .limit(8);
-    listings = (fallback ?? [])
-      .filter(
-        (l): l is FeaturedListing & { status: string; created_at: string } =>
-          Array.isArray(l.media) && l.media.length > 0
-      )
-      .slice(0, 4);
+      .limit(16);
+    listings = diversify(withMedia(fallback as FeaturedListing[] | null), 4);
   }
 
   if (listings.length === 0) return null;
