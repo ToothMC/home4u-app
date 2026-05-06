@@ -243,16 +243,75 @@ DETAIL_EXTRACT_JS = r"""
   const charsBlock = document.querySelector('.announcement-characteristics, [class*="chars"]');
   const charsRaw = charsBlock?.innerText?.trim() || null;
 
-  // Galerie-Hauptbilder. Bazaraki nutzt Slick-Carousel mit Lazy-Load:
-  // - .announcement__images-item: trägt das hi-res Bild (1600px) im data-src;
-  //   src ist meist nur ein 160×104-Placeholder.
-  // - .announcement__thumbnails-item (Nav-Strip): tiny — bewusst ausschließen.
-  // Es gibt kein srcset und keine Größen-Pfad-Variante; data-src ist der einzige Hi-Res-Pfad.
-  const allImages = [...new Set(
-    Array.from(document.querySelectorAll('img.announcement__images-item'))
-      .map(i => i.getAttribute('data-src') || i.src)
-      .filter(s => s && s.includes('bazaraki.com/media') && /\.(jpe?g|png|webp)/i.test(s))
-  )];
+  // Galerie-Hauptbilder. Robust gegen DOM-Änderungen — historisch hatte
+  // Bazaraki `img.announcement__images-item` mit data-src=hi-res, aber das
+  // Klassen-Schema bricht ohne Vorwarnung weg (Inzident 2026-05-06: nur 1
+  // Bild statt 16). Wir probieren mehrere Strategien parallel:
+  //   1) Schema.org image[] aus JSON-LD <script type="application/ld+json">
+  //      — das ist die offizielle Liste, immun gegen CSS-Refactors.
+  //   2) Diverse Galerie-Container-Selektoren (alt + plausible neue Pattern).
+  //   3) Pro img-Tag: data-src > srcset (höchste Auflösung) > src — und
+  //      Placeholder/Thumbnail-Pattern explizit aussortieren.
+  function pickFromImg(img) {
+    const out = [];
+    const ds = img.getAttribute('data-src');
+    if (ds) out.push(ds);
+    const ss = img.getAttribute('srcset') || img.getAttribute('data-srcset');
+    if (ss) {
+      // "url1 320w, url2 640w, url3 1280w" — höchste Auflösung am Ende
+      const parts = ss.split(',').map(s => s.trim()).filter(Boolean);
+      const last = parts[parts.length - 1];
+      if (last) {
+        const url = last.split(/\s+/)[0];
+        if (url) out.push(url);
+      }
+    }
+    if (img.src) out.push(img.src);
+    return out;
+  }
+  const isProperImage = (s) => {
+    if (!s) return false;
+    if (!/\.(jpe?g|png|webp)/i.test(s)) return false;
+    if (!/bazaraki\.com\/media/i.test(s)) return false;
+    // Placeholder/Thumbnail-Pattern. 160×104 ist Bazarakis Listing-Thumb.
+    if (/placeholder|160x104|\/cache0\//i.test(s)) return false;
+    return true;
+  };
+
+  let candidates = [];
+
+  // Strategy 1: JSON-LD (offizielle Schema.org-Daten)
+  try {
+    const ldNodes = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const node of ldNodes) {
+      let parsed;
+      try { parsed = JSON.parse(node.textContent || '{}'); } catch { continue; }
+      const imgs = parsed?.image;
+      if (Array.isArray(imgs)) candidates.push(...imgs);
+      else if (typeof imgs === 'string') candidates.push(imgs);
+    }
+  } catch {}
+
+  // Strategy 2: Diverse Galerie-Container, Bilder daraus extrahieren
+  const gallerySelectors = [
+    'img.announcement__images-item',
+    'img.announcement-images-item',
+    '.announcement__images img',
+    '.announcement-images img',
+    '.announcement__slider img',
+    '.announcement-slider img',
+    '.gallery img',
+    '.image-list img',
+    '.swiper-slide img',
+    '.slick-slide img',
+    'img[data-src*="bazaraki.com/media"]',
+  ];
+  for (const sel of gallerySelectors) {
+    const found = Array.from(document.querySelectorAll(sel));
+    for (const img of found) candidates.push(...pickFromImg(img));
+  }
+
+  const allImages = [...new Set(candidates.filter(isProperImage))];
 
   // Cover (og:image)
   const cover = text('meta[property="og:image"]', 'content');
