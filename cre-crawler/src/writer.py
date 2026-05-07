@@ -145,6 +145,37 @@ def mark_stale_old_listings(stale_days: int = 3) -> int:
         return 0
 
 
+def touch_last_seen(client: httpx.Client, listing_ids: list[str]) -> int:
+    """Aktualisiert last_seen für bestehende cyprus_real_estate-Listings ohne Re-Fetch.
+
+    Wird vom main-Loop für URLs gerufen, die in Phase 1 wieder auftauchen
+    aber bereits vollständig indexiert sind — sonst rostet last_seen ein
+    und mark_stale_listings würde sie nach 7d killen ODER die Health-Check-
+    Schwelle reißen (Inzident 2026-05-07: nur 104/1181 in 24h gesehen).
+    """
+    if not listing_ids:
+        return 0
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    url = f"{url_base}/rest/v1/rpc/touch_listings_last_seen"
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = client.post(
+            url, headers=headers,
+            json={"p_source": SOURCE, "p_external_ids": listing_ids},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return int(resp.json() or 0)
+    except Exception as e:
+        log.warning("touch_last_seen(%d ids) failed: %s", len(listing_ids), e)
+        return 0
+
+
 def fetch_already_indexed(client: httpx.Client) -> set[str]:
     url_base = os.environ["SUPABASE_URL"].rstrip("/")
     service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]

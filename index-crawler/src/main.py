@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 from .dedup import compute_phash_from_url
 from .detail import ParsedListing, fetch_and_parse
 from .sitemap import discover_all_listings
-from .writer import fetch_already_indexed, mark_stale_old_listings, upsert_listings
+from .writer import fetch_already_indexed, mark_stale_old_listings, touch_last_seen, upsert_listings
 
 
 def _setup_logging() -> None:
@@ -83,6 +83,7 @@ def main() -> int:
         if force_refetch:
             log.info("FORCE_REFETCH=1 — alle %d Listings werden gefetched", len(all_urls))
             todo = all_urls
+            already_seen_ids: list[str] = []
         else:
             log.info("Lade Set bereits indexierter external_ids …")
             try:
@@ -92,7 +93,17 @@ def main() -> int:
                 log.warning("fetch_already_indexed failed: %s — fallback full", e)
                 indexed = set()
             todo = [u for u in all_urls if u.listing_id not in indexed]
+            already_seen_ids = [u.listing_id for u in all_urls if u.listing_id in indexed]
             log.info("Neu zu fetchen: %d von %d", len(todo), len(all_urls))
+
+        # Bekannte URLs touchen — sonst rostet last_seen ein und Health-Check
+        # bricht ab (Inzident 2026-05-07: 2265/20160 in 24h gesehen). Nur
+        # wenn discover() URLs geliefert hat — bei leerem discover NICHT
+        # touchen, sonst maskiert man einen toten Crawler.
+        if already_seen_ids and not dry_run:
+            touched = touch_last_seen(client, already_seen_ids)
+            log.info("  %d/%d known URLs touched (last_seen refreshed)",
+                     touched, len(already_seen_ids))
 
         if max_listings:
             todo = todo[:max_listings]
