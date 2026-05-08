@@ -44,6 +44,19 @@ on:
         description: "Smart-Backfill: nur Listings re-drillen mit weniger als N Bildern (0 = aus). Nutze mit force_full_drill=true."
         required: false
         default: "0"
+      backfill_drill_queue:
+        description: "Standalone-Backfill: skip Pass 1, lade dünne Listings direkt aus DB via source_url und drille nur. Schließt Lücken die der reguläre Cron nicht mehr trifft."
+        type: boolean
+        required: false
+        default: false
+      backfill_threshold:
+        description: "Backfill: media-Länge unter der re-drilled wird (default 3, nur mit backfill_drill_queue=true)"
+        required: false
+        default: "3"
+      backfill_limit:
+        description: "Backfill: Max Listings pro Run (0 = unbegrenzt, Watchdog greift dann)"
+        required: false
+        default: "0"
 
 concurrency:
   group: bazaraki-crawl
@@ -89,4 +102,7 @@ jobs:
           SKIP_DETAILS: ${{ inputs.skip_details && '1' || '' }}
           FORCE_FULL_DRILL: ${{ inputs.force_full_drill && '1' || '' }}
           REDRILL_BELOW_MEDIA: ${{ inputs.redrill_below_media || '0' }}
+          BACKFILL_DRILL_QUEUE: ${{ inputs.backfill_drill_queue && '1' || '' }}
+          BACKFILL_THRESHOLD: ${{ inputs.backfill_threshold || '3' }}
+          BACKFILL_LIMIT: ${{ inputs.backfill_limit || '0' }}
         run: python -m src.main
