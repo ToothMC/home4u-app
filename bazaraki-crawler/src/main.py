@@ -509,6 +509,7 @@ def _run_backfill_drill_queue(log: logging.Logger) -> int:
             image_url=q["image_url"],
             title=q["title"],
             detail_url=q["source_url"],
+            property_type=q.get("property_type"),
         )
         for q in queue
     ]

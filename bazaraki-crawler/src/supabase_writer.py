@@ -184,7 +184,7 @@ def fetch_drill_queue_below_media(threshold: int, limit: int | None = None) -> l
             f"{url_base}/rest/v1/listings"
             f"?source=eq.bazaraki"
             f"&status=eq.active"
-            f"&select=external_id,type,location_city,price,rooms,title,media,extracted_data,last_seen"
+            f"&select=external_id,type,location_city,price,rooms,title,media,extracted_data,last_seen,property_type"
             f"&order=last_seen.desc.nullslast"
         )
         try:
@@ -223,6 +223,7 @@ def fetch_drill_queue_below_media(threshold: int, limit: int | None = None) -> l
                 "rooms": row.get("rooms"),
                 "title": row.get("title"),
                 "image_url": media[0] if media else None,
+                "property_type": row.get("property_type"),
             })
             if limit is not None and len(queue) >= limit:
                 if skipped_no_url:
