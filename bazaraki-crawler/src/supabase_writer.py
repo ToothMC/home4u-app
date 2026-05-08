@@ -150,6 +150,92 @@ def upsert_listings(items: Iterable[RawListing]) -> dict[str, int]:
     }
 
 
+def fetch_drill_queue_below_media(threshold: int, limit: int | None = None) -> list[dict]:
+    """Bazaraki-Listings mit media < threshold + ihre Detail-URLs.
+
+    Für den Standalone-Backfill-Modus (BACKFILL_DRILL_QUEUE=1): Pass 1 wird
+    übersprungen, Listings werden direkt aus der DB nach Cover-Mangel gewählt
+    und Pass 2 läuft über sie. Der Detail-Pfad rekonstruiert sich aus
+    `extracted_data->>'source_url'` — das wird seit Mai 2026 für jedes Listing
+    gesetzt (siehe _to_row()).
+
+    Returns: list of {external_id, source_url, listing_type, city, price,
+    rooms, title, image_url}. Items ohne source_url werden geskippt (geloggt) —
+    ohne URL kein Detail-Drill möglich.
+
+    Sortiert nach `last_seen DESC NULLS LAST` damit der Backfill mit den
+    aktivsten/sichtbarsten Listings beginnt: wenn der Watchdog vor dem
+    Komplett-Durchlauf greift, sind die wichtigen schon durch.
+    """
+    if threshold <= 0:
+        return []
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+    }
+    queue: list[dict] = []
+    skipped_no_url = 0
+    offset = 0
+    page_size = 1000
+    while True:
+        url = (
+            f"{url_base}/rest/v1/listings"
+            f"?source=eq.bazaraki"
+            f"&status=eq.active"
+            f"&select=external_id,type,location_city,price,rooms,title,media,extracted_data,last_seen"
+            f"&order=last_seen.desc.nullslast"
+        )
+        try:
+            resp = httpx.get(
+                url,
+                headers={
+                    **headers,
+                    "Range-Unit": "items",
+                    "Range": f"{offset}-{offset + page_size - 1}",
+                },
+                timeout=60,
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            log.warning("fetch_drill_queue failed at offset %d: %s — return partial", offset, e)
+            return queue
+        rows = resp.json() or []
+        for row in rows:
+            media = row.get("media") or []
+            if len(media) >= threshold:
+                continue
+            ext = row.get("external_id")
+            extracted = row.get("extracted_data") or {}
+            source_url = extracted.get("source_url")
+            if not ext:
+                continue
+            if not source_url:
+                skipped_no_url += 1
+                continue
+            queue.append({
+                "external_id": str(ext),
+                "source_url": source_url,
+                "listing_type": row.get("type"),
+                "city": row.get("location_city"),
+                "price": row.get("price"),
+                "rooms": row.get("rooms"),
+                "title": row.get("title"),
+                "image_url": media[0] if media else None,
+            })
+            if limit is not None and len(queue) >= limit:
+                if skipped_no_url:
+                    log.warning("Backfill-Queue: %d Listings ohne source_url übersprungen", skipped_no_url)
+                return queue
+        if len(rows) < page_size:
+            break
+        offset += page_size
+    if skipped_no_url:
+        log.warning("Backfill-Queue: %d Listings ohne source_url übersprungen", skipped_no_url)
+    return queue
+
+
 def fetch_listings_below_media(threshold: int) -> set[str]:
     """Bazaraki external_ids deren media-Array < threshold Elemente hat.
 
@@ -202,15 +288,34 @@ def fetch_listings_below_media(threshold: int) -> set[str]:
     return needs_drill
 
 
-def fetch_already_drilled_external_ids() -> set[str]:
-    """Listings, die bereits Detail-Drilling durchlaufen haben — erkennbar
-    daran dass district ODER size_sqm gesetzt wurde.
+DRILLED_MEDIA_THRESHOLD = 3
+"""Ab welcher media-Array-Länge ein Listing als 'erfolgreich gedrillt' gilt.
 
-    Wird genutzt um beim Daily-Crawl nur NEUE Listings zu drillen.
-    Detail-Daten (district, m², Galerie) ändern sich auf Bazaraki praktisch
-    nie nachträglich — Re-Drill bringt im Schnitt 0 neue Information bei
-    100% Kosten. Re-Drills passieren über separates Weekly-Workflow oder
-    FORCE_FULL_DRILL=1.
+Vorher hingen wir an `district OR size_sqm` — aber `parse_address` setzt
+`district` auch bei teilgescheiterten Detail-Pages, während die Galerie-
+Extraktion auf `[image_url]` zurückfällt. Folge: Listings mit nur 1 Cover-Bild
+wurden als 'gedrillt' markiert und nie wieder besucht (Inzident 2026-05-08).
+Media-Array ist die einzige zuverlässige Indikation 'Detail-Page wurde wirklich
+gegriffen'.
+"""
+
+
+def fetch_already_drilled_external_ids() -> set[str]:
+    """Listings, die bereits erfolgreich Detail-Drilling durchlaufen haben.
+
+    Heuristik: media-Array hat >= DRILLED_MEDIA_THRESHOLD Einträge. Re-Drills
+    von dünnen Listings (nur Cover) sind erwünscht und werden NICHT geskippt.
+    """
+    return _fetch_external_ids_by_media(min_media=DRILLED_MEDIA_THRESHOLD)
+
+
+def _fetch_external_ids_by_media(min_media: int) -> set[str]:
+    """Pagination-Helper: alle aktiven Bazaraki-Listings mit media-Länge >= min_media.
+
+    PostgREST kann `array_length(media,1)` nicht direkt filtern, also lesen
+    wir `media` mit und filtern client-seitig. ~80k Rows bei 1000er Pages = 80
+    Roundtrips, ~10s — günstiger als ein Detail-Re-Drill von zehntausenden
+    falsch-positiv markierten Listings.
     """
     url_base = os.environ["SUPABASE_URL"].rstrip("/")
     service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -219,16 +324,13 @@ def fetch_already_drilled_external_ids() -> set[str]:
         "Authorization": f"Bearer {service_key}",
     }
     drilled: set[str] = set()
-    # Pagination via Range-Header — PostgREST returned max 1000 pro Call
-    # ohne explizites Range-Limit (oder 100 default je nach Setup).
     offset = 0
     page_size = 1000
     while True:
         url = (
             f"{url_base}/rest/v1/listings"
             f"?source=eq.bazaraki"
-            f"&or=(location_district.not.is.null,size_sqm.not.is.null)"
-            f"&select=external_id"
+            f"&select=external_id,media"
         )
         try:
             resp = httpx.get(
@@ -237,18 +339,18 @@ def fetch_already_drilled_external_ids() -> set[str]:
                     **headers,
                     "Range-Unit": "items",
                     "Range": f"{offset}-{offset + page_size - 1}",
-                    "Prefer": "count=exact",
                 },
-                timeout=30,
+                timeout=60,
             )
             resp.raise_for_status()
         except Exception as e:
-            log.warning("fetch_already_drilled failed: %s — assume nothing drilled", e)
+            log.warning("fetch_already_drilled failed at offset %d: %s — assume nothing drilled", offset, e)
             return set()
         rows = resp.json() or []
         for row in rows:
             ext = row.get("external_id")
-            if ext:
+            media = row.get("media") or []
+            if ext and len(media) >= min_media:
                 drilled.add(str(ext))
         if len(rows) < page_size:
             break

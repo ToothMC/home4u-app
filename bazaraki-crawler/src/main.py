@@ -48,6 +48,7 @@ from .supabase_writer import (
     fetch_already_drilled_external_ids,
     fetch_already_phashed_external_ids,
     fetch_city_last_seen,
+    fetch_drill_queue_below_media,
     fetch_listings_below_media,
     mark_stale_old_listings,
     upsert_listings,
@@ -72,6 +73,9 @@ def main() -> int:
     if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_SERVICE_ROLE_KEY"):
         log.error("SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY müssen gesetzt sein (siehe .env.example)")
         return 1
+
+    if os.getenv("BACKFILL_DRILL_QUEUE") == "1":
+        return _run_backfill_drill_queue(log)
 
     cities = selected_cities()
     types = selected_types()
@@ -453,6 +457,141 @@ def main() -> int:
         grand_totals["list_subtypes"], len(plan),
         grand_totals["drill_subtypes"], len(collected),
         aborted_reason or "",
+    )
+    return 0
+
+
+def _run_backfill_drill_queue(log: logging.Logger) -> int:
+    """Standalone-Backfill: lädt direkt aus DB Listings mit media < threshold,
+    rekonstruiert RawListing-Objekte aus extracted_data.source_url und feuert
+    NUR den Detail-Drill (kein Pass 1, kein mark_stale, kein pHash).
+
+    Hintergrund: Pass 2 im regulären Crawl läuft nur über Listings die Pass 1
+    im selben Run frisch gesammelt hat. Listings die in einem alten Run wegen
+    Budget-Stop nur Cover-Bild bekommen haben, werden vom regulären Cron nie
+    wieder besucht (sie tauchen auf den ersten 60 Pages nicht mehr auf).
+    Dieser Modus schließt diese Lücke.
+
+    Env:
+      BACKFILL_DRILL_QUEUE=1     Aktiviert diesen Modus.
+      BACKFILL_THRESHOLD=3       media-Länge unter der re-drilled wird (default 3).
+      BACKFILL_LIMIT=             Max Listings pro Run (default 0 = unbegrenzt).
+                                  Watchdog MAX_RUNTIME_S greift zusätzlich.
+      MAX_RUNTIME_S=              Wall-Clock-Cap (default 5400 = 90min).
+    """
+    from .crawler import RawListing, crawl_detail, with_browser
+
+    threshold = env_int("BACKFILL_THRESHOLD", 3)
+    limit_raw = env_int("BACKFILL_LIMIT", 0)
+    limit: int | None = limit_raw if limit_raw > 0 else None
+    max_runtime_s = env_int("MAX_RUNTIME_S", 90 * 60)
+    dry_run = os.getenv("DRY_RUN") == "1"
+
+    log.info(
+        "BACKFILL_DRILL_QUEUE: threshold=%d, limit=%s, MAX_RUNTIME_S=%ds",
+        threshold, limit if limit else "unlimited", max_runtime_s,
+    )
+
+    log.info("Lade Drill-Queue aus DB …")
+    queue = fetch_drill_queue_below_media(threshold, limit=limit)
+    log.info("Queue: %d Listings (media < %d, source_url vorhanden)", len(queue), threshold)
+    if not queue:
+        log.info("Nichts zu tun.")
+        return 0
+
+    items: list[RawListing] = [
+        RawListing(
+            external_id=q["external_id"],
+            listing_type=q["listing_type"] or "rent",
+            city=q["city"] or "",
+            price=float(q["price"]) if q["price"] is not None else 0.0,
+            rooms=q["rooms"],
+            image_url=q["image_url"],
+            title=q["title"],
+            detail_url=q["source_url"],
+        )
+        for q in queue
+    ]
+
+    started = time.time()
+    deadline_at = started + max_runtime_s
+    ok = 0
+    failed = 0
+    upserted = 0
+    inserted = updated = deduped = 0
+
+    with with_browser() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            # Batch-Upserts alle 50 Drills — kein "1 RPC pro Listing", aber auch
+            # nicht "alles am Ende" (Verlust bei Crash).
+            BATCH_SIZE = 50
+            batch: list[RawListing] = []
+
+            for idx, it in enumerate(items, start=1):
+                if time.time() > deadline_at:
+                    log.warning(
+                        "BACKFILL: Budget erreicht bei %d/%d (%.0fs) — stop",
+                        idx - 1, len(items), time.time() - started,
+                    )
+                    break
+                try:
+                    crawl_detail(browser, it)
+                except Exception as e:
+                    failed += 1
+                    log.warning("  drill-fail %s: %s", it.external_id, e)
+                    continue
+
+                # Erfolg = mehr Bilder als vorher. Dünn-bleibende Listings
+                # (Detail-Page selbst hat <3 Bilder) zählen wir nicht als ok,
+                # aber wir upserten sie trotzdem damit dedup_hash etc. frisch sind.
+                if len(it.media) >= threshold:
+                    ok += 1
+                batch.append(it)
+
+                if idx % 25 == 0:
+                    log.info(
+                        "  progress %d/%d (ok %d, fail %d, %.0fs)",
+                        idx, len(items), ok, failed, time.time() - started,
+                    )
+
+                if len(batch) >= BATCH_SIZE:
+                    if not dry_run:
+                        try:
+                            r = upsert_listings(batch)
+                            inserted += int(r.get("inserted", 0))
+                            updated += int(r.get("updated", 0))
+                            deduped += int(r.get("deduped", 0))
+                            upserted += len(batch)
+                        except Exception as e:
+                            log.warning("  batch-upsert fail: %s", e)
+                    batch = []
+
+                time.sleep(RATE_LIMIT_SECONDS)
+
+            # Tail-Batch
+            if batch and not dry_run:
+                try:
+                    r = upsert_listings(batch)
+                    inserted += int(r.get("inserted", 0))
+                    updated += int(r.get("updated", 0))
+                    deduped += int(r.get("deduped", 0))
+                    upserted += len(batch)
+                except Exception as e:
+                    log.warning("  tail-upsert fail: %s", e)
+        finally:
+            browser.close()
+
+    elapsed = time.time() - started
+    log.info(
+        "BACKFILL ENDE: %d/%d gedrillt mit media>=%d, %d failed, %d upserted "
+        "(ins=%d upd=%d dedup=%d) in %.0fs",
+        ok, len(items), threshold, failed, upserted, inserted, updated, deduped, elapsed,
+    )
+    log.info(
+        "RESULT: ok=true mode=backfill items=%d drilled_ok=%d failed=%d "
+        "upserted=%d inserted=%d updated=%d deduped=%d elapsed=%.0fs",
+        len(items), ok, failed, upserted, inserted, updated, deduped, elapsed,
     )
     return 0
 
