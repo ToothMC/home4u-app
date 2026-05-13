@@ -62,6 +62,7 @@ echo
 
 exec "$CHROME_BIN" \
   --remote-debugging-port="$CDP_PORT" \
+  --remote-allow-origins=* \
   --user-data-dir="$PROFILE_DIR" \
   --no-first-run \
   --no-default-browser-check \

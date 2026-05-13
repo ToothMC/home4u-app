@@ -35,7 +35,9 @@ class CDPPage:
     ws_url: str
 
     def evaluate(self, expression: str, timeout: float = 30.0) -> Any:
-        ws = create_connection(self.ws_url, timeout=timeout)
+        # Origin-Header gegen Chromes "remote-allow-origins"-Schutz (neuere Chromes
+        # blocken WS-Connects ohne erlaubten Origin; localhost ist immer akzeptiert).
+        ws = create_connection(self.ws_url, timeout=timeout, origin="http://localhost")
         try:
             ws.send(json.dumps({
                 "id": 1,
