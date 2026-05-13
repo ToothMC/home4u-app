@@ -207,8 +207,13 @@ def main() -> int:
                 try:
                     counts = _scan_pass(log, conn)
                     _log_counts(log, counts)
+                    conn.commit()
                 except Exception as e:
                     log.exception("Pass fehlgeschlagen: %s", e)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 if _stop_requested:
                     break
                 time.sleep(config.POLL_INTERVAL_SECONDS)
