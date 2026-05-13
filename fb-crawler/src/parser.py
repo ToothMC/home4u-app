@@ -28,7 +28,13 @@ MIN_COVER_WIDTH = 720
 # Python-Side macht alle Filter/Heuristik, damit Drift schnell isoliert ist.
 EXTRACT_POSTS_JS = r"""
 () => {
-  const articles = Array.from(document.querySelectorAll('[role="article"]'));
+  // FB benutzt [role="article"] sowohl für Top-Level-Posts als auch für
+  // verschachtelte Kommentare. Filter: nur Articles ohne weiteren Article-Ancestor.
+  const allArticles = Array.from(document.querySelectorAll('[role="article"]'));
+  const articles = allArticles.filter(a => {
+    const parent = a.parentElement;
+    return parent && !parent.closest('[role="article"]');
+  });
   const out = [];
 
   for (const art of articles) {
@@ -37,6 +43,8 @@ EXTRACT_POSTS_JS = r"""
       'a[href*="/groups/"][href*="/posts/"], a[href*="/groups/"][href*="/permalink/"]'
     );
     if (!permalinkEl) continue;
+    // Comment-Permalinks haben oft ?comment_id= — Top-Level-Posts haben das nicht
+    if (/[?&]comment_id=/.test(permalinkEl.href)) continue;
     const permalink = permalinkEl.href;
 
     // Post-ID: aus /posts/<id>/ oder /permalink/<id>/
