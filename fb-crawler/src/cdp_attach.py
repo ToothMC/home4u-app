@@ -67,6 +67,15 @@ class CDPPage:
             except Exception:
                 pass
 
+    def scroll(self, pixels: int = 1800) -> None:
+        """Scrollt die Page synthetisch, damit FB den nächsten Batch lazy-loaded.
+        Bewusst nicht End-of-page (würde Endlos-Lade-Schleife triggern), sondern
+        portionsweise pro Pass."""
+        try:
+            self.evaluate(f"() => {{ window.scrollBy(0, {int(pixels)}); }}")
+        except Exception as e:
+            log.debug("scroll fehlgeschlagen für %s: %s", self.url, e)
+
 
 @contextmanager
 def attached_browser(cdp_port: int) -> Iterator[tuple[None, int]]:

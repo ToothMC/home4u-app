@@ -69,6 +69,10 @@ def _scan_pass(log: logging.Logger, conn) -> dict[str, int]:
             log.info("  %d Posts im DOM", len(posts))
             for p in posts:
                 all_posts.append((p, group))
+            # Nach Extraktion ein Stück runterscrollen, damit FB den nächsten
+            # Batch lazy-loaded. Begrenzt pro Pass, alle 15 Min setzt der
+            # Refresh-Job die Page wieder an den Top.
+            page.scroll(1800)
 
         counts["raw_posts"] = len(all_posts)
         if not all_posts:
