@@ -140,6 +140,19 @@ export default async function RootLayout({
           }}
         />
         <LangProvider lang={lang}>{children}</LangProvider>
+        <footer className="border-t border-[var(--border)] bg-[var(--background)] text-xs text-[var(--muted-foreground)]">
+          <div className="mx-auto max-w-6xl px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div>© {new Date().getFullYear()} M+M Hammer Ltd</div>
+            <nav className="flex items-center gap-4">
+              <a href="/impressum" className="hover:underline">
+                {lang === "en" ? "Legal Notice" : "Impressum"}
+              </a>
+              <a href="/datenschutz" className="hover:underline">
+                {lang === "en" ? "Privacy" : "Datenschutz"}
+              </a>
+            </nav>
+          </div>
+        </footer>
       </body>
     </html>
   );
