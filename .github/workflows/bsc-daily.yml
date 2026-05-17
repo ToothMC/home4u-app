@@ -9,13 +9,11 @@ name: Daily BSC Crawl
 # Backfill mehrere Tage, danach inkrementell.
 
 on:
-  # Cron AUS bis Cloudflare-Bypass-Strategie für Datacenter-IPs steht:
-  # GitHub-Runner kriegen HTTP 403 trotz curl_cffi Chrome-TLS-Fingerprint.
-  # Lokal (residential IP) funktioniert es sauber. Bevor wir hier scheduled
-  # laufen lassen, brauchen wir entweder Solver-Service (ScraperAPI/ZenRows)
-  # oder self-hosted Runner.
-  # schedule:
-  #   - cron: "30 1,7,13,19 * * *"
+  # Läuft auf self-hosted Runner "home4u-mac-mini" (Cyta-Cyprus residential IP).
+  # Cloudflare blockt GH-hosted Runner trotz curl_cffi, der MacMini kommt sauber
+  # durch. 4× täglich alle 6h.
+  schedule:
+    - cron: "30 1,7,13,19 * * *"
   workflow_dispatch:
     inputs:
       max_listings:
@@ -52,7 +50,10 @@ concurrency:
 
 jobs:
   crawl:
-    runs-on: ubuntu-latest
+    # Pinned auf mac-mini Label, nicht generisch "self-hosted" — falls wir später
+    # weitere Self-hosted-Runner für andere Sources hinzufügen, vermeidet das
+    # versehentliches Mit-Crawlen auf falscher Hardware.
+    runs-on: [self-hosted, mac-mini]
     timeout-minutes: 100
     defaults:
       run:
@@ -60,15 +61,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Install dependencies
+      - name: Setup venv + deps
+        # MacMini hat Python 3.11 via Homebrew. Eigene venv pro Run statt
+        # System-Site-Packages, sonst kollidieren parallele Branches.
         run: |
-          pip install --upgrade pip
-          pip install -e .
+          /opt/homebrew/bin/python3.11 -m venv .venv
+          .venv/bin/pip install --upgrade pip --quiet
+          .venv/bin/pip install -e . --quiet
 
       - name: Run crawler
         env:
@@ -80,4 +79,4 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           SKIP_PHASH: ${{ inputs.skip_phash && '1' || '' }}
           FORCE_REFETCH: ${{ inputs.force_refetch && '1' || '' }}
-        run: python -m src.main
+        run: .venv/bin/python -m src.main
