@@ -1,0 +1,78 @@
+name: Daily BSC Crawl
+
+# BuySellCyprus.com indexer. Sitemap-driven (sitemap1..10.xml), Aktiv-Filter
+# über "Preis im Title". Cloudflare Managed Challenge wird via curl_cffi
+# (Chrome120-TLS-Fingerprint) umgangen.
+#
+# 4× täglich alle 6h. Jeder Lauf 90 min Wall-Clock-Budget, Streaming-Upsert
+# pro 50 Listings — bei einem ~160k-Listings-Sweep läuft das initiale
+# Backfill mehrere Tage, danach inkrementell.
+
+on:
+  schedule:
+    - cron: "30 1,7,13,19 * * *"
+  workflow_dispatch:
+    inputs:
+      max_listings:
+        description: "Cap für Smoke-Tests (0 = unbegrenzt)"
+        required: false
+        default: "0"
+      max_runtime_s:
+        description: "Wall-Clock-Budget in Sekunden (default 5400 = 90min)"
+        required: false
+        default: "5400"
+      rate_limit_s:
+        description: "Pause pro Detail-Fetch (default 1.0s)"
+        required: false
+        default: "1.0"
+      dry_run:
+        description: "Nur loggen, kein DB-Write"
+        type: boolean
+        required: false
+        default: false
+      skip_phash:
+        description: "pHash-Phase überspringen (5x schneller, kein Cross-Source-Match)"
+        type: boolean
+        required: false
+        default: false
+      force_refetch:
+        description: "Auch schon indexierte Listings nochmal fetchen"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: bsc-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    defaults:
+      run:
+        working-directory: ./bsc-crawler
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+
+      - name: Run crawler
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MAX_LISTINGS: ${{ inputs.max_listings || '0' }}
+          MAX_RUNTIME_S: ${{ inputs.max_runtime_s || '5400' }}
+          RATE_LIMIT_S: ${{ inputs.rate_limit_s || '1.0' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          SKIP_PHASH: ${{ inputs.skip_phash && '1' || '' }}
+          FORCE_REFETCH: ${{ inputs.force_refetch && '1' || '' }}
+        run: python -m src.main
