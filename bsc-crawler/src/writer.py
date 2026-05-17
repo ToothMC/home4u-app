@@ -126,14 +126,22 @@ def upsert_listings(items: Iterable[ParsedListing]) -> dict:
             result.get("deduped", 0), len(chunk_failed),
         )
         # Ohne diese Sichtbarkeit war ein per-row-cast-Bug nur an "fail=99 in
-        # einem Chunk" erkennbar — jetzt steht die Reason direkt im Log.
+        # einem Chunk" erkennbar — jetzt steht die Reason direkt im Log inkl.
+        # external_id der Row (über chunk-Index in den Source-Rows).
         if chunk_failed:
-            reasons: dict[str, int] = {}
+            reasons: dict[str, list[str]] = {}
             for f in chunk_failed:
                 r = (f or {}).get("reason") or "unknown"
-                reasons[r] = reasons.get(r, 0) + 1
-            for r, n in sorted(reasons.items(), key=lambda x: -x[1])[:5]:
-                log.warning("    failed-reason (%d×): %s", n, r[:200])
+                idx = (f or {}).get("index")
+                ext_id = "?"
+                if isinstance(idx, int) and 0 <= idx < len(chunk):
+                    ext_id = chunk[idx].get("external_id", "?")
+                reasons.setdefault(r, []).append(str(ext_id))
+            for r, ids in sorted(reasons.items(), key=lambda x: -len(x[1]))[:5]:
+                sample = ",".join(ids[:5])
+                log.warning("    failed-reason (%d×): %s  ids=[%s%s]",
+                            len(ids), r[:160], sample,
+                            "..." if len(ids) > 5 else "")
 
     return {
         "chunks": chunks,
