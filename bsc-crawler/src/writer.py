@@ -23,16 +23,22 @@ CHUNK_SIZE = 50
 SOURCE = "bsc"
 
 
+def _smallint_or_none(v):
+    """RPC castet rooms + size_sqm zu smallint (Range -32768..32767). Float-
+    Werte ("75.0") und Out-of-Range-Werte (Industrial-Plots, pathologische
+    rooms aus dem Title-Regex) brechen die Row sonst in failed[]."""
+    if v is None:
+        return None
+    try:
+        n = int(round(v))
+    except (TypeError, ValueError):
+        return None
+    if n < -32768 or n > 32767:
+        return None
+    return n
+
+
 def _to_row(item: ParsedListing) -> dict:
-    # RPC castet size_sqm zu smallint, daher Float-Werte (z.B. 75.0) als int senden —
-    # sonst kommt "invalid input syntax for type smallint: '75.0'" zurück und die ganze
-    # Row landet im failed-Bucket. smallint cap = 32767, BSC-Land bis 9000 m² → passt.
-    size_sqm_int: int | None = None
-    if item.size_sqm is not None:
-        if item.size_sqm > 32767:
-            size_sqm_int = None  # Riesen-Industrial-Plots passen nicht, lieber NULL
-        else:
-            size_sqm_int = int(round(item.size_sqm))
     row = {
         "external_id": item.listing_id,
         "type": item.listing_type,
@@ -40,8 +46,8 @@ def _to_row(item: ParsedListing) -> dict:
         "location_district": item.location_district,
         "price": item.price,
         "currency": item.currency,
-        "rooms": item.rooms,
-        "size_sqm": size_sqm_int,
+        "rooms": _smallint_or_none(item.rooms),
+        "size_sqm": _smallint_or_none(item.size_sqm),
         "media": item.media,
         "raw_text": item.description,
         "title": item.title,
@@ -168,7 +174,12 @@ def touch_last_seen(listing_ids: list[str]) -> int:
 
 
 def fetch_already_indexed() -> set[str]:
-    """Set aller external_ids die wir schon haben — für inkrement-Filter."""
+    """Set aller external_ids die wir schon haben — für inkrement-Filter.
+
+    PostgREST paginieren wir per `limit`/`offset`-Query (statt Range-Header)
+    plus deterministisches Order auf external_id. Range hat in der vorigen
+    Variante HTTP 400 geworfen; konkreter Error-JSON wird jetzt geloggt.
+    """
     url_base = os.environ["SUPABASE_URL"].rstrip("/")
     service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     headers = {
@@ -181,17 +192,16 @@ def fetch_already_indexed() -> set[str]:
         while True:
             url = (
                 f"{url_base}/rest/v1/listings"
-                f"?source=eq.{SOURCE}&select=external_id"
+                f"?source=eq.{SOURCE}"
+                f"&select=external_id"
+                f"&order=external_id.asc"
+                f"&limit={page}&offset={offset}"
             )
-            resp = client.get(
-                url,
-                headers={
-                    **headers,
-                    "Range-Unit": "items",
-                    "Range": f"{offset}-{offset + page - 1}",
-                },
-            )
-            resp.raise_for_status()
+            resp = client.get(url, headers=headers)
+            if resp.status_code >= 400:
+                log.warning("fetch_already_indexed HTTP %d: %s",
+                            resp.status_code, resp.text[:300])
+                resp.raise_for_status()
             rows = resp.json() or []
             for r in rows:
                 ext = r.get("external_id")
