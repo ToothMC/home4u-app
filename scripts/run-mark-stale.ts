@@ -33,6 +33,7 @@ const SOURCES: Array<{ source: string; minRecentSeen: number }> = [
   { source: "bazaraki", minRecentSeen: 5000 },
   { source: "index_cy", minRecentSeen: 5000 },
   { source: "cyprus_real_estate", minRecentSeen: 200 },
+  { source: "bsc", minRecentSeen: 1000 },
 ];
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
