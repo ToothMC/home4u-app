@@ -24,6 +24,15 @@ SOURCE = "bsc"
 
 
 def _to_row(item: ParsedListing) -> dict:
+    # RPC castet size_sqm zu smallint, daher Float-Werte (z.B. 75.0) als int senden —
+    # sonst kommt "invalid input syntax for type smallint: '75.0'" zurück und die ganze
+    # Row landet im failed-Bucket. smallint cap = 32767, BSC-Land bis 9000 m² → passt.
+    size_sqm_int: int | None = None
+    if item.size_sqm is not None:
+        if item.size_sqm > 32767:
+            size_sqm_int = None  # Riesen-Industrial-Plots passen nicht, lieber NULL
+        else:
+            size_sqm_int = int(round(item.size_sqm))
     row = {
         "external_id": item.listing_id,
         "type": item.listing_type,
@@ -32,7 +41,7 @@ def _to_row(item: ParsedListing) -> dict:
         "price": item.price,
         "currency": item.currency,
         "rooms": item.rooms,
-        "size_sqm": item.size_sqm,
+        "size_sqm": size_sqm_int,
         "media": item.media,
         "raw_text": item.description,
         "title": item.title,
@@ -110,6 +119,15 @@ def upsert_listings(items: Iterable[ParsedListing]) -> dict:
             chunks, result.get("inserted", 0), result.get("updated", 0),
             result.get("deduped", 0), len(chunk_failed),
         )
+        # Ohne diese Sichtbarkeit war ein per-row-cast-Bug nur an "fail=99 in
+        # einem Chunk" erkennbar — jetzt steht die Reason direkt im Log.
+        if chunk_failed:
+            reasons: dict[str, int] = {}
+            for f in chunk_failed:
+                r = (f or {}).get("reason") or "unknown"
+                reasons[r] = reasons.get(r, 0) + 1
+            for r, n in sorted(reasons.items(), key=lambda x: -x[1])[:5]:
+                log.warning("    failed-reason (%d×): %s", n, r[:200])
 
     return {
         "chunks": chunks,
