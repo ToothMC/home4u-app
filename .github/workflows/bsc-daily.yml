@@ -9,8 +9,13 @@ name: Daily BSC Crawl
 # Backfill mehrere Tage, danach inkrementell.
 
 on:
-  schedule:
-    - cron: "30 1,7,13,19 * * *"
+  # Cron AUS bis Cloudflare-Bypass-Strategie für Datacenter-IPs steht:
+  # GitHub-Runner kriegen HTTP 403 trotz curl_cffi Chrome-TLS-Fingerprint.
+  # Lokal (residential IP) funktioniert es sauber. Bevor wir hier scheduled
+  # laufen lassen, brauchen wir entweder Solver-Service (ScraperAPI/ZenRows)
+  # oder self-hosted Runner.
+  # schedule:
+  #   - cron: "30 1,7,13,19 * * *"
   workflow_dispatch:
     inputs:
       max_listings:
