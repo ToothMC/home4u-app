@@ -10,15 +10,19 @@
  *
  * Lösung: separater täglicher Workflow, unabhängig vom Crawl-Status.
  *
+ * Cutoff = 14 Tage: bazaraki hat ~34k active Listings und der Crawler
+ * braucht real ~14 Tage für einen vollen Sweep. Mit 7 Tagen feuerte
+ * der 10%-Safety-Gate täglich (8-14d-Bucket ~36% statt erlaubt 10%).
+ *
  * Aufruf:
- *   npx tsx scripts/run-mark-stale.ts                       # default 7d
- *   STALE_DAYS=5 npx tsx scripts/run-mark-stale.ts          # 5d Cutoff
+ *   npx tsx scripts/run-mark-stale.ts                       # default 14d
+ *   STALE_DAYS=7 npx tsx scripts/run-mark-stale.ts          # 7d Cutoff
  *
  * Idempotent: re-run setzt nur neu archivierte Rows.
  */
 import { createClient } from "@supabase/supabase-js";
 
-const STALE_DAYS = parseInt(process.env.STALE_DAYS ?? "7", 10);
+const STALE_DAYS = parseInt(process.env.STALE_DAYS ?? "14", 10);
 
 // Pro Source: minimale Anzahl Listings, die der Crawler in den letzten 24h
 // gesehen haben muss, damit der Sweep nicht abbricht. Liegt bei ~25-50% des

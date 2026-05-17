@@ -1,10 +1,14 @@
 name: Mark Stale Listings (Daily)
 
-# Markiert Listings die der Crawler seit N Tagen (default 7) nicht mehr
+# Markiert Listings die der Crawler seit N Tagen (default 14) nicht mehr
 # gesehen hat als 'archived'. Entkoppelt vom Crawler-Run, der wegen
 # Watchdog-Cap selten alle Cities erreicht und mark_stale daher nie
 # triggert. Gelöschte Bazaraki/INDEX/CRE-Listings würden sonst dauerhaft
 # als 'active' sichtbar bleiben → User-404 beim Klick auf Source-Link.
+#
+# Cutoff = 14 Tage: bazaraki hat ~34k active Listings und der Crawler
+# braucht real ~14 Tage für einen vollen Sweep (4 Läufe/Tag à 90min, durch
+# Rate-Limits gekappt). Mit 7 Tagen feuert der 10%-Safety-Gate täglich.
 #
 # Läuft 03:00 UTC täglich, ein Block für alle Sources (~5 sec total).
 # Manueller Dispatch erlaubt.
@@ -15,9 +19,9 @@ on:
   workflow_dispatch:
     inputs:
       stale_days:
-        description: "Cutoff in Tagen (default 7)"
+        description: "Cutoff in Tagen (default 14)"
         required: false
-        default: "7"
+        default: "14"
 
 concurrency:
   group: mark-stale-daily
@@ -43,5 +47,5 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          STALE_DAYS: ${{ inputs.stale_days || '7' }}
+          STALE_DAYS: ${{ inputs.stale_days || '14' }}
         run: npx tsx scripts/run-mark-stale.ts
