@@ -60,6 +60,11 @@ def _to_row(item: ParsedListing) -> dict:
             "bathrooms": item.bathrooms,
         },
         "dedup_hash": f"{SOURCE}:{item.listing_id}",
+        # Anteils-Verkauf — Detail-Parser hat im Body Pattern wie
+        # "share of an undivided" / "¼ share" / "1/4 share" gefunden.
+        # RPC ist sticky: einmal true bleibt true bis Crawler explizit
+        # false sendet UND keine andere Quelle es flippt.
+        "is_share": item.is_share,
     }
     if item.cover_phash is not None:
         row["cover_phash"] = str(item.cover_phash)

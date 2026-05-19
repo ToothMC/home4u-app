@@ -46,6 +46,22 @@ _TITLE_TAG_RE = re.compile(r"<title>([^<]+)</title>")
 _BODY_SQM_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:sq\.?m\.?|m²|m2)", re.IGNORECASE)
 _BODY_BATHROOMS_RE = re.compile(r"(\d+)\s*[Bb]athroom", re.IGNORECASE)
 
+# Anteils-Verkauf erkennen. BSC formuliert das im Body als
+#   "the ¼ share of an undivided residential field"
+#   "1/4 share of an undivided ..."
+#   "Available for sale is the share of an undivided ..."
+#   "shares of an undivided plot"
+# Wir matchen breit (case-insensitive): irgendeine Erwaehnung von
+# "share ... undivided" innerhalb von ~80 Zeichen, ODER Unicode-Brueche
+# + 'share', ODER ASCII-Brueche + 'share'.
+_BODY_SHARE_RE = re.compile(
+    r"shares?\s+of\s+(?:an?\s+)?undivided"
+    r"|undivided\s+share"
+    r"|[¼½¾⅓⅔⅛⅜⅝⅞]\s*shares?\b"
+    r"|\b\d+\s*/\s*\d+\s+shares?\b",
+    re.IGNORECASE,
+)
+
 # Type-Slug → Home4U-Taxonomie. BSC hat sehr granulare Types (semi-detached-house,
 # town-house, penthouse, ground-floor-apartment, ...). Wir grouppen pragmatisch.
 _TYPE_MAP = {
@@ -103,6 +119,11 @@ class ParsedListing:
     contact_phone_country: str | None = None
     contact_email: str | None = None
     phone_hash: str | None = None
+
+    # True wenn der Body-Text auf einen Anteils-Verkauf hindeutet
+    # ("share of an undivided field", "¼ share", "1/4 share").
+    # Wichtig fuer /stoebern-Filter und Warn-Banner.
+    is_share: bool = False
 
 
 def _to_int(s: str | None) -> int | None:
@@ -235,6 +256,10 @@ def parse_detail(session: BscSession, listing: "object") -> ParsedListing | None
     desc_m = _OG_DESC_RE.search(body)
     description = desc_m.group(1) if desc_m else None
 
+    # Anteils-Verkauf? Scan im vollen Body — og:description ist nur
+    # Sitemap-Boilerplate ohne das Pattern.
+    is_share = bool(_BODY_SHARE_RE.search(body))
+
     city, district = _strip_district_suffix(parsed["location_raw"], listing.city_slug)
 
     return ParsedListing(
@@ -252,4 +277,5 @@ def parse_detail(session: BscSession, listing: "object") -> ParsedListing | None
         location_city=city or None,
         location_district=district or None,
         media=[cover] if cover else [],
+        is_share=is_share,
     )
