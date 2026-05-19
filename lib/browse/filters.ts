@@ -61,6 +61,10 @@ export type BrowseFilters = {
   energyMin: EnergyOption | null;
   yearMin: number | null;
   petsAllowed: boolean;
+  /** Default false → Anteils-Inserate (is_share=true) werden ausgeblendet,
+   *  weil deren m² im Titel sich aufs ganze Grundstueck beziehen und der
+   *  User irregefuehrt waere. Opt-in fuer Spekulanten via Toggle. */
+  includeShares: boolean;
 };
 
 export const EMPTY_FILTERS: BrowseFilters = {
@@ -78,6 +82,7 @@ export const EMPTY_FILTERS: BrowseFilters = {
   energyMin: null,
   yearMin: null,
   petsAllowed: false,
+  includeShares: false,
 };
 
 function parsePosInt(v: string | undefined | null): number | null {
@@ -151,6 +156,7 @@ export function parseFiltersFromSearchParams(
     energyMin: validEnergy,
     yearMin: parsePosInt(pick("year")),
     petsAllowed: pick("pets") === "1",
+    includeShares: pick("shares") === "1",
   };
 }
 
@@ -176,6 +182,7 @@ export function serializeFilters(f: BrowseFilters): URLSearchParams {
   if (f.energyMin) sp.set("energy", f.energyMin);
   if (f.yearMin != null) sp.set("year", String(f.yearMin));
   if (f.petsAllowed) sp.set("pets", "1");
+  if (f.includeShares) sp.set("shares", "1");
   return sp;
 }
 
@@ -198,6 +205,7 @@ export function countActiveFilters(f: BrowseFilters): number {
   if (f.energyMin) n++;
   if (f.yearMin != null) n++;
   if (f.petsAllowed) n++;
+  if (f.includeShares) n++;
   return n;
 }
 
@@ -210,6 +218,7 @@ export function countAdvancedFilters(f: BrowseFilters): number {
   if (f.energyMin) n++;
   if (f.yearMin != null) n++;
   if (f.petsAllowed) n++;
+  if (f.includeShares) n++;
   return n;
 }
 
@@ -312,6 +321,9 @@ export function applyFiltersToQuery<Q>(query: Q, f: BrowseFilters): Q {
   if (f.yearMin != null) q = q.gte("year_built", f.yearMin);
 
   if (f.petsAllowed) q = q.eq("pets_allowed", true);
+
+  // Default: Anteils-Inserate ausblenden. Opt-in via includeShares.
+  if (!f.includeShares) q = q.eq("is_share", false);
 
   return q as unknown as Q;
 }

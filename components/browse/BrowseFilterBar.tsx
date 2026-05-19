@@ -180,6 +180,7 @@ export function BrowseFilterBar({ initial }: Props) {
             energyMin: null,
             yearMin: null,
             petsAllowed: false,
+            includeShares: false,
           });
           setMoreOpen(false);
         }}
@@ -697,6 +698,21 @@ function AdvancedDialogForm({
                   className="size-4"
                 />
                 <span>{t("filter.pets.label")}</span>
+              </label>
+            </Section>
+
+            {/* Anteils-Inserate (Default: ausgeblendet — opt-in fuer Spekulanten) */}
+            <Section label={t("filter.shares.label")}>
+              <label className="inline-flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={draft.includeShares}
+                  onChange={(e) => patch({ includeShares: e.target.checked })}
+                  className="size-4 mt-0.5"
+                />
+                <span className="text-[var(--warm-bark)] leading-snug">
+                  {t("filter.shares.includeHint")}
+                </span>
               </label>
             </Section>
           </div>

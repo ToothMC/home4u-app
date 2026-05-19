@@ -264,6 +264,19 @@ export default async function PublicListingPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
       />
+      {listing.is_share && (
+        <div className="mx-auto max-w-7xl w-full px-4 pt-4">
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+            <div className="font-semibold text-amber-700 dark:text-amber-300">
+              ⚠ {t("listing.shareWarn.title")}
+            </div>
+            <p className="text-[var(--muted-foreground)] mt-1 leading-snug">
+              {t("listing.shareWarn.body")}
+            </p>
+          </div>
+        </div>
+      )}
+
       {unavailable && (
         <div className="mx-auto max-w-7xl w-full px-4 pt-4">
           {listing.status === "reserved" ? (

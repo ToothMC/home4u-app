@@ -1078,6 +1078,12 @@ const de = {
   "filter.energy.label": "Energieklasse (min.)",
   "filter.year.label": "Baujahr ab",
   "filter.pets.label": "Haustiere erlaubt",
+  "filter.shares.label": "Anteils-Inserate",
+  "filter.shares.includeHint": "Anteils-Inserate einschließen (Default: ausgeblendet — du kaufst nur einen Anteil am Grundstück, nicht das ganze)",
+
+  // Warn-Banner auf der Detail-Seite bei Anteils-Inserat
+  "listing.shareWarn.title": "Anteils-Inserat — nicht das ganze Grundstück",
+  "listing.shareWarn.body": "Dieses Inserat verkauft nur einen Anteil am Grundstück. Die Quadratmeter im Titel beziehen sich auf das gesamte Grundstück — nicht auf deinen Anteil. Eine Vollverwertung ist nicht garantiert. Pruefe Notar-Vertrag und Mit-Eigentumsverhaeltnisse genau, bevor du investierst.",
 } as const;
 
 export type TKey = keyof typeof de;
@@ -2137,6 +2143,11 @@ const en: Dict = {
   "filter.energy.label": "Energy class (min)",
   "filter.year.label": "Built after",
   "filter.pets.label": "Pets allowed",
+  "filter.shares.label": "Share listings",
+  "filter.shares.includeHint": "Include share listings (default: hidden — you only buy a share of the plot, not the whole thing)",
+
+  "listing.shareWarn.title": "Share listing — not the whole plot",
+  "listing.shareWarn.body": "This listing only sells a share of the plot. The square metres in the title refer to the entire plot, not your share. Full ownership is not guaranteed. Check the notary contract and co-ownership structure carefully before you invest.",
 };
 
 const ru: Dict = {
@@ -3193,6 +3204,11 @@ const ru: Dict = {
   "filter.energy.label": "Энергокласс (мин.)",
   "filter.year.label": "Год постройки от",
   "filter.pets.label": "Можно с животными",
+  "filter.shares.label": "Доли",
+  "filter.shares.includeHint": "Показывать долевые объявления (по умолчанию скрыто — вы покупаете только долю участка, не весь)",
+
+  "listing.shareWarn.title": "Долевой объект — не весь участок",
+  "listing.shareWarn.body": "Это объявление продаёт только долю участка. Квадратные метры в заголовке относятся ко всему участку, а не к вашей доле. Полное владение не гарантировано. Перед инвестированием внимательно проверьте нотариальный договор и структуру совладения.",
 };
 
 const el: Dict = {
@@ -4249,6 +4265,11 @@ const el: Dict = {
   "filter.energy.label": "Ενεργ. κλάση (ελάχ.)",
   "filter.year.label": "Χτισμένο μετά",
   "filter.pets.label": "Επιτρέπονται κατοικίδια",
+  "filter.shares.label": "Μερίδια",
+  "filter.shares.includeHint": "Συμπερίληψη αγγελιών μεριδίου (προεπιλογή: κρυφό — αγοράζετε μόνο μερίδιο του οικοπέδου, όχι όλο)",
+
+  "listing.shareWarn.title": "Αγγελία μεριδίου — όχι ολόκληρο το οικόπεδο",
+  "listing.shareWarn.body": "Αυτή η αγγελία πωλεί μόνο μερίδιο του οικοπέδου. Τα τετραγωνικά μέτρα στον τίτλο αναφέρονται σε ολόκληρο το οικόπεδο, όχι στο μερίδιό σας. Η πλήρης κυριότητα δεν είναι εγγυημένη. Ελέγξτε προσεκτικά το συμβόλαιο και τη δομή συνιδιοκτησίας πριν επενδύσετε.",
 };
 
 const zh: Dict = {
@@ -5305,6 +5326,11 @@ const zh: Dict = {
   "filter.energy.label": "能效等级（最低）",
   "filter.year.label": "建造年份起",
   "filter.pets.label": "可养宠物",
+  "filter.shares.label": "份额房源",
+  "filter.shares.includeHint": "包含份额房源（默认隐藏 —— 您只购买地块的一部分份额，而非整块）",
+
+  "listing.shareWarn.title": "份额房源 —— 非整块地",
+  "listing.shareWarn.body": "此房源仅出售地块的一部分份额。标题中的平方米是整个地块的面积，而不是您份额对应的面积。无法保证完全所有权。投资前请仔细核查公证合同与共有结构。",
 };
 
 export const dict: Record<SupportedLang, Dict> = { de, en, ru, el, zh };

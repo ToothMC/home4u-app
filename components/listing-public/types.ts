@@ -158,4 +158,7 @@ export type PublicListingData = {
   has_email_contact: boolean;
   ai_analyzed_at: string | null;
   created_at: string;
+  /** Generated column: true wenn Title mit "(share)" beginnt — Bazaraki-
+   *  Konvention fuer Anteils-Verkauf. UI zeigt dann Warn-Banner. */
+  is_share: boolean;
 };

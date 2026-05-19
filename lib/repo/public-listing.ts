@@ -59,7 +59,8 @@ export async function loadPublicListing(
        market_p10_eur_sqm, market_p25_eur_sqm, market_median_eur_sqm, market_p75_eur_sqm,
        source, external_id, extracted_data, ai_analyzed_at, created_at,
        scam_score, scam_flags, scam_checked_at,
-       contact_phone_enc, contact_email_enc`
+       contact_phone_enc, contact_email_enc,
+       is_share`
     )
     .eq("id", id)
     .maybeSingle();
@@ -161,5 +162,6 @@ export async function loadPublicListing(
     has_email_contact: l.contact_email_enc != null,
     ai_analyzed_at: l.ai_analyzed_at ?? null,
     created_at: l.created_at,
+    is_share: Boolean(l.is_share),
   };
 }
