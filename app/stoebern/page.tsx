@@ -7,6 +7,13 @@ import { LanguageFlagPicker } from "@/components/lang/LanguageFlagPicker";
 import { Button } from "@/components/ui/button";
 import { ChatLink } from "@/components/landing/PathCards";
 import { BrowseFavoriteButton } from "@/components/browse/BrowseFavoriteButton";
+import { BrowseFilterBar } from "@/components/browse/BrowseFilterBar";
+import {
+  applyFiltersToQuery,
+  countActiveFilters,
+  parseFiltersFromSearchParams,
+  serializeFilters,
+} from "@/lib/browse/filters";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
 import { getT } from "@/lib/i18n/server";
@@ -67,12 +74,17 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function BrowsePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ p?: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = (await searchParams) ?? {};
-  const pageNum = Math.max(1, Number.parseInt(sp.p ?? "1", 10) || 1);
+  const pageNum = Math.max(
+    1,
+    Number.parseInt((Array.isArray(sp.p) ? sp.p[0] : sp.p) ?? "1", 10) || 1,
+  );
   const from = (pageNum - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
+  const filters = parseFiltersFromSearchParams(sp);
+  const hasFilters = countActiveFilters(filters) > 0;
 
   const { t, lang } = await getT();
   const supabase = createSupabaseServiceClient();
@@ -85,14 +97,18 @@ export default async function BrowsePage({
   if (supabase) {
     // Sortiert nach created_at (echtes Insert-Datum) — NICHT updated_at, sonst
     // recyceln Crawler-Touches alte Listings nach oben.
-    const { data, count } = await supabase
+    let query = supabase
       .from("listings")
       .select(
         "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media",
         { count: "estimated" },
       )
       .eq("status", "active")
-      .not("media", "is", null)
+      .not("media", "is", null);
+
+    query = applyFiltersToQuery(query, filters);
+
+    const { data, count } = await query
       .order("created_at", { ascending: false })
       .range(from, to);
 
@@ -118,6 +134,13 @@ export default async function BrowsePage({
 
   const hasPrev = pageNum > 1;
   const hasNext = total > pageNum * PAGE_SIZE || rows.length === PAGE_SIZE;
+  const filterQs = serializeFilters(filters).toString();
+  function pageHref(n: number): string {
+    const sp = new URLSearchParams(filterQs);
+    if (n > 1) sp.set("p", String(n));
+    const qs = sp.toString();
+    return qs ? `/stoebern?${qs}` : "/stoebern";
+  }
 
   return (
     <main className="min-h-[100dvh] bg-[var(--warm-cream)]">
@@ -143,12 +166,16 @@ export default async function BrowsePage({
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-8 sm:pt-12 pb-6">
+      <BrowseFilterBar initial={filters} />
+
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-6 sm:pt-8 pb-4">
         <h1 className="font-display text-3xl sm:text-4xl text-[var(--brand-navy)]">
           {t("browse.heading")}
         </h1>
         <p className="mt-2 text-sm text-[var(--warm-bark)]">
-          {t("browse.subtitle")}
+          {hasFilters
+            ? tFormat(t("browse.resultsCount"), { n: total })
+            : t("browse.subtitle")}
         </p>
       </section>
 
@@ -185,10 +212,7 @@ export default async function BrowsePage({
           >
             {hasPrev ? (
               <Button asChild variant="outline" size="lg" className="rounded-full">
-                <Link
-                  href={pageNum - 1 === 1 ? "/stoebern" : `/stoebern?p=${pageNum - 1}`}
-                  prefetch={false}
-                >
+                <Link href={pageHref(pageNum - 1)} prefetch={false}>
                   <ArrowLeft />
                   {t("browse.prev")}
                 </Link>
@@ -204,7 +228,7 @@ export default async function BrowsePage({
             </span>
             {hasNext ? (
               <Button asChild variant="outline" size="lg" className="rounded-full">
-                <Link href={`/stoebern?p=${pageNum + 1}`} prefetch={false}>
+                <Link href={pageHref(pageNum + 1)} prefetch={false}>
                   {t("browse.next")}
                   <ArrowRight />
                 </Link>
