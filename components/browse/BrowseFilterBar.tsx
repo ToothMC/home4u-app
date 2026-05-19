@@ -514,7 +514,14 @@ function RangeInputsInner({
 
 // === Advanced "Mehr"-Dialog =================================================
 
-function AdvancedDialog(props: {
+function AdvancedDialog({
+  open,
+  onOpenChange,
+  filters,
+  onApply,
+  onReset,
+  t,
+}: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   filters: BrowseFilters;
@@ -522,28 +529,46 @@ function AdvancedDialog(props: {
   onReset: () => void;
   t: T;
 }) {
-  // Wrapper: jedes Mal wenn der Dialog frisch öffnet, mountet das Inner
-  // mit dem aktuellen `filters`-Snapshot als initialer Draft. Reset per
-  // `key` statt useEffect+setState (verhindert react-hooks/set-state-in-effect).
+  // Dialog.Content muss immer gerendert sein, damit Radix die open/close-
+  // Transition korrekt steuert. Den Draft-State packen wir in einen Inner,
+  // der per `key` remountet wenn frisch geöffnet wird — so wird er mit dem
+  // aktuellen Filter-Snapshot frisch initialisiert (kein setState-in-effect).
   return (
-    <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
-        {props.open && (
-          <AdvancedDialogInner
-            key={JSON.stringify(props.filters)}
-            initialDraft={props.filters}
-            onApply={props.onApply}
-            onReset={props.onReset}
-            t={props.t}
-          />
-        )}
+        <Dialog.Content
+          className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl bg-[var(--background)] p-6 shadow-lg focus:outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+        >
+          <Dialog.Close
+            aria-label="close"
+            className="absolute right-3 top-3 p-1 hover:bg-[var(--accent)] rounded-md"
+          >
+            <X className="size-4" />
+          </Dialog.Close>
+          <Dialog.Title className="text-lg font-semibold mb-4">
+            {t("filter.advanced.title")}
+          </Dialog.Title>
+          <Dialog.Description className="sr-only">
+            {t("filter.advanced.title")}
+          </Dialog.Description>
+
+          {open ? (
+            <AdvancedDialogForm
+              key={JSON.stringify(filters)}
+              initialDraft={filters}
+              onApply={onApply}
+              onReset={onReset}
+              t={t}
+            />
+          ) : null}
+        </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   );
 }
 
-function AdvancedDialogInner({
+function AdvancedDialogForm({
   initialDraft,
   onApply,
   onReset,
@@ -562,22 +587,6 @@ function AdvancedDialogInner({
 
   return (
     <>
-        <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl bg-[var(--background)] p-6 shadow-lg focus:outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
-        >
-          <Dialog.Close
-            aria-label="close"
-            className="absolute right-3 top-3 p-1 hover:bg-[var(--accent)] rounded-md"
-          >
-            <X className="size-4" />
-          </Dialog.Close>
-          <Dialog.Title className="text-lg font-semibold mb-4">
-            {t("filter.advanced.title")}
-          </Dialog.Title>
-          <Dialog.Description className="sr-only">
-            {t("filter.advanced.title")}
-          </Dialog.Description>
-
           <div className="space-y-5">
             {/* Bäder */}
             <Section label={t("filter.bathrooms.label")}>
@@ -704,7 +713,6 @@ function AdvancedDialogInner({
               {t("filter.apply")}
             </Button>
           </div>
-        </Dialog.Content>
     </>
   );
 }
