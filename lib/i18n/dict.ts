@@ -295,7 +295,7 @@ const de = {
   "marketPrice.heading": "Preis-Einschätzung",
   "marketPrice.subheading": "€/m² verglichen mit ähnlichen Inseraten",
   "marketPrice.notEnough": "Noch zu wenig vergleichbare Inserate für eine faire Einschätzung. Wir aktualisieren das automatisch sobald genug Daten da sind.",
-  "marketPrice.thisOne": "Diese Wohnung",
+  "marketPrice.thisOne": "Dieses Inserat",
   "marketPrice.range50": "Markt-Spanne (50 %)",
   "marketPrice.basedOn": "Basierend auf {n} aktiven Inseraten in {place}{rooms}. Statistische Einschätzung — kein endgültiges Urteil.",
   "marketPrice.studios": "Studios",
