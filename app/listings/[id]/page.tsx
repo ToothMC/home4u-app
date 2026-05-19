@@ -166,6 +166,7 @@ export default async function PublicListingPage({
         city: listing.location_city,
         district: listing.location_district,
         rooms: listing.rooms,
+        property_type: listing.property_type,
       }
     : null;
 

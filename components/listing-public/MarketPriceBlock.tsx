@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
 import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
+import { propertyTypeGroup } from "@/lib/listing/property-type-group";
 
 const NUMBER_LOCALE: Record<string, string> = {
   de: "de-DE",
@@ -30,6 +31,10 @@ export type MarketData = {
   city: string;
   district: string | null;
   rooms: number | null;
+  /** Wenn gesetzt, adaptiert das UI Label und Vergleichsmenge-Text
+   *  (z.B. "Grundstuecken" statt "Wohnungen"). Bleibt null wenn DB-Wert
+   *  fehlt — UI fällt dann auf neutralen Wortlaut zurück. */
+  property_type: string | null;
 };
 
 export const MARKET_POSITION_CONFIG: Record<
@@ -64,14 +69,26 @@ export function MarketPriceBlock({ data }: { data: MarketData }) {
     `${n.toLocaleString(NUMBER_LOCALE[lang] ?? "en-GB", { maximumFractionDigits: 0 })} €/m²`;
 
   const place = data.district ? `${data.district}, ${data.city}` : data.city;
+
+  // property_type-spezifische Labels: muss synchron sein mit
+  // _property_type_group() in der DB, sonst zeigt das UI eine andere
+  // Gruppe an als die, die der Vergleichsmenge zugrunde liegt.
+  const group = propertyTypeGroup(data.property_type);
+  const thisLabel =
+    group === "other"
+      ? t("marketPrice.thisOne")
+      : t((`marketPrice.this.${group}`) as TKey);
+
+  // Rooms-Suffix nur fuer Residentials sinnvoll (Plot/Commercial/Room haben
+  // keine bedeutsamen Zimmer). Studios bleiben Sonderfall mit eigenem Wort.
+  const isResidential =
+    group === "residential_apartment" || group === "residential_house";
   const roomsClause =
-    data.rooms == null
-      ? ""
-      : `, ${
-          data.rooms === 0
-            ? t("marketPrice.studios")
-            : tFormat(t("marketPrice.roomsApt"), { n: data.rooms })
-        }`;
+    isResidential && data.rooms != null
+      ? data.rooms === 0
+        ? `, ${t("marketPrice.studios")}`
+        : tFormat(t("marketPrice.roomsCount"), { n: data.rooms })
+      : "";
 
   return (
     <section className="rounded-2xl border bg-[var(--card)] p-4 space-y-3">
@@ -96,7 +113,7 @@ export function MarketPriceBlock({ data }: { data: MarketData }) {
 
       {data.price_per_sqm != null && (
         <div className="text-xs grid grid-cols-3 gap-2 pt-1">
-          <Stat label={t("marketPrice.thisOne")} value={fmt(data.price_per_sqm)} highlight />
+          <Stat label={thisLabel} value={fmt(data.price_per_sqm)} highlight />
           {data.median_eur_sqm != null && (
             <Stat label={t("marketHint.median")} value={fmt(data.median_eur_sqm)} />
           )}
@@ -110,11 +127,18 @@ export function MarketPriceBlock({ data }: { data: MarketData }) {
       )}
 
       <p className="text-[11px] text-[var(--muted-foreground)] border-t pt-2">
-        {tFormat(t("marketPrice.basedOn"), {
-          n: data.compset_size,
-          place,
-          rooms: roomsClause,
-        })}
+        {group === "other"
+          ? tFormat(t("marketPrice.basedOn"), {
+              n: data.compset_size,
+              place,
+              rooms: roomsClause,
+            })
+          : tFormat(t("marketPrice.basedOnKind"), {
+              n: data.compset_size,
+              kind: t((`marketPrice.kind.${group}`) as TKey),
+              place,
+              rooms: roomsClause,
+            })}
       </p>
     </section>
   );
