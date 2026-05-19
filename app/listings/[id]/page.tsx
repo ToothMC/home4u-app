@@ -88,10 +88,10 @@ export default async function PublicListingPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string }>;
+  searchParams: Promise<{ from?: string; back?: string }>;
 }) {
   const { id } = await params;
-  const { from } = await searchParams;
+  const { from, back: backParam } = await searchParams;
   const listing = await loadPublicListing(id);
 
   if (!listing) {
@@ -115,10 +115,24 @@ export default async function PublicListingPage({
     ? await isListingBookmarked(id, { userId: user.id })
     : false;
 
+  // `back` ist eine encodierte same-site URL (z.B. von /stoebern aus). Hart
+  // validieren: muss mit "/" beginnen, KEIN "//" oder Protokoll — sonst
+  // Open-Redirect-Vektor. Bei "edit"-Flow gewinnt der Dashboard-Link.
+  const safeBack =
+    backParam && backParam.startsWith("/") && !backParam.startsWith("//")
+      ? backParam
+      : null;
   const back =
     from === "edit"
       ? { href: `/dashboard/listings/${id}`, label: t("listing.back.edit") }
-      : { href: "/matches", label: t("listing.back.search") };
+      : safeBack
+        ? {
+            href: safeBack,
+            label: safeBack.startsWith("/stoebern")
+              ? t("listing.back.browse")
+              : t("listing.back.search"),
+          }
+        : { href: "/matches", label: t("listing.back.search") };
 
   const hasOwnerContact =
     listing.source === "direct" && !!listing.owner_user_id;

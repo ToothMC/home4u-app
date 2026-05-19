@@ -141,6 +141,10 @@ export default async function BrowsePage({
     const qs = sp.toString();
     return qs ? `/stoebern?${qs}` : "/stoebern";
   }
+  // URL für den Zurück-Button auf der Detail-Seite — encodiert auf den
+  // exakten Stand inkl. Filter + aktueller Seite, damit der User nach
+  // dem Zurück-Klick wieder genau dort landet, wo er die Karte gewählt hat.
+  const backUrlForCards = pageHref(pageNum);
 
   return (
     <main className="min-h-[100dvh] bg-[var(--warm-cream)]">
@@ -200,6 +204,7 @@ export default async function BrowsePage({
                 lang={lang}
                 initialSaved={savedIds.has(l.id)}
                 isAuthenticated={isAuthenticated}
+                backUrl={backUrlForCards}
               />
             ))}
           </div>
@@ -252,17 +257,20 @@ function BrowseCard({
   lang,
   initialSaved,
   isAuthenticated,
+  backUrl,
 }: {
   listing: Row;
   t: T;
   lang: SupportedLang;
   initialSaved: boolean;
   isAuthenticated: boolean;
+  backUrl: string;
 }) {
   const cover = listing.media?.[0];
+  const href = `/listings/${listing.id}?back=${encodeURIComponent(backUrl)}`;
   return (
     <Link
-      href={`/listings/${listing.id}`}
+      href={href}
       className="group relative flex flex-col rounded-2xl overflow-hidden bg-white border border-[var(--border)] hover:border-[var(--brand-gold-300)] hover:shadow-[0_14px_40px_-10px_rgb(120_90_50/14%)] transition-all"
     >
       <div className="relative aspect-[4/3] bg-[var(--muted)] overflow-hidden">

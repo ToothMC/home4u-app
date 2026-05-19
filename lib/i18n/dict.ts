@@ -131,6 +131,7 @@ const de = {
   // === Listing detail page ===
   "listing.back.edit": "Zurück zur Bearbeitung",
   "listing.back.search": "Zurück zur Suche",
+  "listing.back.browse": "Zurück zum Stöbern",
   "listing.price.warm": "Warmmiete",
   "listing.price.rent": "Miete",
   "listing.price.sale": "Kaufpreis",
@@ -1189,6 +1190,7 @@ const en: Dict = {
 
   "listing.back.edit": "Back to editing",
   "listing.back.search": "Back to search",
+  "listing.back.browse": "Back to browsing",
   "listing.price.warm": "Rent (incl. utilities)",
   "listing.price.rent": "Rent",
   "listing.price.sale": "Sale price",
@@ -2232,6 +2234,7 @@ const ru: Dict = {
 
   "listing.back.edit": "Назад к редактированию",
   "listing.back.search": "Назад к поиску",
+  "listing.back.browse": "Назад к каталогу",
   "listing.price.warm": "Аренда с коммунальными",
   "listing.price.rent": "Аренда",
   "listing.price.sale": "Цена продажи",
@@ -3275,6 +3278,7 @@ const el: Dict = {
 
   "listing.back.edit": "Πίσω στην επεξεργασία",
   "listing.back.search": "Πίσω στην αναζήτηση",
+  "listing.back.browse": "Πίσω στην περιήγηση",
   "listing.price.warm": "Ενοίκιο με κοινόχρηστα",
   "listing.price.rent": "Ενοίκιο",
   "listing.price.sale": "Τιμή πώλησης",
@@ -4318,6 +4322,7 @@ const zh: Dict = {
 
   "listing.back.edit": "返回编辑",
   "listing.back.search": "返回搜索",
+  "listing.back.browse": "返回浏览",
   "listing.price.warm": "含杂费租金",
   "listing.price.rent": "租金",
   "listing.price.sale": "售价",
