@@ -154,7 +154,7 @@ export async function FeaturedListings({
 
       <div className="flex justify-center mt-10">
         <Button asChild variant="outline" size="lg" className="rounded-full">
-          <Link href="/matches">
+          <Link href="/stoebern">
             {t("featured.viewAll")}
             <ArrowRight />
           </Link>

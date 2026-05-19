@@ -1007,6 +1007,15 @@ const de = {
   "feedback.success": "Danke! Wir melden uns.",
   "feedback.error.generic": "Konnte nicht gesendet werden, bitte später erneut versuchen.",
   "feedback.error.tooShort": "Bitte mindestens 10 Zeichen.",
+
+  // === Browse / Stöbern (Alle Immobilien) ===
+  "browse.heading": "Alle Immobilien",
+  "browse.subtitle": "Frisch reingekommen — Stöbern ohne Suchprofil.",
+  "browse.empty": "Aktuell keine Immobilien verfügbar.",
+  "browse.prev": "Zurück",
+  "browse.next": "Weiter",
+  "browse.page": "Seite {n}",
+  "browse.startSearch": "Lass Sophie deine Suche starten",
 } as const;
 
 export type TKey = keyof typeof de;
@@ -1995,6 +2004,15 @@ const en: Dict = {
   "feedback.success": "Thanks! We'll get back to you.",
   "feedback.error.generic": "Could not send — please try again later.",
   "feedback.error.tooShort": "Please write at least 10 characters.",
+
+  // === Browse / All listings ===
+  "browse.heading": "All properties",
+  "browse.subtitle": "Freshly listed — browse without a search profile.",
+  "browse.empty": "No properties available right now.",
+  "browse.prev": "Previous",
+  "browse.next": "Next",
+  "browse.page": "Page {n}",
+  "browse.startSearch": "Let Sophie start your search",
 };
 
 const ru: Dict = {
@@ -2980,6 +2998,15 @@ const ru: Dict = {
   "feedback.success": "Спасибо! Мы свяжемся с вами.",
   "feedback.error.generic": "Не удалось отправить — попробуйте позже.",
   "feedback.error.tooShort": "Минимум 10 символов.",
+
+  // === Browse / Все объекты ===
+  "browse.heading": "Все объекты",
+  "browse.subtitle": "Свежие поступления — смотрите без поискового профиля.",
+  "browse.empty": "Сейчас нет доступных объектов.",
+  "browse.prev": "Назад",
+  "browse.next": "Далее",
+  "browse.page": "Страница {n}",
+  "browse.startSearch": "Начать поиск с Софи",
 };
 
 const el: Dict = {
@@ -3965,6 +3992,15 @@ const el: Dict = {
   "feedback.success": "Ευχαριστούμε! Θα επικοινωνήσουμε.",
   "feedback.error.generic": "Δεν στάλθηκε — δοκίμασε ξανά αργότερα.",
   "feedback.error.tooShort": "Τουλάχιστον 10 χαρακτήρες.",
+
+  // === Browse / Όλα τα ακίνητα ===
+  "browse.heading": "Όλα τα ακίνητα",
+  "browse.subtitle": "Νέες καταχωρίσεις — περιηγηθείτε χωρίς προφίλ αναζήτησης.",
+  "browse.empty": "Δεν υπάρχουν διαθέσιμα ακίνητα αυτή τη στιγμή.",
+  "browse.prev": "Προηγούμενη",
+  "browse.next": "Επόμενη",
+  "browse.page": "Σελίδα {n}",
+  "browse.startSearch": "Ξεκινήστε την αναζήτηση με τη Sophie",
 };
 
 const zh: Dict = {
@@ -4950,6 +4986,15 @@ const zh: Dict = {
   "feedback.success": "感谢!我们会与您联系。",
   "feedback.error.generic": "发送失败,请稍后重试。",
   "feedback.error.tooShort": "请至少输入 10 个字符。",
+
+  // === Browse / 全部房源 ===
+  "browse.heading": "全部房源",
+  "browse.subtitle": "最新房源 — 无需搜索条件，自由浏览。",
+  "browse.empty": "暂无房源。",
+  "browse.prev": "上一页",
+  "browse.next": "下一页",
+  "browse.page": "第 {n} 页",
+  "browse.startSearch": "让 Sophie 开启你的搜索",
 };
 
 export const dict: Record<SupportedLang, Dict> = { de, en, ru, el, zh };
