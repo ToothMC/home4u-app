@@ -32,6 +32,14 @@ const NUMBER_LOCALE: Record<SupportedLang, string> = {
   zh: "zh-CN",
 };
 
+type MarketPosition =
+  | "very_good"
+  | "good"
+  | "fair"
+  | "above"
+  | "expensive"
+  | "unknown";
+
 type Row = {
   id: string;
   type: "rent" | "sale";
@@ -44,6 +52,7 @@ type Row = {
   location_district: string | null;
   property_type: string | null;
   media: string[] | null;
+  market_position: MarketPosition | null;
 };
 
 function fmt(price: number, currency: string, lang: SupportedLang) {
@@ -100,7 +109,7 @@ export default async function BrowsePage({
     let query = supabase
       .from("listings")
       .select(
-        "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media",
+        "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, market_position",
         { count: "estimated" },
       )
       .eq("status", "active")
@@ -290,7 +299,7 @@ function BrowseCard({
         />
       </div>
       <div className="p-4 flex flex-col gap-1.5">
-        <div className="flex items-baseline justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="text-lg font-semibold text-[var(--brand-navy)]">
             {fmt(listing.price, listing.currency, lang)}
             {listing.type === "rent" && (
@@ -300,6 +309,7 @@ function BrowseCard({
               </span>
             )}
           </div>
+          <MarketPositionPill position={listing.market_position} t={t} />
         </div>
         <h3 className="text-sm font-medium text-[var(--brand-navy)] leading-snug line-clamp-1">
           {roomsTitle(listing.rooms, listing.property_type, t)}
@@ -336,3 +346,64 @@ function BrowseCard({
     </Link>
   );
 }
+
+// Kompakte, NICHT-interaktive Variante der MarketPriceBadge — die Browse-
+// Karte ist selbst ein <Link>, daher kein Popover (würde nested-button-Markup
+// erzeugen). Detail-Seite zeigt weiterhin die volle Badge mit Popover.
+function MarketPositionPill({
+  position,
+  t,
+}: {
+  position: MarketPosition | null;
+  t: T;
+}) {
+  if (!position || position === "unknown") return null;
+  const cfg = MARKET_PILL_CONFIG[position];
+  const label = t(cfg.key);
+  const isGreen = cfg.tone === "green";
+  return (
+    <span
+      className={[
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 border text-[10px] font-semibold whitespace-nowrap",
+        isGreen
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-amber-200 bg-amber-50 text-amber-700",
+      ].join(" ")}
+      aria-label={label}
+    >
+      <span className="inline-flex items-end gap-[1.5px]" aria-hidden>
+        {[1, 2, 3, 4, 5].map((i) => {
+          const active = i <= cfg.bars;
+          return (
+            <span
+              key={i}
+              className={[
+                "w-[2px] rounded-sm",
+                active
+                  ? isGreen
+                    ? "bg-emerald-600"
+                    : "bg-amber-500"
+                  : isGreen
+                    ? "bg-emerald-200"
+                    : "bg-amber-200",
+              ].join(" ")}
+              style={{ height: 4 + i * 1.5 }}
+            />
+          );
+        })}
+      </span>
+      {label}
+    </span>
+  );
+}
+
+const MARKET_PILL_CONFIG: Record<
+  Exclude<MarketPosition, "unknown">,
+  { bars: number; key: TKey; tone: "green" | "orange" }
+> = {
+  very_good: { bars: 5, key: "matchCard.priceVeryGood", tone: "green" },
+  good: { bars: 4, key: "matchCard.priceGood", tone: "green" },
+  fair: { bars: 3, key: "matchCard.priceFair", tone: "green" },
+  above: { bars: 2, key: "matchCard.priceElevated", tone: "orange" },
+  expensive: { bars: 1, key: "matchCard.priceHigh", tone: "orange" },
+};
