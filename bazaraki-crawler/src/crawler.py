@@ -689,6 +689,9 @@ def crawl_city(
     disallowed: list[str],
     max_pages: int = MAX_PAGES_PER_CITY,
     deadline_at: float | None = None,
+    known_ids: set[str] | None = None,
+    smart_stop_min_pages: int = 3,
+    smart_stop_consecutive: int = 2,
 ) -> Iterator[RawListing]:
     """Iteriert Pages für eine City+Type+Subtype-Kombination, yieldet RawListings.
 
@@ -697,8 +700,21 @@ def crawl_city(
     Wenn `deadline_at` (epoch-Sekunden) gesetzt ist, bricht die Pagination ab
     sobald `time.time() > deadline_at`. Caller bekommt dann nur die bis dahin
     extrahierten Items — Watchdog-Konsistenz mit drill/phash-Loops.
+
+    Smart-Stop (FAST_MODE):
+        Wenn `known_ids` übergeben wird (= alle in unserer DB bekannten
+        external_ids für diese City+Type), beendet die Pagination früh:
+        ab `smart_stop_min_pages` (Default 3), wenn `smart_stop_consecutive`
+        (Default 2) Pages in Folge **alle** Listings bereits in `known_ids`
+        enthalten, brechen wir ab. Conservative-Defaults verhindern false-
+        positive Stops bei Sticky-Listings — wir nehmen lieber 30 Listings
+        zu viel als ein neues zu wenig. Voraussetzung für korrekten Stale-
+        Sweep: Caller muss vor crawl_city die known_ids per
+        `touch_last_seen` gerefresht haben.
     """
     seen_external_ids: set[str] = set()
+    smart_stop_enabled = known_ids is not None and len(known_ids) > 0
+    all_known_in_row = 0
 
     for page_num in range(1, max_pages + 1):
         if deadline_at is not None and time.time() > deadline_at:
@@ -738,17 +754,46 @@ def crawl_city(
             page.close()
 
         new_count = 0
+        unknown_count = 0  # Listings auf dieser Page, die NICHT in known_ids sind
         for item in items:
             if item.external_id in seen_external_ids:
                 continue
             seen_external_ids.add(item.external_id)
             new_count += 1
+            if smart_stop_enabled and item.external_id not in known_ids:
+                unknown_count += 1
             yield item
 
-        log.info(
-            "  list %s %s %s p%d: %d cards, %d new (cum %d)",
-            city.display, listing_type, subtype, page_num, len(items), new_count, len(seen_external_ids),
-        )
+        # Smart-Stop-Tracking: zähle Pages-in-Folge mit 0 unbekannten Items
+        if smart_stop_enabled:
+            page_all_known = new_count > 0 and unknown_count == 0
+            if page_all_known:
+                all_known_in_row += 1
+            else:
+                all_known_in_row = 0
+
+            log.info(
+                "  list %s %s %s p%d: %d cards, %d new (%d unknown, %d known-in-row, cum %d)",
+                city.display, listing_type, subtype, page_num, len(items),
+                new_count, unknown_count, all_known_in_row, len(seen_external_ids),
+            )
+
+            if (
+                page_num >= smart_stop_min_pages
+                and all_known_in_row >= smart_stop_consecutive
+            ):
+                log.info(
+                    "  list %s %s %s: smart-stop — %d pages in row all-known (>= page %d) → break",
+                    city.display, listing_type, subtype,
+                    all_known_in_row, smart_stop_min_pages,
+                )
+                return
+        else:
+            log.info(
+                "  list %s %s %s p%d: %d cards, %d new (cum %d)",
+                city.display, listing_type, subtype, page_num, len(items), new_count, len(seen_external_ids),
+            )
+
         if new_count == 0:
             return
         time.sleep(RATE_LIMIT_SECONDS)

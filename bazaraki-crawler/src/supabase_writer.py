@@ -430,6 +430,112 @@ def fetch_already_phashed_external_ids() -> set[str]:
     return phashed
 
 
+def fetch_known_external_ids_for_city_type(
+    city_display: str, listing_type: str
+) -> set[str]:
+    """Alle bekannten external_ids für (source=bazaraki, location_city LIKE City%, type).
+
+    Wird im FAST_MODE genutzt, damit crawl_city während der Pagination
+    "all_known → break"-Smart-Stop machen kann. Granularität auf
+    (city, type) statt (city, type, subtype) reicht: Subtype-Filterung ist
+    eine Bazaraki-URL-Konvention, kein Listing-Field — beim Smart-Stop
+    interessiert nur "ist diese Listing-ID schon in unserer DB".
+    """
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+    }
+    ids: set[str] = set()
+    offset = 0
+    page_size = 1000
+    while True:
+        url = (
+            f"{url_base}/rest/v1/listings"
+            f"?source=eq.bazaraki"
+            f"&location_city=ilike.{city_display}*"
+            f"&type=eq.{listing_type}"
+            f"&select=external_id"
+        )
+        try:
+            resp = httpx.get(
+                url,
+                headers={
+                    **headers,
+                    "Range-Unit": "items",
+                    "Range": f"{offset}-{offset + page_size - 1}",
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            log.warning(
+                "fetch_known_external_ids(%s, %s) failed at offset %d: %s — fallback empty",
+                city_display, listing_type, offset, e,
+            )
+            return set()
+        rows = resp.json() or []
+        for row in rows:
+            ext = row.get("external_id")
+            if ext:
+                ids.add(str(ext))
+        if len(rows) < page_size:
+            break
+        offset += page_size
+    return ids
+
+
+def touch_last_seen(external_ids: list[str]) -> int:
+    """Bulk-Update last_seen=NOW() für gegebene Bazaraki-Listings.
+
+    Wird im FAST_MODE vor der Pagination aufgerufen: alle in unserer DB
+    bekannten Listings einer (City, Type)-Kombination bekommen einen
+    last_seen-Touch — auch wenn Smart-Stop die Pagination früh kappt,
+    werden sie nicht fälschlich als stale markiert.
+
+    RPC `touch_listings_last_seen(p_source, p_external_ids)` ist in der
+    DB vorhanden (von cre-/index-/dev-crawler bereits genutzt).
+
+    Returns: Anzahl tatsächlich getouchter Listings (RPC-Return).
+    Batched in CHUNK_SIZE-Größen damit RPC-Args nicht überlaufen.
+    """
+    if not external_ids:
+        return 0
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Content-Type": "application/json",
+    }
+    url = f"{url_base}/rest/v1/rpc/touch_listings_last_seen"
+    total = 0
+    BATCH = 500
+    for i in range(0, len(external_ids), BATCH):
+        chunk = external_ids[i : i + BATCH]
+        try:
+            resp = httpx.post(
+                url,
+                headers=headers,
+                json={"p_source": "bazaraki", "p_external_ids": chunk},
+                timeout=30,
+            )
+            if resp.status_code == 404:
+                log.info(
+                    "RPC touch_listings_last_seen nicht vorhanden — Pre-Touch deaktiviert"
+                )
+                return 0
+            resp.raise_for_status()
+            total += int(resp.json() or 0)
+        except Exception as e:
+            log.warning(
+                "touch_last_seen batch %d-%d failed: %s",
+                i, i + len(chunk), e,
+            )
+    return total
+
+
 def mark_stale_old_listings(stale_days: int = 7) -> int:
     """Listings, die seit N Tagen nicht mehr gesehen wurden → status='stale'.
 

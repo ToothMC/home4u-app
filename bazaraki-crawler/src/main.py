@@ -42,15 +42,18 @@ from collections import defaultdict
 
 from dotenv import load_dotenv
 
-from .config import PROPERTY_SUBTYPES_BY_TYPE, RATE_LIMIT_SECONDS, env_int, selected_cities, selected_types
+from .config import PROPERTY_SUBTYPES_BY_TYPE, RATE_LIMIT_SECONDS, env_int, env_str, selected_cities, selected_types
+from datetime import datetime, timezone
 from .crawler import RawListing, crawl_city, crawl_detail, fetch_disallowed_paths, with_browser
 from .supabase_writer import (
     fetch_already_drilled_external_ids,
     fetch_already_phashed_external_ids,
     fetch_city_last_seen,
     fetch_drill_queue_below_media,
+    fetch_known_external_ids_for_city_type,
     fetch_listings_below_media,
     mark_stale_old_listings,
+    touch_last_seen,
     upsert_listings,
 )
 
@@ -124,6 +127,26 @@ def main() -> int:
     city_max_pct = env_int("CITY_MAX_PCT", 35)
     city_max_pct = max(15, min(100, city_max_pct))
 
+    # FAST_MODE: incrementeller Crawl mit Smart-Stop + Pre-Touch.
+    # Standard ON, aber 1×/Tag automatisch OFF im 00-UTC-Slot (Full-Crawl),
+    # damit mark_stale die echten Verschwundenen sauber erkennt.
+    # Override via BAZARAKI_FAST_MODE: "0" = aus, "1" = ein, "auto" = stunden-
+    # basiert. Workflow-Dispatch kann FORCE_FULL_DRILL=1 setzen → impliziert
+    # auch fast_mode=False.
+    fast_mode_env = env_str("BAZARAKI_FAST_MODE", "auto").lower()
+    if fast_mode_env == "0" or force_full_drill:
+        fast_mode = False
+        fast_mode_reason = "ENV=0" if fast_mode_env == "0" else "force_full_drill"
+    elif fast_mode_env == "1":
+        fast_mode = True
+        fast_mode_reason = "ENV=1"
+    else:
+        # Auto: full-crawl 1×/Tag im 00:00-UTC-Slot
+        utc_hour = datetime.now(timezone.utc).hour
+        fast_mode = utc_hour != 0
+        fast_mode_reason = f"auto (UTC-Stunde={utc_hour})"
+    log.info("FAST_MODE: %s (%s)", "ON" if fast_mode else "OFF", fast_mode_reason)
+
     # Sets einmal am Anfang ziehen — danach lokal mitführen, damit nachfolgende
     # Subtypes nicht doppelt drillen/hashen wenn ein Listing in mehreren City-
     # Subtype-Buckets auftaucht (passiert bei border-Locations selten, schadet
@@ -191,6 +214,33 @@ def main() -> int:
     city_start_times: dict[str, float] = {}
     capped_cities: set[str] = set()
 
+    # FAST_MODE Pre-Step: pro (City, Type) bekannte external_ids holen +
+    # bulk-Touch last_seen. Damit kann crawl_city Smart-Stop machen, ohne
+    # dass mark_stale die übersprungenen Listings fälschlich killt. Wir
+    # touchen JETZT — selbst wenn der Job danach crasht, ist last_seen frisch.
+    known_ids_by_city_type: dict[tuple[str, str], set[str]] = {}
+    if fast_mode:
+        log.info("=== FAST_MODE: Pre-Touch bekannter Listings ===")
+        for city in cities_sorted:
+            for ltype in types:
+                key = (city.display, ltype)
+                try:
+                    ids = fetch_known_external_ids_for_city_type(city.display, ltype)
+                except Exception as e:
+                    log.warning("fetch_known(%s, %s) failed: %s — skip touch", city.display, ltype, e)
+                    ids = set()
+                known_ids_by_city_type[key] = ids
+                if not ids:
+                    continue
+                try:
+                    touched = touch_last_seen(list(ids))
+                    log.info(
+                        "  pre-touch %s/%s: %d known, %d touched",
+                        city.display, ltype, len(ids), touched,
+                    )
+                except Exception as e:
+                    log.warning("touch_last_seen(%s, %s) failed: %s", city.display, ltype, e)
+
     with with_browser() as p:
         browser = p.chromium.launch(headless=True)
         try:
@@ -239,8 +289,14 @@ def main() -> int:
                     effective_deadline - time.time(),
                 )
                 try:
-                    items = list(crawl_city(browser, city, listing_type, subtype, disallowed,
-                                            deadline_at=effective_deadline))
+                    items = list(crawl_city(
+                        browser, city, listing_type, subtype, disallowed,
+                        deadline_at=effective_deadline,
+                        known_ids=(
+                            known_ids_by_city_type.get((city.display, listing_type))
+                            if fast_mode else None
+                        ),
+                    ))
                 except Exception as e:
                     log.exception("    List für %s gecrasht: %s — überspringe Subtype", tag, e)
                     list_phase_complete = False
@@ -470,11 +526,18 @@ def main() -> int:
     for (city, t), n in sorted(per_city_counts.items()):
         log.info("  %s/%s: %d", city, t, n)
 
-    # mark_stale nur bei vollständigem List-Pass — sonst markieren wir Cities
-    # als stale, die im aktuellen Run nie erreicht wurden. Zusätzlich schützen
-    # die RPC-Guards (10% Cap, p_min_recent_seen) gegen Restrisiko.
+    # mark_stale nur bei vollständigem List-Pass UND NICHT im FAST_MODE.
+    # FAST_MODE hat per Pre-Touch alle bekannten Listings blind gerefresht
+    # → mark_stale würde nichts finden (alle frisch) und echte verschwundene
+    # Listings nie aussortieren. Die 1×/Tag Full-Crawl (fast_mode=False,
+    # 00 UTC) macht das stattdessen.
     if dry_run:
         log.info("DRY_RUN — kein mark_stale.")
+    elif fast_mode:
+        log.info(
+            "mark_stale übersprungen — FAST_MODE (Pre-Touch hat alle bekannten "
+            "gerefresht). Full-Crawl im 00-UTC-Slot übernimmt Stale-Detection."
+        )
     elif list_phase_complete:
         log.info("Mark stale (>3d unseen) …")
         try:
