@@ -467,7 +467,6 @@ const handlers: Record<string, Handler> = {
     const passthrough: ReadonlyArray<keyof typeof input> = [
       "type",
       "region",
-      "propertyTypes",
       "rooms",
       "priceMin",
       "priceMax",
@@ -483,6 +482,30 @@ const handlers: Record<string, Handler> = {
     for (const key of passthrough) {
       const v = (input as Record<string, unknown>)[key];
       if (v !== undefined) patch[key as string] = v;
+    }
+    // propertyTypes: im Zypern-Kontext sind villa/townhouse/bungalow
+    // semantisch identisch zu "house" — wenn Sophie die übergibt, ziehen wir
+    // sie auf den Eltern-Wert hoch, damit Filter nicht auf 107 Villen
+    // einrastet, während der User "Häuser" meint. Analog land→plot,
+    // building→commercial. Apartment-Subtypen (studio, penthouse, maisonette)
+    // bleiben exakt — die sind echt unterscheidbar.
+    const rawPT = (input as Record<string, unknown>).propertyTypes;
+    if (Array.isArray(rawPT)) {
+      const REWRITE: Record<string, string> = {
+        villa: "house",
+        townhouse: "house",
+        bungalow: "house",
+        land: "plot",
+        building: "commercial",
+      };
+      const normalized = Array.from(
+        new Set(
+          rawPT
+            .filter((v): v is string => typeof v === "string")
+            .map((v) => REWRITE[v] ?? v),
+        ),
+      );
+      patch.propertyTypes = normalized;
     }
     const reset = Boolean((input as Record<string, unknown>).reset);
     return {
