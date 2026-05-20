@@ -252,10 +252,24 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
           type: "array",
           items: {
             type: "string",
-            enum: ["apartment", "house", "plot", "commercial", "room"],
+            enum: [
+              "apartment",
+              "house",
+              "plot",
+              "commercial",
+              "room",
+              "studio",
+              "penthouse",
+              "maisonette",
+              "villa",
+              "townhouse",
+              "bungalow",
+              "land",
+              "building",
+            ],
           },
           description:
-            "Eltern-Kategorie(n) als OR-Filter. 'apartment' zieht Studio/Penthouse/Maisonette mit, 'house' zieht Villa/Townhouse/Bungalow mit, 'plot' zieht Land mit, 'commercial' zieht Building mit. Keine Sub-Typen verwenden.",
+            "Property-Typen als OR-Filter. Eltern-Werte expandieren (apartment → +studio/penthouse/maisonette; house → +villa/townhouse/bungalow; plot → +land; commercial → +building). Subtypen filtern EXAKT — nutze sie, wenn der User explizit z.B. 'nur Penthouse' oder 'wirklich nur Villa' sagt.",
         },
         rooms: {
           type: "array",

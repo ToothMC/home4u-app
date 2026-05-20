@@ -2,27 +2,48 @@ import type { TKey } from "@/lib/i18n/dict";
 import { CYPRUS_REGIONS, type CyprusRegion } from "@/lib/geo/cyprus-regions";
 
 /**
- * Filter-UI: nur die 5 Eltern-Kategorien. Subtypes (villa, penthouse, studio,
- * maisonette, townhouse, bungalow, land, building) sind in der DB <0,2% und
- * werden via {@link PROPERTY_TYPE_DB_MAP} unter ihre Eltern-Kategorie gemappt.
- * Karten zeigen den DB-Subtype weiter (z.B. "Villa") über `t("property.villa")`.
+ * Filter-UI rendert nur die 5 Eltern-Kategorien (siehe {@link PROPERTY_TYPE_OPTIONS}).
+ * Das Filter-Modell akzeptiert aber alle Werte — Sophie kann via Chat
+ * gezielter auf Subtypen filtern (z.B. nur "penthouse" oder "villa"), während
+ * der User-Klick "Wohnung" alle Apartment-Subtypen mit einbezieht.
  */
-export const PROPERTY_TYPE_OPTIONS = [
+export const PROPERTY_TYPE_PARENTS = [
   "apartment",
   "house",
   "plot",
   "commercial",
   "room",
 ] as const;
-export type PropertyTypeOption = (typeof PROPERTY_TYPE_OPTIONS)[number];
+
+export const PROPERTY_TYPE_SUBTYPES = [
+  "studio",
+  "penthouse",
+  "maisonette",
+  "villa",
+  "townhouse",
+  "bungalow",
+  "land",
+  "building",
+] as const;
+
+/** Alles, was im URL-Param `?pt=` erlaubt ist. */
+export const PROPERTY_TYPE_VALUES = [
+  ...PROPERTY_TYPE_PARENTS,
+  ...PROPERTY_TYPE_SUBTYPES,
+] as const;
+
+/** UI-Filter-Buttons: nur die 5 Eltern. Subtypen sind Sophie/URL-only. */
+export const PROPERTY_TYPE_OPTIONS = PROPERTY_TYPE_PARENTS;
+export type PropertyTypeOption = (typeof PROPERTY_TYPE_VALUES)[number];
 
 /**
- * UI-Filter → DB property_type Werte. Wird beim Query-Build expandiert.
- * "house" zieht villa/townhouse/maisonette/bungalow mit; "apartment" zieht
- * studio/penthouse mit. So sehen Sucher in einer Region alle relevanten
- * Inserate, statt 107 Villen versteckt zu lassen.
+ * Eltern-Kategorie → DB-Werte. Wird beim Query-Build expandiert.
+ * "house" zieht villa/townhouse/bungalow mit; "apartment" zieht
+ * studio/penthouse/maisonette mit. Subtypen, die hier nicht als Key
+ * stehen, werden in {@link applyFiltersToQuery} als-ist durchgereicht
+ * (Sophie kann also gezielt nach "penthouse" filtern).
  */
-export const PROPERTY_TYPE_DB_MAP: Record<PropertyTypeOption, string[]> = {
+export const PROPERTY_TYPE_DB_MAP: Record<string, string[]> = {
   apartment: ["apartment", "studio", "penthouse", "maisonette"],
   house: ["house", "villa", "townhouse", "bungalow"],
   plot: ["plot", "land"],
@@ -158,7 +179,7 @@ export function parseFiltersFromSearchParams(
   return {
     type: validType,
     region: validRegion,
-    propertyTypes: parseCsv(pick("pt"), PROPERTY_TYPE_OPTIONS),
+    propertyTypes: parseCsv(pick("pt"), PROPERTY_TYPE_VALUES),
     rooms: parseRoomsCsv(pick("rooms")),
     priceMin: parsePosInt(pick("pmin")),
     priceMax: parsePosInt(pick("pmax")),
