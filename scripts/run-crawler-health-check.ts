@@ -90,6 +90,53 @@ async function main() {
     }
   }
 
+  // ──────────────────────────────────────────────────────────────────────
+  // City-aware Check (Bazaraki)
+  // ──────────────────────────────────────────────────────────────────────
+  // Source-Aggregat allein hat den 22-Tage-Ausfall von Nicosia/Famagusta
+  // nicht erwischt — bazaraki insgesamt war grün, weil Limassol/Paphos
+  // weiter crawlten. Hier prüfen wir pro (bazaraki, City) ob in den letzten
+  // CITY_MAX_HOURS Stunden ein last_seen registriert wurde.
+  //
+  // 48h als Schwelle: Workflow läuft 4×/Tag, also alle 6h sollte refresh
+  // kommen. 48h ≈ 8 fehlgeschlagene Iterationen — definitiv kein normaler
+  // Aussetzer. Bei Fail bekommt man eine Mail VIEL früher als bei 22 Tagen.
+  const CITIES = ["Paphos", "Limassol", "Nicosia", "Larnaca", "Famagusta"];
+  const CITY_MAX_HOURS = 48;
+  console.log(
+    `\nCity-aware Check (bazaraki, max ${CITY_MAX_HOURS}h pro City):`,
+  );
+  for (const city of CITIES) {
+    const { data, error: cityErr } = await supabase
+      .from("listings")
+      .select("last_seen")
+      .eq("source", "bazaraki")
+      .ilike("location_city", `${city}%`)
+      .order("last_seen", { ascending: false })
+      .limit(1);
+    if (cityErr) {
+      failures.push(`bazaraki/${city}: Query-Fehler — ${cityErr.message}`);
+      continue;
+    }
+    const lastSeen = data?.[0]?.last_seen ?? null;
+    if (!lastSeen) {
+      failures.push(
+        `bazaraki/${city}: kein einziges Listing in der DB — Crawler-Pfad kaputt?`,
+      );
+      continue;
+    }
+    const hoursSince = (Date.now() - new Date(lastSeen).getTime()) / 3600_000;
+    const tag = `bazaraki/${city.padEnd(10)} last_seen=${lastSeen} (${hoursSince.toFixed(1)}h)`;
+    if (hoursSince > CITY_MAX_HOURS) {
+      console.log(`  ✗ ${tag}`);
+      failures.push(
+        `bazaraki/${city}: last_seen vor ${hoursSince.toFixed(1)}h (max ${CITY_MAX_HOURS}h) — diese City wird nicht mehr gecrawlt, obwohl andere Cities frisch sind.`,
+      );
+    } else {
+      console.log(`  ✓ ${tag}`);
+    }
+  }
+
   if (failures.length > 0) {
     console.error("\nCrawler-Health-Check FAIL:");
     for (const f of failures) console.error("  ✗ " + f);

@@ -115,6 +115,15 @@ def main() -> int:
     list_phase_pct = env_int("LIST_PHASE_PCT", 50)
     list_phase_pct = max(10, min(100, list_phase_pct))
 
+    # Per-City Pass-1-Cap: keine einzelne City darf mehr als CITY_MAX_PCT
+    # des Pass-1-Budgets schlucken. Default 35% — bei 45min Pass-1-Budget
+    # heißt das ~15min pro City. Limassol-Sale braucht historisch ~20min
+    # und hat damit alle anderen Cities verhungert; mit dem Cap wird die
+    # Limassol-Subtypes-Tail (plots/prefab) zurückgestellt, dafür kommen
+    # Nicosia/Famagusta sicher dran.
+    city_max_pct = env_int("CITY_MAX_PCT", 35)
+    city_max_pct = max(15, min(100, city_max_pct))
+
     # Sets einmal am Anfang ziehen — danach lokal mitführen, damit nachfolgende
     # Subtypes nicht doppelt drillen/hashen wenn ein Listing in mehreren City-
     # Subtype-Buckets auftaucht (passiert bei border-Locations selten, schadet
@@ -136,6 +145,15 @@ def main() -> int:
     started = time.time()
     deadline_at = started + max_runtime_s
     list_deadline_at = started + int(max_runtime_s * list_phase_pct / 100)
+    # Per-City wall-clock-Budget (auf Pass-1 bezogen). Wird bei der ersten
+    # Subtype dieser City als Startzeit gesetzt und limit greift sobald die
+    # City `city_max_seconds` an Wall-Clock akkumuliert hat.
+    pass1_budget_s = max(1, list_deadline_at - int(started))
+    city_max_seconds = pass1_budget_s * city_max_pct / 100.0
+    log.info(
+        "Per-City Pass-1-Cap: %d%% von %ds = %.0fs pro City",
+        city_max_pct, pass1_budget_s, city_max_seconds,
+    )
     grand_totals = {
         "inserted": 0, "updated": 0, "deduped": 0, "failed": 0,
         "items": 0, "list_subtypes": 0, "drill_subtypes": 0,
@@ -167,6 +185,11 @@ def main() -> int:
     collected: dict[tuple, list[RawListing]] = {}
     list_phase_complete = True
     aborted_reason: str | None = None
+    # Per-City Tracking: erste Subtype dieser City setzt den Start-Timestamp.
+    # Sobald city_max_seconds überschritten, wird die City in capped_cities
+    # aufgenommen und alle folgenden Subtypes werden geskippt.
+    city_start_times: dict[str, float] = {}
+    capped_cities: set[str] = set()
 
     with with_browser() as p:
         browser = p.chromium.launch(headless=True)
@@ -191,10 +214,29 @@ def main() -> int:
                     list_phase_complete = False
                     break
 
+                # Per-City Cap: skipt restliche Subtypes dieser City, sobald
+                # ihr Wall-Clock-Budget verbraucht ist. Wichtig: Skip ist
+                # silent (kein break) — so kommen nachfolgende Cities dran.
+                if city.display in capped_cities:
+                    continue
+                if city.display not in city_start_times:
+                    city_start_times[city.display] = time.time()
+                city_elapsed = time.time() - city_start_times[city.display]
+                if city_elapsed > city_max_seconds:
+                    log.warning(
+                        "  city-cap: %s hat %.0fs verbraucht (max %.0fs) — "
+                        "skip restliche Subtypes dieser City",
+                        city.display, city_elapsed, city_max_seconds,
+                    )
+                    capped_cities.add(city.display)
+                    list_phase_complete = False
+                    continue
+
                 tag = f"{city.display}/{listing_type}/{subtype}"
                 log.info(
-                    "  list %s (elapsed %.0fs, list-budget left %.0fs)",
-                    tag, elapsed, effective_deadline - time.time(),
+                    "  list %s (elapsed %.0fs, city %.0fs/%.0fs, budget left %.0fs)",
+                    tag, elapsed, city_elapsed, city_max_seconds,
+                    effective_deadline - time.time(),
                 )
                 try:
                     items = list(crawl_city(browser, city, listing_type, subtype, disallowed,
