@@ -1,20 +1,34 @@
 import type { TKey } from "@/lib/i18n/dict";
 import { CYPRUS_REGIONS, type CyprusRegion } from "@/lib/geo/cyprus-regions";
 
+/**
+ * Filter-UI: nur die 5 Eltern-Kategorien. Subtypes (villa, penthouse, studio,
+ * maisonette, townhouse, bungalow, land, building) sind in der DB <0,2% und
+ * werden via {@link PROPERTY_TYPE_DB_MAP} unter ihre Eltern-Kategorie gemappt.
+ * Karten zeigen den DB-Subtype weiter (z.B. "Villa") über `t("property.villa")`.
+ */
 export const PROPERTY_TYPE_OPTIONS = [
   "apartment",
   "house",
-  "villa",
-  "penthouse",
-  "maisonette",
-  "townhouse",
-  "studio",
-  "bungalow",
   "plot",
   "commercial",
   "room",
 ] as const;
 export type PropertyTypeOption = (typeof PROPERTY_TYPE_OPTIONS)[number];
+
+/**
+ * UI-Filter → DB property_type Werte. Wird beim Query-Build expandiert.
+ * "house" zieht villa/townhouse/maisonette/bungalow mit; "apartment" zieht
+ * studio/penthouse mit. So sehen Sucher in einer Region alle relevanten
+ * Inserate, statt 107 Villen versteckt zu lassen.
+ */
+export const PROPERTY_TYPE_DB_MAP: Record<PropertyTypeOption, string[]> = {
+  apartment: ["apartment", "studio", "penthouse", "maisonette"],
+  house: ["house", "villa", "townhouse", "bungalow"],
+  plot: ["plot", "land"],
+  commercial: ["commercial", "building"],
+  room: ["room"],
+};
 
 export const FEATURE_OPTIONS = [
   "pool",
@@ -276,7 +290,13 @@ export function applyFiltersToQuery<Q>(query: Q, f: BrowseFilters): Q {
   }
 
   if (f.propertyTypes.length) {
-    q = q.in("property_type", f.propertyTypes);
+    // Eltern-Kategorien zu DB-Werten expandieren (z.B. "house" → house, villa,
+    // townhouse, ...). Dedup über Set, damit überlappende Auswahl keinen IN()
+    // mit Duplikaten erzeugt.
+    const dbValues = Array.from(
+      new Set(f.propertyTypes.flatMap((pt) => PROPERTY_TYPE_DB_MAP[pt] ?? [pt])),
+    );
+    q = q.in("property_type", dbValues);
   }
 
   if (f.rooms.length) {
