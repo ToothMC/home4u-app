@@ -30,6 +30,7 @@ const ListingSummarySchema = z.object({
 const BrowseFiltersSchema = z.object({
   type: z.enum(["rent", "sale"]).nullable(),
   region: z.string().nullable(),
+  subArea: z.string().nullable(),
   propertyTypes: z.array(z.string()),
   rooms: z.array(z.number()),
   priceMin: z.number().nullable(),
@@ -71,6 +72,7 @@ export function formatSidekickContextBlock(ctx: SidekickContext): string {
     const parts: string[] = [];
     if (f.type) parts.push(`type=${f.type}`);
     if (f.region) parts.push(`region=${f.region}`);
+    if (f.subArea) parts.push(`sub_area=${f.subArea}`);
     if (f.propertyTypes.length)
       parts.push(`property_types=${f.propertyTypes.join("|")}`);
     if (f.rooms.length) parts.push(`rooms=${f.rooms.join("|")}`);

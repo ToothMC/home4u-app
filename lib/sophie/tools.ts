@@ -245,8 +245,14 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
         },
         region: {
           type: "string",
+          enum: ["nicosia", "limassol", "paphos", "larnaca", "famagusta"],
           description:
-            "Region-Slug aus CYPRUS_REGIONS (z.B. 'nicosia', 'limassol', 'paphos', 'larnaca', 'famagusta', 'paphos-tala'). Bei Unklarheit weglassen.",
+            "Region-Slug. Bei Unklarheit weglassen. Für Sub-Areas (Pegeia, Germasogeia, Strovolos …) statt region das Feld subArea benutzen — region wird automatisch passend gesetzt.",
+        },
+        subArea: {
+          type: "string",
+          description:
+            "Sub-Area-Slug innerhalb einer Region (z.B. 'pegeia', 'germasogeia', 'strovolos', 'aradippou', 'paralimni', 'kato-paphos', 'protaras'). Der Handler akzeptiert auch Aliase ('Coral Bay', 'Peyia', 'Aglandjia') und normalisiert sie. Wenn der User einen Ortsteil/Dorf nennt, IMMER hier setzen, NICHT in region. Die zugehörige region wird automatisch passend mitgesetzt.",
         },
         propertyTypes: {
           type: "array",

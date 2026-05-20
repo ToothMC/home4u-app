@@ -1,5 +1,10 @@
 import type { TKey } from "@/lib/i18n/dict";
-import { CYPRUS_REGIONS, type CyprusRegion } from "@/lib/geo/cyprus-regions";
+import {
+  CYPRUS_REGIONS,
+  CYPRUS_SUB_AREAS,
+  subAreaBySlug,
+  type CyprusRegion,
+} from "@/lib/geo/cyprus-regions";
 
 /**
  * Filter-UI rendert nur die 5 Eltern-Kategorien (siehe {@link PROPERTY_TYPE_OPTIONS}).
@@ -83,6 +88,10 @@ export type ListingType = "rent" | "sale";
 export type BrowseFilters = {
   type: ListingType | null;
   region: CyprusRegion["slug"] | null;
+  /** Sub-Area-Slug (z.B. "pegeia", "germasogeia"). Wenn gesetzt, wird
+   *  zusätzlich zur Stadt auf location_district + location_raw via
+   *  ILIKE-OR mit allen Aliasen gefiltert. */
+  subArea: string | null;
   propertyTypes: PropertyTypeOption[];
   rooms: number[]; // empty = any; contains ROOMS_PLUS_THRESHOLD → ">=5"
   priceMin: number | null;
@@ -105,6 +114,7 @@ export type BrowseFilters = {
 export const EMPTY_FILTERS: BrowseFilters = {
   type: null,
   region: null,
+  subArea: null,
   propertyTypes: [],
   rooms: [],
   priceMin: null,
@@ -158,6 +168,7 @@ export function parseFiltersFromSearchParams(
 
   const type = pick("type");
   const region = pick("region");
+  const subAreaRaw = pick("sub");
   const furnishing = pick("furn");
   const energyMin = pick("energy");
 
@@ -176,9 +187,16 @@ export function parseFiltersFromSearchParams(
       ? (energyMin as EnergyOption)
       : null;
 
+  // subArea validieren + Region implizit erzwingen: wenn jemand
+  // ?sub=pegeia ohne ?region= aufruft, setzen wir region auf 'paphos'
+  // damit die Liste konsistent gefiltert ist.
+  const subArea = subAreaBySlug(subAreaRaw);
+  const finalRegion = subArea ? subArea.region : validRegion;
+
   return {
     type: validType,
-    region: validRegion,
+    region: finalRegion,
+    subArea: subArea?.slug ?? null,
     propertyTypes: parseCsv(pick("pt"), PROPERTY_TYPE_VALUES),
     rooms: parseRoomsCsv(pick("rooms")),
     priceMin: parsePosInt(pick("pmin")),
@@ -205,6 +223,7 @@ export function serializeFilters(f: BrowseFilters): URLSearchParams {
   const sp = new URLSearchParams();
   if (f.type) sp.set("type", f.type);
   if (f.region) sp.set("region", f.region);
+  if (f.subArea) sp.set("sub", f.subArea);
   if (f.propertyTypes.length) sp.set("pt", f.propertyTypes.join(","));
   if (f.rooms.length) sp.set("rooms", f.rooms.join(","));
   if (f.priceMin != null) sp.set("pmin", String(f.priceMin));
@@ -230,6 +249,7 @@ export function countActiveFilters(f: BrowseFilters): number {
   let n = 0;
   if (f.type) n++;
   if (f.region) n++;
+  if (f.subArea) n++;
   if (f.propertyTypes.length) n++;
   if (f.rooms.length) n++;
   if (f.priceMin != null || f.priceMax != null) n++;
@@ -308,6 +328,26 @@ export function applyFiltersToQuery<Q>(query: Q, f: BrowseFilters): Q {
   if (f.region) {
     const region = CYPRUS_REGIONS.find((r) => r.slug === f.region);
     if (region) q = q.ilike("location_city", `${region.cityPrefix}%`);
+  }
+
+  // Sub-Area: ILIKE-OR über alle Aliase auf location_district UND
+  // location_raw. location_raw fängt Bazaraki-Inserate, die den Sub-Area
+  // im Format "Paphos – Pegeia" als raw mitliefern, aber district leer
+  // lassen.
+  if (f.subArea) {
+    const sub = subAreaBySlug(f.subArea);
+    if (sub) {
+      // PostgREST or() braucht Komma-separierte Clauses ohne Leerzeichen
+      // im operator-Teil. ilike-pattern muss escaped sein — wir filtern
+      // bewusst keine User-Input-Patterns, sondern nur kuratierte Aliase.
+      const clauses: string[] = [];
+      for (const alias of sub.aliases) {
+        // %alias% — case-insensitive Substring
+        clauses.push(`location_district.ilike.%${alias}%`);
+        clauses.push(`location_raw.ilike.%${alias}%`);
+      }
+      q = q.or(clauses.join(","));
+    }
   }
 
   if (f.propertyTypes.length) {

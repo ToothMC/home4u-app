@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
 import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
-import { CYPRUS_REGIONS } from "@/lib/geo/cyprus-regions";
+import { CYPRUS_REGIONS, subAreasForRegion } from "@/lib/geo/cyprus-regions";
 import {
   EMPTY_FILTERS,
   ENERGY_OPTIONS,
@@ -86,9 +86,12 @@ export function BrowseFilterBar({ initial }: Props) {
           aria-label={t("filter.region.label")}
           value={filters.region ?? ""}
           onChange={(e) =>
+            // Bei Region-Wechsel subArea zurücksetzen — eine Limassol-
+            // SubArea ergibt in Paphos keinen Sinn.
             patch({
               region:
                 (e.target.value || null) as BrowseFilters["region"],
+              subArea: null,
             })
           }
         >
@@ -99,6 +102,24 @@ export function BrowseFilterBar({ initial }: Props) {
             </option>
           ))}
         </NativeSelect>
+
+        {/* 2b. Sub-Area (nur wenn Region gewählt) */}
+        {filters.region && (
+          <NativeSelect
+            aria-label={t("filter.subArea.label")}
+            value={filters.subArea ?? ""}
+            onChange={(e) =>
+              patch({ subArea: e.target.value || null })
+            }
+          >
+            <option value="">{t("filter.subArea.all")}</option>
+            {subAreasForRegion(filters.region).map((s) => (
+              <option key={s.slug} value={s.slug}>
+                {s.label}
+              </option>
+            ))}
+          </NativeSelect>
+        )}
 
         {/* 3. Art (multi-select via popover) */}
         <PropertyTypePicker

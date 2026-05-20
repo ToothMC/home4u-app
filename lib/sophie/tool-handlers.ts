@@ -15,6 +15,8 @@ import {
   CYPRUS_REGIONS,
   regionBySlug,
   regionFromText,
+  subAreaBySlug,
+  subAreaFromText,
 } from "@/lib/geo/cyprus-regions";
 
 export type ToolResult = {
@@ -486,20 +488,53 @@ const handlers: Record<string, Handler> = {
       const v = (input as Record<string, unknown>)[key];
       if (v !== undefined) patch[key as string] = v;
     }
-    // region: Sophie übergibt manchmal Sub-Areas/Aliase (Pegeia, Tala,
-    // Germasogeia, Coral Bay). Listings sind nur auf City-Ebene gespeichert,
-    // also Alias → kanonischen Slug normalisieren. Ungültige Werte werden
-    // STILL VERWORFEN (kein Patch), damit der bestehende Region-Filter im
-    // URL-State erhalten bleibt — andernfalls fällt der Filter komplett raus
-    // und Limassol-Inserate tauchen in einer Paphos-Suche auf.
+    // subArea hat Vorrang: wenn Sophie ein Viertel/Dorf nennt, wird das
+    // hier normalisiert (Slug oder Alias → kanonischer Slug). Die
+    // zugehörige Stadt-Region wird automatisch mitgesetzt, damit der
+    // Filter konsistent ist.
+    const rawSubArea = (input as Record<string, unknown>).subArea;
+    let resolvedSubAreaRegion: string | null = null;
+    if (typeof rawSubArea === "string" && rawSubArea.trim()) {
+      const sub =
+        subAreaBySlug(rawSubArea) ?? subAreaFromText(rawSubArea) ?? null;
+      if (sub) {
+        patch.subArea = sub.slug;
+        resolvedSubAreaRegion = sub.region;
+      } else {
+        // Nicht erkannt: subArea null setzen (entfernt evtl. veralteten
+        // Filter aus dem URL-State).
+        patch.subArea = null;
+      }
+    } else if (rawSubArea === null) {
+      // Sophie kann subArea explizit zurücksetzen
+      patch.subArea = null;
+    }
+
+    // region: wenn subArea eine Region forciert, gewinnt das. Sonst
+    // versucht der Handler Slug-Match, dann Alias-Match (Pegeia, Tala,
+    // Germasogeia …). Ein Alias wird zusätzlich als subArea aufgelöst,
+    // damit der User auch über das region-Feld den vollen Sub-Area-Filter
+    // bekommt. Ungültige Werte werden STILL VERWORFEN, damit der
+    // bestehende Filter im URL-State nicht versehentlich kippt.
     const rawRegion = (input as Record<string, unknown>).region;
-    if (typeof rawRegion === "string" && rawRegion.trim()) {
-      const slug =
-        regionBySlug(rawRegion)?.slug ??
-        regionFromText(rawRegion)?.slug ??
-        null;
-      if (slug) patch.region = slug;
-      // sonst: region NICHT ins Patch → aktueller Filter bleibt erhalten
+    if (resolvedSubAreaRegion) {
+      patch.region = resolvedSubAreaRegion;
+    } else if (typeof rawRegion === "string" && rawRegion.trim()) {
+      const direct = regionBySlug(rawRegion);
+      if (direct) {
+        patch.region = direct.slug;
+      } else {
+        // Kein direkter Region-Slug — vielleicht Sub-Area-Alias?
+        const subFromText = subAreaFromText(rawRegion);
+        if (subFromText) {
+          patch.subArea = subFromText.slug;
+          patch.region = subFromText.region;
+        } else {
+          const fuzzyRegion = regionFromText(rawRegion);
+          if (fuzzyRegion) patch.region = fuzzyRegion.slug;
+          // sonst: region NICHT ins Patch → aktueller Filter bleibt erhalten
+        }
+      }
     }
     // propertyTypes: im Zypern-Kontext sind villa/townhouse/bungalow
     // semantisch identisch zu "house" — wenn Sophie die übergibt, ziehen wir
