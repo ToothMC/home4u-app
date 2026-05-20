@@ -106,6 +106,9 @@ export default async function LandingPage({
                 </Button>
               </Suspense>
               <Button asChild size="lg" variant="outline" className="bg-white/85 backdrop-blur">
+                <Link href="/stoebern">{t("hero.cta.browse")}</Link>
+              </Button>
+              <Button asChild size="lg" variant="ghost" className="text-[var(--warm-bark)] hover:text-[var(--brand-navy)]">
                 <Link href="/scam-check">{t("hero.cta.check")}</Link>
               </Button>
             </div>
@@ -230,7 +233,7 @@ export default async function LandingPage({
             <p className="mt-4 text-[var(--warm-bark)] leading-relaxed">
               {t("closing.text")}
             </p>
-            <div className="mt-8">
+            <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <Suspense fallback={<Button size="lg" disabled>{t("hero.cta.search")}</Button>}>
                 <Button asChild size="lg">
                   <ChatLink>
@@ -239,6 +242,9 @@ export default async function LandingPage({
                   </ChatLink>
                 </Button>
               </Suspense>
+              <Button asChild size="lg" variant="outline" className="bg-white/85 backdrop-blur">
+                <Link href="/stoebern">{t("hero.cta.browse")}</Link>
+              </Button>
             </div>
           </div>
         </div>

@@ -16,6 +16,10 @@ import {
   createConversation,
   logLlmUsage,
 } from "@/lib/repo/conversations";
+import {
+  SidekickContextSchema,
+  formatSidekickContextBlock,
+} from "@/lib/sophie/sidekick-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +48,7 @@ const BodySchema = z.object({
   messages: z.array(MessageSchema).min(1).max(40),
   region: RegionSchema,
   attached_media: z.array(AttachedMediaSchema).max(20).optional(),
+  sidekick_context: SidekickContextSchema.optional(),
 });
 
 const MAX_TOOL_ROUNDS = 4;
@@ -163,6 +168,12 @@ export async function POST(req: NextRequest) {
         systemBlocks.push({
           type: "text",
           text: `<user_context>\nDer Nutzer hat im Landing-Page-Picker die Region "${body.region.label}" (slug: ${body.region.slug}) gewählt. Frage nicht nochmal nach Land/Stadt, arbeite mit dieser Region als Default. Bei Wunsch nach anderer Region darf der Nutzer jederzeit wechseln.\n</user_context>`,
+        });
+      }
+      if (body.sidekick_context) {
+        systemBlocks.push({
+          type: "text",
+          text: formatSidekickContextBlock(body.sidekick_context),
         });
       }
       if (body.attached_media && body.attached_media.length > 0) {

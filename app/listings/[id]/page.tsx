@@ -23,6 +23,7 @@ import {
 } from "@/components/listing-public/SourceLinkButton";
 import { loadPublicListing } from "@/lib/repo/public-listing";
 import { ClusterOffersBlock } from "@/components/listing-public/ClusterOffersBlock";
+import { SophieDrawerTrigger } from "@/components/chat/SophieDrawer";
 import { getT } from "@/lib/i18n/server";
 import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
 import type { SupportedLang } from "@/lib/lang/preferred-language";
@@ -463,6 +464,28 @@ export default async function PublicListingPage({
           </div>
         </aside>
       </div>
+
+      <SophieDrawerTrigger
+        variant="fab"
+        context={{
+          page: "listing",
+          listing: {
+            id: listing.id,
+            title: listing.title,
+            type: listing.type,
+            property_type: listing.property_type,
+            price: listing.price,
+            currency: listing.currency,
+            location_city: listing.location_city,
+            location_district: listing.location_district,
+            rooms: listing.rooms,
+            size_sqm: listing.size_sqm,
+            bathrooms: listing.bathrooms,
+            market_position: listing.market_position,
+          },
+        }}
+        seed={t("sidekick.seed.listing")}
+      />
     </main>
   );
 }

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ChatLink } from "@/components/landing/PathCards";
 import { BrowseFavoriteButton } from "@/components/browse/BrowseFavoriteButton";
 import { BrowseFilterBar } from "@/components/browse/BrowseFilterBar";
+import { SophieDrawerTrigger } from "@/components/chat/SophieDrawer";
 import {
   applyFiltersToQuery,
   countActiveFilters,
@@ -218,6 +219,16 @@ export default async function BrowsePage({
             ))}
           </div>
         )}
+
+        <SophieDrawerTrigger
+          variant="fab"
+          context={{
+            page: "stoebern",
+            filters,
+            visible_listing_ids: rows.map((r) => r.id),
+          }}
+          seed={t(hasFilters ? "sidekick.seed.stoebern" : "sidekick.seed.stoebern.empty")}
+        />
 
         {rows.length > 0 && (hasPrev || hasNext) && (
           <nav

@@ -30,6 +30,7 @@ export function PathCards() {
         description={t("paths.seeker.text")}
         cta={t("paths.seeker.cta")}
         href={href("seeker")}
+        subLink={{ href: "/stoebern", label: t("paths.seeker.subLink") }}
       />
       <PathCard
         icon={<Megaphone className="size-6" />}
@@ -62,12 +63,14 @@ function PathCard({
   description,
   cta,
   href,
+  subLink,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
   cta: string;
   href: string;
+  subLink?: { href: string; label: string };
 }) {
   return (
     <Card className="group relative overflow-hidden h-full flex flex-col border-[var(--border)] hover:border-[var(--brand-gold-300)] hover:shadow-[0_14px_40px_-10px_rgb(120_90_50/15%)] transition-all">
@@ -80,10 +83,18 @@ function PathCard({
           {description}
         </CardDescription>
       </CardHeader>
-      <CardContent className="mt-auto">
+      <CardContent className="mt-auto space-y-2">
         <Button asChild className="w-full" variant="outline">
           <Link href={href}>{cta}</Link>
         </Button>
+        {subLink && (
+          <Link
+            href={subLink.href}
+            className="block text-center text-xs text-[var(--warm-bark)] hover:text-[var(--brand-navy)] underline-offset-2 hover:underline transition-colors"
+          >
+            {subLink.label}
+          </Link>
+        )}
       </CardContent>
     </Card>
   );

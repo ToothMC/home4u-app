@@ -11,6 +11,7 @@ import {
 } from "@/lib/embeddings";
 import { translate } from "@/lib/translation/translate";
 import type { Lang } from "@/lib/translation/glossary";
+import { CYPRUS_REGIONS } from "@/lib/geo/cyprus-regions";
 
 export type ToolResult = {
   ok: boolean;
@@ -458,6 +459,214 @@ const handlers: Record<string, Handler> = {
     };
   },
 
+  // === Sidekick-Tools ===
+  async apply_browse_filters(input) {
+    // Stateless: Tool gibt nur das geprüfte Patch zurück. Der Client merged
+    // mit dem aktuellen URL-State und navigiert.
+    const patch: Record<string, unknown> = {};
+    const passthrough: ReadonlyArray<keyof typeof input> = [
+      "type",
+      "region",
+      "propertyTypes",
+      "rooms",
+      "priceMin",
+      "priceMax",
+      "bathroomsMin",
+      "sizeMin",
+      "sizeMax",
+      "furnishing",
+      "features",
+      "energyMin",
+      "yearMin",
+      "petsAllowed",
+    ];
+    for (const key of passthrough) {
+      const v = (input as Record<string, unknown>)[key];
+      if (v !== undefined) patch[key as string] = v;
+    }
+    const reset = Boolean((input as Record<string, unknown>).reset);
+    return {
+      ok: true,
+      data: {
+        applied: patch,
+        reset,
+        message: `Filter ${reset ? "ersetzt" : "aktualisiert"}.`,
+      },
+    };
+  },
+
+  async explain_listing(input) {
+    const listingId = asString(input.listing_id);
+    if (!listingId) return { ok: false, error: "missing_listing_id" };
+    const supabase = createSupabaseServiceClient();
+    if (!supabase) return { ok: false, error: "supabase_not_configured" };
+
+    const { data: listing, error } = await supabase
+      .from("listings")
+      .select(
+        "id, type, property_type, location_city, location_district, price, currency, rooms, size_sqm, bathrooms, energy_class, year_built, market_position, features, furnishing",
+      )
+      .eq("id", listingId)
+      .maybeSingle();
+    if (error || !listing) {
+      return {
+        ok: false,
+        error: "listing_not_found",
+        data: { detail: error?.message },
+      };
+    }
+    const pricePerSqm =
+      listing.size_sqm && listing.size_sqm > 0
+        ? Math.round((listing.price / listing.size_sqm) * 10) / 10
+        : null;
+
+    // Region-Aggregat (gleiche Stadt + property_type + type)
+    const peers = await fetchMarketAggregate(supabase, {
+      location_city: listing.location_city,
+      property_type: listing.property_type as string | null,
+      type: listing.type as "rent" | "sale",
+    });
+
+    return {
+      ok: true,
+      data: {
+        listing: {
+          ...listing,
+          price_per_sqm: pricePerSqm,
+        },
+        market: peers,
+      },
+    };
+  },
+
+  async compare_listings(input) {
+    const ids = asStringArray(input.listing_ids) ?? [];
+    if (ids.length < 2 || ids.length > 4) {
+      return { ok: false, error: "needs_2_to_4_ids" };
+    }
+    const supabase = createSupabaseServiceClient();
+    if (!supabase) return { ok: false, error: "supabase_not_configured" };
+    const { data, error } = await supabase
+      .from("listings")
+      .select(
+        "id, type, property_type, location_city, location_district, price, currency, rooms, size_sqm, bathrooms, energy_class, market_position, features, furnishing, year_built",
+      )
+      .in("id", ids);
+    if (error) return { ok: false, error: error.message };
+    const rows = (data ?? []).map((l) => ({
+      ...l,
+      price_per_sqm:
+        l.size_sqm && l.size_sqm > 0
+          ? Math.round((l.price / l.size_sqm) * 10) / 10
+          : null,
+    }));
+    return {
+      ok: true,
+      data: {
+        count: rows.length,
+        listings: rows,
+      },
+    };
+  },
+
+  async market_insights(input) {
+    const type = asString(input.type) === "sale" ? "sale" : "rent";
+    const regionSlug = asString(input.region);
+    const propertyType = asString(input.property_type) ?? null;
+    const supabase = createSupabaseServiceClient();
+    if (!supabase) return { ok: false, error: "supabase_not_configured" };
+
+    // Region-Slug → cityPrefix für ilike. Wenn nicht gesetzt: aggregiert über alle Städte.
+    let cityPrefix: string | null = null;
+    if (regionSlug) {
+      const region = CYPRUS_REGIONS.find((r) => r.slug === regionSlug);
+      if (!region) return { ok: false, error: "unknown_region" };
+      cityPrefix = region.cityPrefix;
+    }
+
+    let q = supabase
+      .from("listings")
+      .select("price, size_sqm")
+      .eq("status", "active")
+      .eq("type", type)
+      .not("price", "is", null);
+    if (cityPrefix) q = q.ilike("location_city", `${cityPrefix}%`);
+    if (propertyType) q = q.eq("property_type", propertyType);
+
+    const { data, error } = await q.limit(5000);
+    if (error) return { ok: false, error: error.message };
+    const prices = (data ?? [])
+      .map((r) => r.price as number)
+      .filter((p): p is number => typeof p === "number" && p > 0)
+      .sort((a, b) => a - b);
+    const sqmPrices = (data ?? [])
+      .filter(
+        (r): r is { price: number; size_sqm: number } =>
+          typeof r.price === "number" &&
+          typeof r.size_sqm === "number" &&
+          r.size_sqm > 0,
+      )
+      .map((r) => r.price / r.size_sqm)
+      .sort((a, b) => a - b);
+
+    const pct = (arr: number[], p: number) => {
+      if (arr.length === 0) return null;
+      const idx = Math.max(
+        0,
+        Math.min(arr.length - 1, Math.floor((arr.length - 1) * p)),
+      );
+      return arr[idx];
+    };
+
+    return {
+      ok: true,
+      data: {
+        region: regionSlug ?? "all",
+        type,
+        property_type: propertyType,
+        count: prices.length,
+        price: {
+          p25: pct(prices, 0.25),
+          median: pct(prices, 0.5),
+          p75: pct(prices, 0.75),
+        },
+        price_per_sqm: {
+          median: pct(sqmPrices, 0.5)
+            ? Math.round((pct(sqmPrices, 0.5) as number) * 10) / 10
+            : null,
+        },
+      },
+    };
+  },
+
+  async save_search(input, ctx) {
+    if (!ctx.userId) {
+      return {
+        ok: false,
+        error: "not_authenticated",
+        data: {
+          message:
+            "Zum Speichern als Alert bitte oben rechts anmelden, dann lege ich dir den Alert an.",
+        },
+      };
+    }
+    // save_search verlässt sich auf den sidekick_context, der serverseitig
+    // bereits in den System-Prompt injiziert wurde — Sophie muss die Filter
+    // also in den natürlichen Sprach-Slots wieder rauslesen. Für ein erstes
+    // sauberes Roundtrip: wir verlangen, dass Sophie ein label übergibt; die
+    // eigentliche Persistenz übernimmt der bestehende create_search_profile-
+    // Workflow für den Detail-Mapping-Fall. Hier liefern wir nur die Bestätigung.
+    const label = asString(input.label) ?? null;
+    return {
+      ok: true,
+      data: {
+        saved: false,
+        note: "save_search ist Phase-2 — bitte aktuell create_search_profile mit den extrahierten Feldern nutzen, das speichert den Such-Filter dauerhaft und löst find_matches aus.",
+        label,
+      },
+    };
+  },
+
   async confirm_match_request(input, ctx) {
     const listingId = asString(input.listing_id);
     if (!listingId) {
@@ -595,6 +804,57 @@ async function refreshProfileEmbedding(ctx: ToolContext): Promise<void> {
     lifestyle_tags: data.lifestyle_tags,
     free_text: data.free_text,
   });
+}
+
+/**
+ * Holt rohe (price, size_sqm)-Paare für Peers (gleiche Stadt + property_type + type)
+ * und berechnet Median + €/m²-Median für den explain_listing-Use-Case.
+ */
+async function fetchMarketAggregate(
+  supabase: ReturnType<typeof createSupabaseServiceClient>,
+  args: {
+    location_city: string;
+    property_type: string | null;
+    type: "rent" | "sale";
+  },
+): Promise<{
+  count: number;
+  median_price: number | null;
+  median_price_per_sqm: number | null;
+}> {
+  if (!supabase)
+    return { count: 0, median_price: null, median_price_per_sqm: null };
+  let q = supabase
+    .from("listings")
+    .select("price, size_sqm")
+    .eq("status", "active")
+    .eq("type", args.type)
+    .eq("location_city", args.location_city);
+  if (args.property_type) q = q.eq("property_type", args.property_type);
+  const { data } = await q.limit(2000);
+  const prices = (data ?? [])
+    .map((r) => r.price as number)
+    .filter((p): p is number => typeof p === "number" && p > 0)
+    .sort((a, b) => a - b);
+  const sqm = (data ?? [])
+    .filter(
+      (r): r is { price: number; size_sqm: number } =>
+        typeof r.price === "number" &&
+        typeof r.size_sqm === "number" &&
+        r.size_sqm > 0,
+    )
+    .map((r) => r.price / r.size_sqm)
+    .sort((a, b) => a - b);
+  const median = (arr: number[]) =>
+    arr.length === 0 ? null : arr[Math.floor((arr.length - 1) / 2)];
+  return {
+    count: prices.length,
+    median_price: median(prices),
+    median_price_per_sqm: (() => {
+      const m = median(sqm);
+      return m ? Math.round(m * 10) / 10 : null;
+    })(),
+  };
 }
 
 function asNumber(v: unknown): number | undefined {

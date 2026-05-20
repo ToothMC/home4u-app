@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Send,
   Loader2,
@@ -19,6 +20,13 @@ import { AuthMenu } from "@/components/auth/AuthMenu";
 import { MediaUploader, type AttachedMedia } from "@/components/chat/MediaUploader";
 import type { Region } from "@/lib/regions";
 import { emitMatchesUpdated } from "@/lib/events/match-events";
+import type { SidekickContext } from "@/lib/sophie/sidekick-context";
+import {
+  EMPTY_FILTERS,
+  parseFiltersFromSearchParams,
+  serializeFilters,
+  type BrowseFilters,
+} from "@/lib/browse/filters";
 
 type ToolCall = {
   id: string;
@@ -46,19 +54,32 @@ const SEED_KEY: Record<string, TKey> = {
 export function ChatView({
   flow,
   region,
+  embedded = false,
+  context,
+  seedOverride,
 }: {
   flow?: string;
   region?: Region;
+  /** Wenn true: kein eigener Header, kein 100dvh — der Caller (z.B. Drawer)
+   *  liefert sein eigenes Layout. */
+  embedded?: boolean;
+  /** Sidekick-Kontext (Filter / aktuelles Listing) — wird an /api/chat geschickt. */
+  context?: SidekickContext;
+  /** Optionaler Seed-Text, der den flow/region-Default überschreibt (Drawer-Use-Case). */
+  seedOverride?: string;
 }) {
   const { t } = useT();
+  const router = useRouter();
   const seedKey = SEED_KEY[flow ?? "default"] ?? SEED_KEY.default;
   const baseSeed = t(seedKey);
   // Für seeker/default bekommt der Region-Seed Vorrang (macht Sophie konkreter).
   // Für owner/agent bleibt der Flow-Seed erhalten, Region wird nur im Header angezeigt.
   const useRegionSeed = region && (flow === "seeker" || !flow || flow === "default");
-  const seed = useRegionSeed
-    ? tFormat(t("chat.seed.regional"), { region: region!.label })
-    : baseSeed;
+  const seed = seedOverride
+    ? seedOverride
+    : useRegionSeed
+      ? tFormat(t("chat.seed.regional"), { region: region!.label })
+      : baseSeed;
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", content: seed },
   ]);
@@ -69,13 +90,17 @@ export function ChatView({
   const [attached, setAttached] = useState<AttachedMedia[]>([]);
   const endRef = useRef<HTMLDivElement | null>(null);
 
+  // Sidekick-Drawer startet IMMER frisch (Filter-Kontext-Konversation),
+  // History-Load wird übersprungen.
+  const skipHistory = Boolean(flow || context);
+
   // Letzte Conversation des Users/der Session beim Mount laden.
   // ABER: wenn flow explizit gesetzt ist (z.B. via "+ Inserat" / "+ Suche"-
   // Button), starten wir bewusst frisch mit dem flow-spezifischen Seed —
   // sonst landet man in der alten Konversation und Sophie reagiert nicht
   // auf die Intent.
   useEffect(() => {
-    if (flow) return; // explizite Flow-Wahl ignoriert History
+    if (skipHistory) return;
     let cancelled = false;
     (async () => {
       try {
@@ -141,6 +166,7 @@ export function ChatView({
             kind: m.kind,
             name: m.name,
           })),
+          sidekick_context: context ?? undefined,
         }),
       });
 
@@ -221,6 +247,36 @@ export function ChatView({
               if (tc.name === "confirm_match_request" && tc.result.ok) {
                 emitMatchesUpdated();
               }
+              // Sophie hat Filter via apply_browse_filters geändert — Patch
+              // mit aktuellem URL-State mergen und navigieren, damit /stoebern
+              // neu rendert und der Sidekick-Context im nächsten Turn frisch ist.
+              if (
+                tc.name === "apply_browse_filters" &&
+                tc.result.ok &&
+                evt.data &&
+                typeof evt.data === "object" &&
+                "applied" in evt.data
+              ) {
+                const result = evt.data as {
+                  applied: Partial<BrowseFilters>;
+                  reset?: boolean;
+                };
+                const currentSp = new URLSearchParams(window.location.search);
+                const currentRaw: Record<string, string> = {};
+                currentSp.forEach((v, k) => {
+                  currentRaw[k] = v;
+                });
+                const current = parseFiltersFromSearchParams(currentRaw);
+                const base: BrowseFilters = result.reset
+                  ? EMPTY_FILTERS
+                  : current;
+                const next: BrowseFilters = {
+                  ...base,
+                  ...result.applied,
+                };
+                const qs = serializeFilters(next).toString();
+                router.replace(qs ? `/stoebern?${qs}` : "/stoebern");
+              }
             }
             // Nächster Text-Delta startet neue Bubble (= neuer Turn nach Tool).
             pendingNewBubble = true;
@@ -257,39 +313,47 @@ export function ChatView({
   }
 
   return (
-    <div className="flex flex-col flex-1 h-[100dvh] max-h-[100dvh]">
-      <header className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--warm-cream)]/85 backdrop-blur px-4 py-3">
-        <Button asChild size="icon" variant="ghost" aria-label={t("chatView.backAria")}>
-          <Link href="/">
-            <ArrowLeft />
-          </Link>
-        </Button>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/sophie/apple-touch-icon.png"
-          alt="Sophie"
-          width={36}
-          height={36}
-          className="size-9 rounded-full object-cover ring-2 ring-[var(--brand-gold)]/40 shadow-[0_4px_12px_-4px_rgb(26_46_68/30%)]"
-        />
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold leading-tight text-[var(--brand-navy)]">Sophie</p>
-          <p className="text-xs text-[var(--warm-bark)] leading-tight">
-            Home<span className="text-[var(--brand-gold)] font-semibold">4</span>U · {t("chatView.brandSubtitle")}
-          </p>
-        </div>
-        {region && (
-          <Link
-            href="/#region"
-            className="flex items-center gap-1 text-xs text-[var(--muted-foreground)] rounded-full border px-3 py-1.5 hover:bg-[var(--accent)]"
-            aria-label={t("chatView.regionAria")}
-          >
-            <MapPin className="size-3" />
-            {region.city}
-          </Link>
-        )}
-        <AuthMenu compact />
-      </header>
+    <div
+      className={
+        embedded
+          ? "flex flex-col h-full min-h-0"
+          : "flex flex-col flex-1 h-[100dvh] max-h-[100dvh]"
+      }
+    >
+      {!embedded && (
+        <header className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--warm-cream)]/85 backdrop-blur px-4 py-3">
+          <Button asChild size="icon" variant="ghost" aria-label={t("chatView.backAria")}>
+            <Link href="/">
+              <ArrowLeft />
+            </Link>
+          </Button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/sophie/apple-touch-icon.png"
+            alt="Sophie"
+            width={36}
+            height={36}
+            className="size-9 rounded-full object-cover ring-2 ring-[var(--brand-gold)]/40 shadow-[0_4px_12px_-4px_rgb(26_46_68/30%)]"
+          />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold leading-tight text-[var(--brand-navy)]">Sophie</p>
+            <p className="text-xs text-[var(--warm-bark)] leading-tight">
+              Home<span className="text-[var(--brand-gold)] font-semibold">4</span>U · {t("chatView.brandSubtitle")}
+            </p>
+          </div>
+          {region && (
+            <Link
+              href="/#region"
+              className="flex items-center gap-1 text-xs text-[var(--muted-foreground)] rounded-full border px-3 py-1.5 hover:bg-[var(--accent)]"
+              aria-label={t("chatView.regionAria")}
+            >
+              <MapPin className="size-3" />
+              {region.city}
+            </Link>
+          )}
+          <AuthMenu compact />
+        </header>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl px-4 py-4 space-y-4">

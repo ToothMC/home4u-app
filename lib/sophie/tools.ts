@@ -230,4 +230,168 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
+  // === Sidekick-Tools (nutzbar wenn Sophie als Drawer auf /stoebern oder /listings/[id] läuft) ===
+  {
+    name: "apply_browse_filters",
+    description:
+      "SIDEKICK-TOOL für /stoebern: Setzt oder ändert die URL-Filter der Browse-Seite. Der Client führt direkt nach dem Tool-Result die Navigation aus — du musst danach NICHT find_matches oder create_search_profile aufrufen. Felder nur übergeben, die du ändern willst; alles andere bleibt. Filter ohne Wert lassen (null/leerer Array) löscht den Filter.",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: {
+          type: "string",
+          enum: ["rent", "sale"],
+          description: "Miete oder Kauf",
+        },
+        region: {
+          type: "string",
+          description:
+            "Region-Slug aus CYPRUS_REGIONS (z.B. 'nicosia', 'limassol', 'paphos', 'larnaca', 'famagusta', 'paphos-tala'). Bei Unklarheit weglassen.",
+        },
+        propertyTypes: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: [
+              "apartment",
+              "house",
+              "villa",
+              "penthouse",
+              "maisonette",
+              "townhouse",
+              "studio",
+              "bungalow",
+              "plot",
+              "commercial",
+              "room",
+            ],
+          },
+          description: "Liste der Property-Typen (mehrere = OR-Filter).",
+        },
+        rooms: {
+          type: "array",
+          items: { type: "integer", minimum: 1, maximum: 5 },
+          description:
+            "Zimmer-Optionen 1..5. Der Wert 5 bedeutet 5 oder mehr.",
+        },
+        priceMin: { type: "integer", description: "Mindestpreis" },
+        priceMax: { type: "integer", description: "Maximalpreis" },
+        bathroomsMin: { type: "integer", description: "Mindest-Bäder" },
+        sizeMin: { type: "integer", description: "Mindest-m²" },
+        sizeMax: { type: "integer", description: "Maximal-m²" },
+        furnishing: {
+          type: "string",
+          enum: ["furnished", "semi", "unfurnished"],
+        },
+        features: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: [
+              "pool",
+              "garden",
+              "parking",
+              "balcony",
+              "terrace",
+              "sea_view",
+              "air_conditioning",
+              "elevator",
+              "fireplace",
+              "solar",
+              "smart_home",
+              "storage",
+              "accessible",
+              "mountain_view",
+            ],
+          },
+          description: "Must-have-Features (AND-Match).",
+        },
+        energyMin: {
+          type: "string",
+          enum: ["A+", "A", "B", "C", "D", "E", "F", "G"],
+          description: "Mindest-Energieklasse",
+        },
+        yearMin: { type: "integer", description: "Mindest-Baujahr" },
+        petsAllowed: { type: "boolean" },
+        reset: {
+          type: "boolean",
+          description:
+            "Wenn true: alle vorhandenen Filter werden gelöscht und durch die hier übergebenen ersetzt. Default false (merge mit aktuellen Filtern).",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "explain_listing",
+    description:
+      "Holt strukturierte Markt-Daten zu einem einzelnen Listing: Preis-Pro-m², Region-Median, market_position-Klassifikation, Vergleich zu ähnlichen Inseraten. Nutze das, wenn der User fragt 'warum so teuer/günstig', 'lohnt sich das', 'wie ist das im Markt'. Antwort dann kurz formulieren — Sophie referiert die Zahlen, schwätzt nicht.",
+    input_schema: {
+      type: "object",
+      properties: {
+        listing_id: { type: "string", description: "Listing-UUID" },
+      },
+      required: ["listing_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "compare_listings",
+    description:
+      "Vergleicht 2 bis 4 Listings als Diff-Tabelle (Preis, m², €/m², Zimmer, Bäder, Energie, Lage, market_position). Nutze, wenn der User mehrere Inserate gegenüberstellen will.",
+    input_schema: {
+      type: "object",
+      properties: {
+        listing_ids: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 2,
+          maxItems: 4,
+        },
+      },
+      required: ["listing_ids"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "market_insights",
+    description:
+      "Liefert Aggregat-Statistiken für eine Region + Listing-Typ + optional Property-Typ: count, median price, p25/p75, median €/m². Nutze, wenn der User nach 'Marktwert', 'Durchschnittspreis', 'wie viel kostet so was' fragt.",
+    input_schema: {
+      type: "object",
+      properties: {
+        region: {
+          type: "string",
+          description:
+            "Region-Slug (z.B. 'limassol'). Wenn nicht gesetzt, nimmt Sophie das aktuelle URL-Filter aus dem sidekick_context.",
+        },
+        type: {
+          type: "string",
+          enum: ["rent", "sale"],
+        },
+        property_type: {
+          type: "string",
+          enum: ["apartment", "house", "room", "plot"],
+        },
+      },
+      required: ["type"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "save_search",
+    description:
+      "Speichert die aktuelle Filter-Auswahl als Such-Profil mit Alert. Nutze, wenn der User sagt 'merk dir das', 'speichern', 'Alert', 'Bescheid geben'. Wenn der User nicht eingeloggt ist, gibt das Tool not_authenticated zurück.",
+    input_schema: {
+      type: "object",
+      properties: {
+        label: {
+          type: "string",
+          description:
+            "Optionaler Kurz-Name für die Suche (z.B. '2-Zi Limassol unter 1.500'). Falls weggelassen, wird automatisch aus den Filtern generiert.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
 ];
