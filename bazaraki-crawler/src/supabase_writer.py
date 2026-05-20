@@ -456,15 +456,29 @@ def mark_stale_old_listings(stale_days: int = 7) -> int:
 
 
 def fetch_city_last_seen() -> dict[str, str | None]:
-    """Pro Stadt das MAX(last_seen) für source='bazaraki' AND status='active'.
+    """Pro Stadt das MAX(last_seen) für source='bazaraki'.
 
     Wird in main.py genutzt um den Plan nach Freshness zu sortieren —
-    Cities mit ältestem last_seen werden zuerst gecrawlt. Bei Watchdog-
-    Cap werden so die wichtigsten Lücken zuerst geschlossen.
+    Cities mit ältestem (oder fehlendem) last_seen werden ZUERST gecrawlt.
+    Bei Watchdog-Cap werden so die ältesten Lücken zuerst geschlossen.
 
     Returns: {"Famagusta": "2026-04-28T13:28:32+00", "Paphos": "...", ...}
-    Cities ohne Active-Listings → fehlen im Dict (= MAX(last_seen) NULL,
-    Caller behandelt das als „älteste, sofort crawlen").
+    Cities ohne Listings → fehlen im Dict (= „nie gecrawlt, sofort dran").
+
+    Implementation: Eine City pro PostgREST-Call mit
+    `location_city=ilike.<display>*&select=last_seen.max()`. Frühere
+    Implementation gruppierte global per location_city — dort enthält die
+    Spalte aber "Limassol – Mesa Geitonia", "Paphos – Pegeia" usw. (Hunderte
+    distinkte Sub-Strings); kein Lookup matchte den Display-Namen, alle
+    Cities bekamen NULL und der Sort wurde wirkungslos. Folge: Cities am
+    Ende der Default-Reihenfolge (Nicosia, Famagusta) wurden über Wochen
+    nie erreicht, weil Pass-1-Budget bei Limassol/Paphos aufgebraucht war.
+
+    Ebenfalls bewusst entfernt: `status=eq.active`. Für die Plan-Sortierung
+    interessiert uns, wann eine City zuletzt überhaupt gecrawlt wurde —
+    auch wenn ihre Listings inzwischen stale geworden sind. Sonst sehen
+    wir bei Cities mit nur staled-Listings „nie gecrawlt" und unterstellen
+    fälschlich Crawl-Bedarf, obwohl der eigentliche Defekt woanders liegt.
     """
     url_base = os.environ["SUPABASE_URL"].rstrip("/")
     service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -473,22 +487,28 @@ def fetch_city_last_seen() -> dict[str, str | None]:
         "Authorization": f"Bearer {service_key}",
         "Content-Type": "application/json",
     }
-    # PostgREST aggregat: source=eq.bazaraki + select=location_city,last_seen.max()
-    # mit „order=last_seen.max.asc" sortiert Server-side. Aggregat braucht 'columns' Header.
-    url = (
-        f"{url_base}/rest/v1/listings"
-        f"?source=eq.bazaraki&status=eq.active"
-        f"&select=location_city,last_seen.max()"
-    )
+    # Lokaler Import vermeidet Circular-Reference mit config.CITIES
+    from .config import CITIES
+
     out: dict[str, str | None] = {}
-    try:
-        resp = httpx.get(url, headers=headers, timeout=20)
-        resp.raise_for_status()
-        for row in resp.json() or []:
-            city = row.get("location_city")
-            ls = row.get("max")
-            if city:
-                out[str(city)] = ls
-    except Exception as e:
-        log.warning("fetch_city_last_seen failed: %s — fallback unsortiert", e)
+    for city in CITIES:
+        # location_city enthält Sub-Strings wie "Paphos – Pegeia" → ilike-Prefix
+        url = (
+            f"{url_base}/rest/v1/listings"
+            f"?source=eq.bazaraki"
+            f"&location_city=ilike.{city.display}*"
+            f"&select=last_seen.max()"
+        )
+        try:
+            resp = httpx.get(url, headers=headers, timeout=20)
+            resp.raise_for_status()
+            rows = resp.json() or []
+            ls = rows[0].get("max") if rows else None
+            out[city.display] = ls
+        except Exception as e:
+            log.warning(
+                "fetch_city_last_seen(%s) failed: %s — überspringe",
+                city.display,
+                e,
+            )
     return out
