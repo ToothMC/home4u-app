@@ -11,7 +11,11 @@ import {
 } from "@/lib/embeddings";
 import { translate } from "@/lib/translation/translate";
 import type { Lang } from "@/lib/translation/glossary";
-import { CYPRUS_REGIONS } from "@/lib/geo/cyprus-regions";
+import {
+  CYPRUS_REGIONS,
+  regionBySlug,
+  regionFromText,
+} from "@/lib/geo/cyprus-regions";
 
 export type ToolResult = {
   ok: boolean;
@@ -466,7 +470,6 @@ const handlers: Record<string, Handler> = {
     const patch: Record<string, unknown> = {};
     const passthrough: ReadonlyArray<keyof typeof input> = [
       "type",
-      "region",
       "rooms",
       "priceMin",
       "priceMax",
@@ -482,6 +485,21 @@ const handlers: Record<string, Handler> = {
     for (const key of passthrough) {
       const v = (input as Record<string, unknown>)[key];
       if (v !== undefined) patch[key as string] = v;
+    }
+    // region: Sophie übergibt manchmal Sub-Areas/Aliase (Pegeia, Tala,
+    // Germasogeia, Coral Bay). Listings sind nur auf City-Ebene gespeichert,
+    // also Alias → kanonischen Slug normalisieren. Ungültige Werte werden
+    // STILL VERWORFEN (kein Patch), damit der bestehende Region-Filter im
+    // URL-State erhalten bleibt — andernfalls fällt der Filter komplett raus
+    // und Limassol-Inserate tauchen in einer Paphos-Suche auf.
+    const rawRegion = (input as Record<string, unknown>).region;
+    if (typeof rawRegion === "string" && rawRegion.trim()) {
+      const slug =
+        regionBySlug(rawRegion)?.slug ??
+        regionFromText(rawRegion)?.slug ??
+        null;
+      if (slug) patch.region = slug;
+      // sonst: region NICHT ins Patch → aktueller Filter bleibt erhalten
     }
     // propertyTypes: im Zypern-Kontext sind villa/townhouse/bungalow
     // semantisch identisch zu "house" — wenn Sophie die übergibt, ziehen wir
