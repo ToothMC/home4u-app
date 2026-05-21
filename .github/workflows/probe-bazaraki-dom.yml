@@ -14,10 +14,9 @@ on:
 
 jobs:
   probe:
-    # ubuntu-latest reicht für Diagnose-Single-Request — Bazaraki blockt
-    # Datacenter-IPs nicht hart für simple Page-Loads (anders als BSC). Falls
-    # doch 403: auf [self-hosted, mac-mini] umschalten.
-    runs-on: ubuntu-latest
+    # Self-hosted mac-mini hat Cyta-CY residential IP — Bazaraki liefert die
+    # echte Detail-Page ohne CF-Challenge. Ubuntu-latest hat geblockt.
+    runs-on: [self-hosted, mac-mini]
     timeout-minutes: 10
     defaults:
       run:
@@ -25,18 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Install dependencies
+      - name: Setup venv + deps
         run: |
-          pip install --upgrade pip
-          pip install -e .
+          /opt/homebrew/bin/python3.11 -m venv .venv
+          .venv/bin/pip install --upgrade pip --quiet
+          .venv/bin/pip install -e . --quiet
 
       - name: Install Playwright Chromium
-        run: python -m playwright install --with-deps chromium
+        run: .venv/bin/python -m playwright install chromium
 
       - name: Run DOM probe
-        run: python -m src.probe_dom "${{ inputs.url }}"
+        run: .venv/bin/python -m src.probe_dom "${{ inputs.url }}"
