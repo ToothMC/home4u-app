@@ -209,8 +209,15 @@ LIST_EXTRACT_JS = r"""
       }
     }
     if (!img) {
-      const imgEl = card.querySelector('img[src*="bazaraki"], img[data-src*="bazaraki"]');
-      img = imgEl?.getAttribute('data-src') || imgEl?.src || null;
+      // Skip Makler-Header-Logo (`.advert__header-logo` Container, Bazaraki rendert
+      // dort bei VIP-Listings die Agency-Branding als <img>). Sonst landet das Logo
+      // bei Listings ohne eigenes Cover als image_url → media[0] → Frontend-Cover.
+      const allImgs = card.querySelectorAll('img[src*="bazaraki"], img[data-src*="bazaraki"]');
+      for (const el of allImgs) {
+        if (el.closest('.advert__header-logo')) continue;
+        const candidate = el.getAttribute('data-src') || el.src || null;
+        if (candidate) { img = candidate; break; }
+      }
     }
 
     return { url, advId, price, name, img };
@@ -284,43 +291,27 @@ DETAIL_EXTRACT_JS = r"""
 
   let candidates = [];
 
-  // Strategy 1: JSON-LD (offizielle Schema.org-Daten)
-  try {
-    const ldNodes = document.querySelectorAll('script[type="application/ld+json"]');
-    for (const node of ldNodes) {
-      let parsed;
-      try { parsed = JSON.parse(node.textContent || '{}'); } catch { continue; }
-      const imgs = parsed?.image;
-      if (Array.isArray(imgs)) candidates.push(...imgs);
-      else if (typeof imgs === 'string') candidates.push(imgs);
-    }
-  } catch {}
+  // Whitelist-Strategie (2026-05-21, nach Probe-Verifizierung):
+  // JSON-LD wurde entfernt — Bazaraki packt dort manchmal Makler-Logos in `image`.
+  // Stattdessen ausschließlich Container-scoped Selektoren der echten Galerie.
+  //
+  // Probe gegen 6489011 (16 Fotos) + 5373424 (7 Fotos) bestätigt:
+  // `img.announcement__images-item` ist robust und liefert exakt die Galerie.
+  // `img[itemprop="image"]` greift auch "Similar listings"-Cards (50+ Fremd-IDs)
+  //  → nicht verwenden.
 
-  // Strategy 2: <img>-Tags der Hauptgalerie (alter Bazaraki-Layout, vor 2026-05).
-  // Bewusst SPEZIFISCH — generische Selektoren wie `[data-src*=bazaraki/media]`
-  // würden auch Thumbnail-Strip-Bilder (300px) und Sidebar-Previews einfangen.
-  const gallerySelectors = [
-    'img.announcement__images-item',
-    'img.announcement-images-item',
-    '.announcement__images img',
-    '.announcement-images img',
-    '.announcement__slider img',
-    '.announcement-slider img',
-  ];
-  for (const sel of gallerySelectors) {
-    const found = Array.from(document.querySelectorAll(sel));
-    for (const img of found) candidates.push(...pickFromImg(img));
-  }
+  // Strategy 1: <img>-Tags der Galerie (canonical Bazaraki-Layout 2026-05).
+  const galleryImgs = document.querySelectorAll(
+    'img.announcement__images-item, img.announcement-images-item'
+  );
+  for (const img of galleryImgs) candidates.push(...pickFromImg(img));
 
-  // Strategy 3: <div style="background-image: url(...)"> — der aktuelle
-  // Bazaraki-Galerie-Layout (2026-05+). Wir EXKLUDIEREN bewusst Container
-  // mit Sidebar-Preview-Thumbnails von anderen Listings (advert-grid,
-  // similar-adverts, etc.) — die liegen als 300px webps unter der gleichen
-  // /media/cache1/ Pfadstruktur und würden den ≥720px-Test brechen.
-  const SIDEBAR_EXCLUDE = '.advert-grid, .similar-adverts, .similar-listings, .recommended-listings, .listing-card-grid';
-  const bgDivs = document.querySelectorAll('[style*="background-image"]');
+  // Strategy 2: <div style="background-image">-Galerien (DOM-Drift-Schutz für
+  // alte/zukünftige Layouts). NUR innerhalb der Galerie-Container — alles
+  // außerhalb (Author-Card, Banner, UI-Icons) wird verworfen.
+  const GALLERY_SCOPE = '.announcement__images, .announcement-images, .announcement__gallery, .announcement-gallery, .announcement__slider, .announcement-slider';
+  const bgDivs = document.querySelectorAll(`${GALLERY_SCOPE} [style*="background-image"]`);
   for (const el of bgDivs) {
-    if (el.closest(SIDEBAR_EXCLUDE)) continue;
     const m = (el.getAttribute('style') || '').match(/background-image:\s*url\((["']?)([^"')]+)\1\)/i);
     if (m && m[2]) candidates.push(m[2]);
   }
