@@ -128,14 +128,28 @@ def main() -> None:
         browser = pw.chromium.launch(headless=True)
         page = browser.new_page(user_agent=USER_AGENT)
         page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        page.wait_for_selector(
-            '[itemprop="address"], .announcement-characteristics, [class*="chars"]',
-            timeout=10_000,
-        )
-        try:
-            page.wait_for_selector('img[itemprop="image"], img.announcement__images-item', timeout=3_000)
-        except Exception:
-            pass
+
+        # Best-effort warten — bei CF-Challenge oder Layout-Drift trotzdem evaluieren
+        # statt hart fail'n. Wir wollen DIAGNOSE, nicht ein perfektes Listing.
+        for sel in [
+            '[itemprop="address"]',
+            '.announcement-characteristics',
+            'img[itemprop="image"]',
+            'img.announcement__images-item',
+        ]:
+            try:
+                page.wait_for_selector(sel, timeout=5_000)
+                print(f"# wait OK: {sel}", flush=True)
+                break
+            except Exception:
+                print(f"# wait timeout: {sel}", flush=True)
+
+        # Diagnose-Info: HTTP-Status, Title, Body-Snippet
+        title = page.title()
+        body_text = page.locator("body").inner_text(timeout=2_000)[:500] if page.locator("body").count() else "(no body)"
+        print(f"\n# title: {title}")
+        print(f"# body[0:500]: {body_text!r}\n", flush=True)
+
         result = page.evaluate(PROBE_JS)
         browser.close()
 
