@@ -14,7 +14,10 @@ on:
 
 jobs:
   probe:
-    runs-on: [self-hosted, mac-mini]
+    # ubuntu-latest reicht für Diagnose-Single-Request — Bazaraki blockt
+    # Datacenter-IPs nicht hart für simple Page-Loads (anders als BSC). Falls
+    # doch 403: auf [self-hosted, mac-mini] umschalten.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
       run:
@@ -22,14 +25,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup venv + deps
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
         run: |
-          /opt/homebrew/bin/python3.11 -m venv .venv
-          .venv/bin/pip install --upgrade pip --quiet
-          .venv/bin/pip install -e . --quiet
+          pip install --upgrade pip
+          pip install -e .
 
       - name: Install Playwright Chromium
-        run: .venv/bin/python -m playwright install chromium
+        run: python -m playwright install --with-deps chromium
 
       - name: Run DOM probe
-        run: .venv/bin/python -m src.probe_dom "${{ inputs.url }}"
+        run: python -m src.probe_dom "${{ inputs.url }}"
