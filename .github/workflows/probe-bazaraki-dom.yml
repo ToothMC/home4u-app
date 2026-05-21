@@ -1,0 +1,35 @@
+name: Probe Bazaraki DOM
+
+# Diagnose-Workflow: öffnet eine konkrete Bazaraki-Detail-URL via Playwright
+# und druckt für jeden Crawler-Selektor (JSON-LD, gallery img, bg-image, ...)
+# die gefundenen URLs. Damit lässt sich nachvollziehen, woher ein Logo in
+# media[0] kommt, ohne den Produktiv-Crawler zu modifizieren.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Bazaraki-Detail-URL (z.B. https://www.bazaraki.com/adv/6489011/)"
+        required: true
+
+jobs:
+  probe:
+    runs-on: [self-hosted, mac-mini]
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ./bazaraki-crawler
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup venv + deps
+        run: |
+          /opt/homebrew/bin/python3.11 -m venv .venv
+          .venv/bin/pip install --upgrade pip --quiet
+          .venv/bin/pip install -e . --quiet
+
+      - name: Install Playwright Chromium
+        run: .venv/bin/python -m playwright install chromium
+
+      - name: Run DOM probe
+        run: .venv/bin/python -m src.probe_dom "${{ inputs.url }}"

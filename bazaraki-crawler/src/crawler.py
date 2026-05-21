@@ -244,16 +244,17 @@ DETAIL_EXTRACT_JS = r"""
   const charsBlock = document.querySelector('.announcement-characteristics, [class*="chars"]');
   const charsRaw = charsBlock?.innerText?.trim() || null;
 
-  // Galerie-Hauptbilder. Bazaraki rendert die Galerie seit 2026-05 als
-  // `<div class="full-image" style="background-image: url(...)">` — KEINE
-  // <img>-Tags mehr. Frühere DOM-Versionen hatten `img.announcement__images-item`
-  // mit data-src. Wir kombinieren mehrere Strategien:
-  //   1) JSON-LD <script type="application/ld+json"> → Schema.org image[].
-  //      Offiziell, immun gegen CSS-Refactors. Erste Wahl.
-  //   2) Divs mit style="background-image: url(...)" — aktueller Bazaraki-DOM.
-  //      Filtert /media/icons/ raus (UI-Buttons wie Zoom/Share, pro Slide 4-5x).
-  //   3) <img>-Tag-Selektoren als Fallback für ältere Listings/Mixed-Layouts.
+  // Galerie-Hauptbilder. Whitelist-Strategie statt Blacklist (2026-05-21):
+  // Bazaraki rendert das Makler-Logo im Author-Section als nacktes `<img src=...>`
+  // ohne Klasse/itemprop — JSON-LD `image` und generische bg-image-Divs würden
+  // es als "Property-Foto" mit-extrahieren. Echte Galerie-Bilder dagegen tragen
+  // IMMER `itemprop="image"` (Schema.org) oder `class="announcement__images-item"`.
+  // Wir akzeptieren NUR explizit markierte Galerie-Bilder:
+  //   1) <img itemprop="image">  → Schema.org-Standard, stabilster Marker
+  //   2) <img class="announcement__images-item ...">  → Bazaraki-spezifisch
+  //   3) Background-Image-Divs INNERHALB eines Galerie-Wrappers (für DOM-Drift)
   //   4) Pro img: data-src > srcset (höchste Auflösung) > src.
+  // JSON-LD bewusst nicht verwendet — kann Author-Logo enthalten.
   function pickFromImg(img) {
     const out = [];
     const ds = img.getAttribute('data-src');
@@ -502,7 +503,13 @@ def _extract_list_page(page: Page, city: str, listing_type: str, subtype: str) -
                 city=city,
                 price=float(entry["price"]),
                 rooms=parse_rooms_from_slug(entry["url"]),
-                image_url=entry["img"] if entry["img"] and "bazaraki" in entry["img"] else None,
+                image_url=(
+                    entry["img"]
+                    if entry["img"]
+                    and "bazaraki" in entry["img"]
+                    and not _is_bazaraki_boilerplate(entry["img"])
+                    else None
+                ),
                 title=entry["name"],
                 detail_url=entry["url"],
                 property_type=property_type,
@@ -518,6 +525,17 @@ def _extract_list_page(page: Page, city: str, listing_type: str, subtype: str) -
 # der Extraktion via Range-Request den WebP-Header. Schwelle bewusst <720px
 # (Test-Schwelle) damit edge-cases (z.B. Portrait-Format) durchkommen.
 MIN_IMAGE_WIDTH = 500
+
+
+# Bazaraki setzt bei manchen Inseraten sein FB-Sharing-Logo
+# (`www.bazaraki.com/static/images/fb/bazaraki.*.png`) als og:image — wir wollen
+# echte Fotos statt Fremd-Werbung. Echte Galerie-URLs liegen unter
+# `cdn{1,2,...}.bazaraki.com/media/`. Alles unter dem `/static/`-Prefix der
+# Hauptdomain ist Boilerplate (Logo, Icons, FB-Cards) und gehört nicht in media[].
+def _is_bazaraki_boilerplate(url: str | None) -> bool:
+    if not url:
+        return False
+    return "bazaraki.com/static/" in url
 
 
 def _webp_width(blob: bytes) -> int | None:
@@ -633,18 +651,23 @@ def crawl_detail(browser: Browser, item: RawListing) -> None:
     # Detail-Drill war erfolgreich → höhere Confidence.
     item.confidence = 0.85
 
-    # Media: Cover zuerst, dann Rest dedupliziert
+    # Media: Cover zuerst, dann Rest dedupliziert.
+    # og:image kann das Bazaraki-FB-Sharing-Logo sein statt eines echten Fotos —
+    # in dem Fall lieber gar kein Cover als Fremd-Werbung anzeigen; dann übernimmt
+    # das erste Galerie-Bild die Cover-Rolle.
     cover = data.get("cover")
+    if _is_bazaraki_boilerplate(cover):
+        cover = None
     all_images = data.get("allImages") or []
     media: list[str] = []
     if cover:
         media.append(cover)
     for img in all_images:
-        if img and img not in media:
+        if img and img not in media and not _is_bazaraki_boilerplate(img):
             media.append(img)
     if media:
         item.media = _filter_thumbnails(media)[:24]
-    elif item.image_url:
+    elif item.image_url and not _is_bazaraki_boilerplate(item.image_url):
         item.media = [item.image_url]
 
     # Description (clamped via JS auf 4000)
