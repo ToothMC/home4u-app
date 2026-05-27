@@ -106,35 +106,55 @@ async function main() {
   console.log(
     `\nCity-aware Check (bazaraki, max ${CITY_MAX_HOURS}h pro City):`,
   );
+  // Zwei Stufen, damit der teure top-N Sort über 26k Limassol-Zeilen nicht
+  // ins Statement-Timeout läuft (Inzident 2026-05-27, 8s service_role-Limit):
+  //   1) schneller Probe-Query mit last_seen-Zeitfenster → Index-Lookup, <1ms
+  //   2) nur bei Miss der teure Sort, um das tatsächliche max(last_seen) für
+  //      die Fehlermeldung zu finden.
+  const cutoffIso = new Date(Date.now() - CITY_MAX_HOURS * 3600_000).toISOString();
   for (const city of CITIES) {
-    const { data, error: cityErr } = await supabase
+    const { data: fresh, error: probeErr } = await supabase
       .from("listings")
       .select("last_seen")
       .eq("source", "bazaraki")
-      .ilike("location_city", `${city}%`)
-      .order("last_seen", { ascending: false })
+      .eq("location_city", city)
+      .gt("last_seen", cutoffIso)
       .limit(1);
-    if (cityErr) {
-      failures.push(`bazaraki/${city}: Query-Fehler — ${cityErr.message}`);
+    if (probeErr) {
+      failures.push(`bazaraki/${city}: Query-Fehler — ${probeErr.message}`);
       continue;
     }
-    const lastSeen = data?.[0]?.last_seen ?? null;
+    if (fresh && fresh.length > 0) {
+      const lastSeen = fresh[0].last_seen as string;
+      const hoursSince = (Date.now() - new Date(lastSeen).getTime()) / 3600_000;
+      console.log(`  ✓ bazaraki/${city.padEnd(10)} last_seen=${lastSeen} (${hoursSince.toFixed(1)}h)`);
+      continue;
+    }
+    // Kein frisches Listing — jetzt teurer Sort für den genauen Wert.
+    const { data: stale, error: staleErr } = await supabase
+      .from("listings")
+      .select("last_seen")
+      .eq("source", "bazaraki")
+      .eq("location_city", city)
+      .order("last_seen", { ascending: false })
+      .limit(1);
+    if (staleErr) {
+      failures.push(`bazaraki/${city}: Query-Fehler — ${staleErr.message}`);
+      continue;
+    }
+    const lastSeen = stale?.[0]?.last_seen ?? null;
     if (!lastSeen) {
+      console.log(`  ✗ bazaraki/${city.padEnd(10)} kein Listing in der DB`);
       failures.push(
         `bazaraki/${city}: kein einziges Listing in der DB — Crawler-Pfad kaputt?`,
       );
       continue;
     }
     const hoursSince = (Date.now() - new Date(lastSeen).getTime()) / 3600_000;
-    const tag = `bazaraki/${city.padEnd(10)} last_seen=${lastSeen} (${hoursSince.toFixed(1)}h)`;
-    if (hoursSince > CITY_MAX_HOURS) {
-      console.log(`  ✗ ${tag}`);
-      failures.push(
-        `bazaraki/${city}: last_seen vor ${hoursSince.toFixed(1)}h (max ${CITY_MAX_HOURS}h) — diese City wird nicht mehr gecrawlt, obwohl andere Cities frisch sind.`,
-      );
-    } else {
-      console.log(`  ✓ ${tag}`);
-    }
+    console.log(`  ✗ bazaraki/${city.padEnd(10)} last_seen=${lastSeen} (${hoursSince.toFixed(1)}h)`);
+    failures.push(
+      `bazaraki/${city}: last_seen vor ${hoursSince.toFixed(1)}h (max ${CITY_MAX_HOURS}h) — diese City wird nicht mehr gecrawlt, obwohl andere Cities frisch sind.`,
+    );
   }
 
   if (failures.length > 0) {
