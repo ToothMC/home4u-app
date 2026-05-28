@@ -31,7 +31,9 @@ export default async function SearchDetailPage({
     .select(
       `id, location, type, budget_min, budget_max, rooms, move_in_date,
        household, lifestyle_tags, pets, free_text, active, notify_new_matches,
-       published_as_wanted, user_id, anonymous_id`
+       published_as_wanted, user_id, anonymous_id,
+       property_types, bathrooms_min, size_min, size_max, furnishing,
+       features_required, energy_min, year_min, include_shares`
     )
     .eq("id", id)
     .maybeSingle();
@@ -62,6 +64,15 @@ export default async function SearchDetailPage({
     active: data.active,
     notify_new_matches: data.notify_new_matches !== false,
     published_as_wanted: data.published_as_wanted === true,
+    property_types: (data.property_types ?? []) as EditableSearchProfile["property_types"],
+    bathrooms_min: data.bathrooms_min,
+    size_min: data.size_min,
+    size_max: data.size_max,
+    furnishing: data.furnishing as EditableSearchProfile["furnishing"],
+    features_required: (data.features_required ?? []) as EditableSearchProfile["features_required"],
+    energy_min: data.energy_min as EditableSearchProfile["energy_min"],
+    year_min: data.year_min,
+    include_shares: data.include_shares === true,
   };
 
   return (

@@ -1,14 +1,27 @@
 "use client";
 
 import * as React from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, Check, Globe, Loader2, Lock, X } from "lucide-react";
+import { Bell, BellOff, Check, Filter, Globe, Loader2, Lock, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DeleteRecordButton } from "@/components/dashboard/DeleteRecordButton";
 import { emitMatchesUpdated } from "@/lib/events/match-events";
+import {
+  ENERGY_OPTIONS,
+  FEATURE_OPTIONS,
+  FURNISHING_OPTIONS,
+  PROPERTY_TYPE_OPTIONS,
+  featureKey,
+  propertyTypeKey,
+  type EnergyOption,
+  type FeatureOption,
+  type FurnishingOption,
+  type PropertyTypeOption,
+} from "@/lib/browse/filters";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
 import type { TKey } from "@/lib/i18n/dict";
@@ -28,6 +41,16 @@ export type EditableSearchProfile = {
   active: boolean;
   notify_new_matches: boolean;
   published_as_wanted: boolean;
+  // stoebern-Parität
+  property_types: PropertyTypeOption[];
+  bathrooms_min: number | null;
+  size_min: number | null;
+  size_max: number | null;
+  furnishing: FurnishingOption | null;
+  features_required: FeatureOption[];
+  energy_min: EnergyOption | null;
+  year_min: number | null;
+  include_shares: boolean;
 };
 
 const HOUSEHOLD: Array<{ value: string; key: TKey }> = [
@@ -63,6 +86,7 @@ const INSTANT_SAVE_FIELDS = new Set<keyof EditableSearchProfile>([
 export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
   const router = useRouter();
   const { t } = useT();
+  const [moreOpen, setMoreOpen] = React.useState(false);
   const [form, setForm] = React.useState<Partial<EditableSearchProfile>>({});
   // Instant-saved toggles werden hier persistiert, damit das UI nach dem
   // Server-Roundtrip den neuen Stand anzeigt ohne auf router.refresh() warten
@@ -301,6 +325,35 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
         </Field>
       </div>
 
+      <Field label={t("filter.propertyType.label")}>
+        <div className="flex flex-wrap gap-2">
+          {PROPERTY_TYPE_OPTIONS.map((pt) => {
+            const current = (get("property_types") as PropertyTypeOption[] | null) ?? [];
+            const active = current.includes(pt);
+            return (
+              <button
+                key={pt}
+                type="button"
+                onClick={() => {
+                  const next = active
+                    ? current.filter((x) => x !== pt)
+                    : [...current, pt];
+                  set("property_types", next);
+                }}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs",
+                  active
+                    ? "bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]"
+                    : "bg-[var(--background)] hover:bg-[var(--accent)]"
+                )}
+              >
+                {t(propertyTypeKey(pt))}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+
       <div className="grid grid-cols-2 gap-3">
         <Field label={t("searchEditor.budgetMin")}>
           <Input
@@ -434,6 +487,33 @@ export function SearchEditor({ initial }: { initial: EditableSearchProfile }) {
         </div>
       </Field>
 
+      <div>
+        <button
+          type="button"
+          onClick={() => setMoreOpen(true)}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs",
+            "bg-[var(--background)] hover:bg-[var(--accent)]"
+          )}
+        >
+          <Filter className="size-3.5" />
+          {t("filter.more")}
+          {countAdvancedFromProfile(get) > 0 && (
+            <span className="ml-1 inline-flex items-center justify-center rounded-full bg-[var(--brand-gold)] px-1.5 min-w-5 text-[10px] font-semibold text-white">
+              {countAdvancedFromProfile(get)}
+            </span>
+          )}
+        </button>
+      </div>
+
+      <AdvancedFilterDialog
+        open={moreOpen}
+        onOpenChange={setMoreOpen}
+        get={get}
+        set={set}
+        t={t}
+      />
+
       <Field label={t("searchEditor.freeText")}>
         <Textarea
           value={(get("free_text") as string) ?? ""}
@@ -489,5 +569,237 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </span>
       <div className="mt-1">{children}</div>
     </label>
+  );
+}
+
+type Getter = <K extends keyof EditableSearchProfile>(key: K) => EditableSearchProfile[K];
+type Setter = <K extends keyof EditableSearchProfile>(key: K, value: EditableSearchProfile[K]) => void;
+
+function countAdvancedFromProfile(get: Getter): number {
+  let n = 0;
+  if (get("bathrooms_min") != null) n++;
+  if (get("size_min") != null || get("size_max") != null) n++;
+  if (get("furnishing") != null) n++;
+  if (((get("features_required") as FeatureOption[] | null) ?? []).length > 0) n++;
+  if (get("energy_min") != null) n++;
+  if (get("year_min") != null) n++;
+  if (get("include_shares") === true) n++;
+  return n;
+}
+
+function AdvancedFilterDialog({
+  open,
+  onOpenChange,
+  get,
+  set,
+  t,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  get: Getter;
+  set: Setter;
+  t: ReturnType<typeof useT>["t"];
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl bg-[var(--background)] p-6 shadow-lg focus:outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95">
+          <Dialog.Close
+            aria-label="close"
+            className="absolute right-3 top-3 p-1 hover:bg-[var(--accent)] rounded-md"
+          >
+            <X className="size-4" />
+          </Dialog.Close>
+          <Dialog.Title className="text-lg font-semibold mb-4">
+            {t("filter.advanced.title")}
+          </Dialog.Title>
+          <Dialog.Description className="sr-only">
+            {t("filter.advanced.title")}
+          </Dialog.Description>
+
+          <div className="space-y-5">
+            <Section label={t("filter.bathrooms.label")}>
+              <ChipMulti<number>
+                options={[1, 2, 3, 4]}
+                value={
+                  get("bathrooms_min") != null ? [get("bathrooms_min") as number] : []
+                }
+                onChange={(v) => set("bathrooms_min", v[v.length - 1] ?? null)}
+                renderLabel={(r) => `${r}+`}
+              />
+            </Section>
+
+            <Section label={t("filter.size.label")}>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder={t("filter.size.from")}
+                  value={(get("size_min") as number | null) ?? ""}
+                  onChange={(e) =>
+                    set("size_min", e.target.value ? Number(e.target.value) : null)
+                  }
+                  className="h-9 w-28"
+                />
+                <span className="text-[var(--muted-foreground)]">–</span>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder={t("filter.size.to")}
+                  value={(get("size_max") as number | null) ?? ""}
+                  onChange={(e) =>
+                    set("size_max", e.target.value ? Number(e.target.value) : null)
+                  }
+                  className="h-9 w-28"
+                />
+              </div>
+            </Section>
+
+            <Section label={t("filter.furnishing.label")}>
+              <div className="flex flex-wrap gap-1.5">
+                <FurnishingChip
+                  label={t("filter.furnishing.any")}
+                  active={get("furnishing") == null}
+                  onClick={() => set("furnishing", null)}
+                />
+                {FURNISHING_OPTIONS.map((f) => (
+                  <FurnishingChip
+                    key={f}
+                    label={t(`filter.furnishing.${f}` as TKey)}
+                    active={get("furnishing") === f}
+                    onClick={() => set("furnishing", f)}
+                  />
+                ))}
+              </div>
+            </Section>
+
+            <Section label={t("filter.features.label")}>
+              <ChipMulti<FeatureOption>
+                options={FEATURE_OPTIONS}
+                value={(get("features_required") as FeatureOption[] | null) ?? []}
+                onChange={(v) => set("features_required", v)}
+                renderLabel={(f) => t(featureKey(f))}
+              />
+            </Section>
+
+            <Section label={t("filter.energy.label")}>
+              <ChipMulti<EnergyOption>
+                options={ENERGY_OPTIONS}
+                value={get("energy_min") ? [get("energy_min") as EnergyOption] : []}
+                onChange={(v) => set("energy_min", v[v.length - 1] ?? null)}
+                renderLabel={(e) => e}
+              />
+            </Section>
+
+            <Section label={t("filter.year.label")}>
+              <Input
+                type="number"
+                min={1900}
+                max={new Date().getFullYear() + 5}
+                placeholder="2010"
+                value={(get("year_min") as number | null) ?? ""}
+                onChange={(e) =>
+                  set("year_min", e.target.value ? Number(e.target.value) : null)
+                }
+                className="h-9 w-28"
+              />
+            </Section>
+
+            <Section label={t("filter.shares.label")}>
+              <label className="inline-flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={get("include_shares") === true}
+                  onChange={(e) => set("include_shares", e.target.checked)}
+                  className="size-4 mt-0.5"
+                />
+                <span className="text-[var(--warm-bark)] leading-snug">
+                  {t("filter.shares.includeHint")}
+                </span>
+              </label>
+            </Section>
+          </div>
+
+          <div className="mt-6 flex items-center justify-end gap-3">
+            <Button type="button" onClick={() => onOpenChange(false)}>
+              {t("filter.apply")}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-[var(--brand-navy)] mb-2">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function ChipMulti<T extends string | number>({
+  options,
+  value,
+  onChange,
+  renderLabel,
+}: {
+  options: readonly T[];
+  value: T[];
+  onChange: (next: T[]) => void;
+  renderLabel: (opt: T) => string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => {
+        const active = value.includes(opt);
+        return (
+          <button
+            key={String(opt)}
+            type="button"
+            onClick={() => {
+              const next = active ? value.filter((v) => v !== opt) : [...value, opt];
+              onChange(next);
+            }}
+            className={cn(
+              "inline-flex h-8 items-center rounded-full border px-3 text-xs transition-colors",
+              active
+                ? "bg-[var(--brand-navy)] border-[var(--brand-navy)] text-white"
+                : "bg-white border-[var(--border)] text-[var(--brand-navy)] hover:border-[var(--brand-gold-300)]"
+            )}
+          >
+            {renderLabel(opt)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FurnishingChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-8 items-center rounded-full border px-3 text-xs",
+        active
+          ? "bg-[var(--brand-navy)] border-[var(--brand-navy)] text-white"
+          : "bg-white border-[var(--border)] text-[var(--brand-navy)] hover:border-[var(--brand-gold-300)]"
+      )}
+    >
+      {label}
+    </button>
   );
 }

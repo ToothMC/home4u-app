@@ -9,6 +9,39 @@ import { findMatchesForSession } from "@/lib/repo/listings";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const PROPERTY_TYPE_VALUES = [
+  "apartment",
+  "house",
+  "plot",
+  "commercial",
+  "room",
+  "studio",
+  "penthouse",
+  "maisonette",
+  "villa",
+  "townhouse",
+  "bungalow",
+  "land",
+  "building",
+] as const;
+
+const FEATURE_VALUES = [
+  "pool",
+  "garden",
+  "parking",
+  "balcony",
+  "terrace",
+  "sea_view",
+  "air_conditioning",
+  "elevator",
+  "fireplace",
+  "solar",
+  "smart_home",
+  "storage",
+  "accessible",
+  "mountain_view",
+] as const;
+
 const patchSchema = z
   .object({
     location: z.string().min(1).max(160).optional(),
@@ -24,6 +57,16 @@ const patchSchema = z
     active: z.boolean().optional(),
     notify_new_matches: z.boolean().optional(),
     published_as_wanted: z.boolean().optional(),
+    // stoebern-Parität
+    property_types: z.array(z.enum(PROPERTY_TYPE_VALUES)).max(13).nullable().optional(),
+    bathrooms_min: z.number().int().min(0).max(20).nullable().optional(),
+    size_min: z.number().int().min(0).max(10_000).nullable().optional(),
+    size_max: z.number().int().min(0).max(10_000).nullable().optional(),
+    furnishing: z.enum(["furnished", "semi", "unfurnished"]).nullable().optional(),
+    features_required: z.array(z.enum(FEATURE_VALUES)).max(20).nullable().optional(),
+    energy_min: z.enum(["A+", "A", "B", "C", "D", "E", "F", "G"]).nullable().optional(),
+    year_min: z.number().int().min(1800).max(2100).nullable().optional(),
+    include_shares: z.boolean().optional(),
   })
   .strict();
 
