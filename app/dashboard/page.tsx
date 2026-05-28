@@ -88,17 +88,20 @@ export default async function DashboardPage({
       }
     }
 
-    // Treffer pro Suchprofil (RPC pro Profil, für MVP ausreichend)
-    for (const p of profiles) {
-      const { data: matches } = await supabase.rpc(
-        "match_listings_for_profile",
-        {
-          p_user_id: user.id,
+    // Treffer pro Suchprofil — leichtgewichtige count-RPC parallel statt
+    // sequenziell den vollen Matcher (mit Scoring/Cluster-Stats) durchzunudeln.
+    // Vorher 3 × ~7s Loop = 20s+ Dashboard-Load.
+    const counts = await Promise.all(
+      profiles.map(async (p) => {
+        const { data } = await supabase.rpc("count_matches_for_profile", {
           p_profile_id: p.id,
-          p_limit: 100,
-        }
-      );
-      profileMatchCounts[p.id] = (matches ?? []).length;
+          p_cap: 200,
+        });
+        return [p.id, typeof data === "number" ? data : 0] as const;
+      })
+    );
+    for (const [pid, n] of counts) {
+      profileMatchCounts[pid] = n;
     }
   }
 
