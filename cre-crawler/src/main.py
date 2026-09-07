@@ -74,8 +74,13 @@ def main() -> int:
         log.info("Discovery fertig: %d unique listings", len(all_urls))
 
         if not all_urls:
-            log.warning("0 Listings discovered — Abbruch")
-            return 0
+            # War 2026-07-27 bis 2026-09-07 ein exit(0) — Site hatte die
+            # Sub-Sitemaps umbenannt, Discovery lief monatelang leer durch
+            # und CI blieb grün. Bei >0 vorher indexierten Listings ist ein
+            # 0-Ergebnis ein Fehler (Sitemap-Format geändert, Site down,
+            # Regex kaputt), kein normaler Zustand — CI muss das rot zeigen.
+            log.error("0 Listings discovered — Abbruch (Sitemap-Format geändert?)")
+            return 1
 
         if force_refetch:
             log.info("FORCE_REFETCH=1 — alle %d Listings werden gefetched", len(all_urls))

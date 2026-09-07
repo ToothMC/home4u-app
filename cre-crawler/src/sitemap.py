@@ -51,8 +51,11 @@ def _fetch(client: httpx.Client, url: str) -> str:
 def fetch_sitemap_urls(client: httpx.Client) -> list[str]:
     """Sitemap-Index lesen und alle sub-sitemaps zurückgeben."""
     xml = _fetch(client, SITEMAP_INDEX_URL)
+    # cyprus-real.estate hat die Sub-Sitemaps zwischen Jul und Sep 2026 von
+    # sitemap-N.xml auf sitemap-en-N.xml umbenannt (crawler lief bis dahin
+    # monatelang still leer). Beide Formen matchen, falls sie zurückwechseln.
     urls = re.findall(
-        r"<loc>(https://cyprus-real\.estate/sitemap-\d+\.xml)</loc>", xml
+        r"<loc>(https://cyprus-real\.estate/sitemap-(?:en-)?\d+\.xml)</loc>", xml
     )
     log.info("sitemap-index: %d sub-sitemaps", len(urls))
     return urls
