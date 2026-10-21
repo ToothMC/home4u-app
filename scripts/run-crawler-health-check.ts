@@ -30,8 +30,19 @@ type SourceConfig = {
 const SOURCES: SourceConfig[] = [
   { source: "bazaraki", minSeen24h: 5000, maxHoursSinceSeen: 30 },
   { source: "index_cy", minSeen24h: 5000, maxHoursSinceSeen: 30 },
+  // bsc fehlte hier, obwohl crawler_health_snapshot die Zahlen seit
+  // Migration 20260907120000 ausdrücklich mitliefert ("cover bsc/fb") —
+  // die Daten kamen an und wurden nur geloggt. Folge: bsc-daily lief vom
+  // 01.10. bis 21.10. gar nicht (mac-mini-Runner offline, und ein Job auf
+  // einem offline Runner wird nicht rot, er passiert einfach nicht), ohne
+  // dass irgendetwas Alarm geschlagen hat. Schwelle wie in
+  // run-mark-stale.ts, damit beide Gates dieselbe Erwartung haben.
+  { source: "bsc", minSeen24h: 1000, maxHoursSinceSeen: 30 },
   { source: "cyprus_real_estate", minSeen24h: 200, maxHoursSinceSeen: 30 },
   // cy_developer hat keinen automatischen Crawler — kein Health-Check.
+  // fb ebenso: fb-crawler läuft lokal per CDP-Attach, hat keinen Workflow
+  // und keinen Zeitplan. Ein Check darauf wäre dauerhaft rot und würde den
+  // Kanal verstopfen — genau das Problem, das wir gerade abstellen.
 ];
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;

@@ -76,8 +76,15 @@ def main() -> int:
         log.info("Discovery fertig: %d unique listings", len(all_urls))
 
         if not all_urls:
-            log.warning("0 Listings discovered — Abbruch")
-            return 0
+            # Gleiche Falle wie bei cre 2026-07-27 bis 2026-09-07: dort hatte
+            # die Site die Sub-Sitemaps umbenannt, Discovery lief monatelang
+            # leer durch und CI blieb grün. Hier besonders heikel, weil
+            # sitemap.py die Sub-Sitemaps per Substring "/sale-sitemap" bzw.
+            # "/rent-sitemap" filtert — ein Rename macht `relevant` leer.
+            # Bei >0 vorher indexierten Listings ist 0 ein Fehler, kein
+            # normaler Zustand: CI muss das rot zeigen.
+            log.error("0 Listings discovered — Abbruch (Sitemap-Format geändert?)")
+            return 1
 
         # Phase 2: inkrementell — schon indexierte ausfiltern
         if force_refetch:

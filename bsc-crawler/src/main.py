@@ -108,8 +108,13 @@ def main() -> int:
     all_urls = discover_all_listings(session)
     log.info("Discovery fertig: %d unique listings", len(all_urls))
     if not all_urls:
-        log.warning("0 Listings discovered — Abbruch")
-        return 0
+        # Gleiche Falle wie bei cre 2026-07-27 bis 2026-09-07 (Sitemaps
+        # umbenannt, CI blieb 6 Wochen grün). Hier kommt die Sitemap-Liste
+        # zwar hart kodiert aus sitemap.py, aber eine Cloudflare-Blockade
+        # oder ein Format-Wechsel sieht identisch aus: 0 URLs. Bei >0 vorher
+        # indexierten Listings ist das ein Fehler — CI muss das rot zeigen.
+        log.error("0 Listings discovered — Abbruch (Sitemaps weg oder geblockt?)")
+        return 1
 
     # Phase 2: inkrementell — schon indexierte ausfiltern
     already_seen_ids: list[str] = []

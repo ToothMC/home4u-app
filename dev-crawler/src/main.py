@@ -280,6 +280,21 @@ def main() -> int:
         time.time() - started,
         aborted_reason or "",
     )
+
+    # Ein einzelner Developer darf 0 URLs liefern (Stub-Modul, Seite im
+    # Umbau) — das ist oben bewusst nur log.info. Liefern aber ALLE
+    # zusammen nichts, ist das kein Normalzustand, sondern ein kaputter
+    # Lauf (Selektoren gewandert, Hoster blockt, Netz weg). Ohne diesen
+    # Guard endet so ein Lauf grün, genau wie bei cre 2026-07-27 bis
+    # 2026-09-07 sechs Wochen lang.
+    if grand["discovered"] == 0:
+        log.error(
+            "0 URLs über ALLE %d Developer discovered — Abbruch "
+            "(Selektoren geändert oder geblockt?)",
+            len(selected),
+        )
+        return 1
+
     return 0
 
 

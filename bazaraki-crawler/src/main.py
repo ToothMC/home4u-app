@@ -213,14 +213,40 @@ def main() -> int:
     # aufgenommen und alle folgenden Subtypes werden geskippt.
     city_start_times: dict[str, float] = {}
     capped_cities: set[str] = set()
+    # Subtypes, die 0 Items geliefert haben. Zählen NICHT als erledigt —
+    # sonst meldet ein komplett blinder Lauf "35/35 list" und ok=true.
+    empty_subtypes = 0
+    # Aufeinanderfolgende 0-Item-Subtypes. Bei einem DOM-Bruch sind die
+    # ersten paar bereits beweisend; dann lohnt es nicht, noch 30 weitere
+    # Subtypes stumm durchzulaufen (genau das erzeugte die 17-Minuten-
+    # Läufe, die seit 2026-06-03 grün meldeten und nichts fanden).
+    consecutive_empty = 0
+    MAX_CONSECUTIVE_EMPTY = 5
 
-    # FAST_MODE Pre-Step: pro (City, Type) bekannte external_ids holen +
-    # bulk-Touch last_seen. Damit kann crawl_city Smart-Stop machen, ohne
-    # dass mark_stale die übersprungenen Listings fälschlich killt. Wir
-    # touchen JETZT — selbst wenn der Job danach crasht, ist last_seen frisch.
+    # FAST_MODE Pre-Step: pro (City, Type) die bekannten external_ids holen.
+    # Die braucht crawl_city für Smart-Stop.
+    #
+    # Früher wurde hier GLEICHZEITIG last_seen für alle bekannten IDs
+    # getoucht, mit der Begründung "selbst wenn der Job danach crasht, ist
+    # last_seen frisch". Das hat die Reißleine des gesamten Systems
+    # durchgeschnitten: crawler_health_snapshot und der Health-Check lesen
+    # genau dieses Feld, und mark_stale_listings ebenso. Ein Crawler, der
+    # nichts mehr findet, frischte damit trotzdem ~19k Listings auf und
+    # meldete seen_24h=19k — strukturell grün, egal was Bazaraki lieferte.
+    # Genau so blieben 4,5 Monate Blindflug unbemerkt.
+    #
+    # Jetzt wird erst nach Pass 1 getoucht, und nur für (City, Type)-Paare,
+    # die tatsächlich Items geliefert haben. Die ursprüngliche Absicht
+    # bleibt erhalten (Smart-Stop-übersprungene Listings werden nicht
+    # fälschlich stale — Inzident 2026-05-06), aber ein toter Crawler
+    # frischt nichts mehr auf. Dasselbe Muster nutzen index, cre und dev
+    # bereits, dort kommentiert mit "sonst maskieren wir einen toten
+    # Crawler".
     known_ids_by_city_type: dict[tuple[str, str], set[str]] = {}
+    # (City, Type)-Paare, die in Pass 1 mindestens ein echtes Item hatten.
+    verified_city_types: set[tuple[str, str]] = set()
     if fast_mode:
-        log.info("=== FAST_MODE: Pre-Touch bekannter Listings ===")
+        log.info("=== FAST_MODE: bekannte Listings holen (Touch folgt nach Pass 1) ===")
         for city in cities_sorted:
             for ltype in types:
                 key = (city.display, ltype)
@@ -230,16 +256,6 @@ def main() -> int:
                     log.warning("fetch_known(%s, %s) failed: %s — skip touch", city.display, ltype, e)
                     ids = set()
                 known_ids_by_city_type[key] = ids
-                if not ids:
-                    continue
-                try:
-                    touched = touch_last_seen(list(ids))
-                    log.info(
-                        "  pre-touch %s/%s: %d known, %d touched",
-                        city.display, ltype, len(ids), touched,
-                    )
-                except Exception as e:
-                    log.warning("touch_last_seen(%s, %s) failed: %s", city.display, ltype, e)
 
     with with_browser() as p:
         browser = p.chromium.launch(headless=True)
@@ -306,14 +322,41 @@ def main() -> int:
                 grand_totals["items"] += len(items)
 
                 if not items:
-                    log.info("    %s: 0 items", tag)
-                    grand_totals["list_subtypes"] += 1
+                    # Früher wurde hier list_subtypes hochgezählt — ein
+                    # Subtype ohne ein einziges Ergebnis galt als erledigt.
+                    # Dadurch meldete ein blinder Lauf "35/35 list, ok=true".
+                    empty_subtypes += 1
+                    consecutive_empty += 1
+                    log.info("    %s: 0 items (%d in Folge)", tag, consecutive_empty)
+                    # Nur abbrechen, wenn der Lauf bis hierhin NICHTS
+                    # gefunden hat. Eine kleine City kann mehrere Subtypes
+                    # in Folge legitim leer haben (der Plan ist nach City
+                    # gruppiert, 7 Subtypes je City) — hat der Crawler
+                    # anderswo schon geliefert, ist Leere normale Varianz
+                    # und kein Blindflug.
+                    if (
+                        consecutive_empty >= MAX_CONSECUTIVE_EMPTY
+                        and grand_totals["items"] == 0
+                    ):
+                        aborted_reason = (
+                            f"PASS 1 abort: {consecutive_empty} Subtypes in Folge und "
+                            f"im ganzen Lauf kein einziges Item (zuletzt {tag}) — "
+                            f"Selektoren gewandert oder geblockt?"
+                        )
+                        log.error(aborted_reason)
+                        list_phase_complete = False
+                        break
                     if time.time() > effective_deadline:
                         aborted_reason = f"PASS 1 abort: Budget während List {tag}"
                         log.warning(aborted_reason)
                         list_phase_complete = False
                         break
                     continue
+
+                consecutive_empty = 0
+                # Dieses (City, Type)-Paar hat nachweislich geliefert —
+                # erst dadurch wird sein Pre-Touch nach Pass 1 freigegeben.
+                verified_city_types.add((city.display, listing_type))
 
                 collected[(city, listing_type, subtype)] = items
 
@@ -343,10 +386,39 @@ def main() -> int:
                 grand_totals["list_subtypes"] += 1
 
             log.info(
-                "PASS 1 Ende: %d/%d Subtypes durch, %d items in %.1fs",
-                grand_totals["list_subtypes"], len(plan),
+                "PASS 1 Ende: %d/%d Subtypes durch, %d items (%d leer) in %.1fs",
+                grand_totals["list_subtypes"], len(plan), empty_subtypes,
                 grand_totals["items"], time.time() - started,
             )
+
+            # Aufgeschobener Pre-Touch: jetzt wissen wir, welche (City, Type)
+            # tatsächlich Ergebnisse geliefert haben. Nur deren bekannte
+            # Listings bekommen last_seen aufgefrischt — damit bleibt
+            # last_seen ein Signal über den Crawler und nicht bloß über den
+            # Inhalt unserer eigenen Tabelle.
+            if fast_mode and not dry_run:
+                if not verified_city_types:
+                    log.error(
+                        "Touch übersprungen: kein einziges (City, Type) hat Items "
+                        "geliefert. last_seen bleibt alt — genau so soll der "
+                        "Health-Check das sehen."
+                    )
+                else:
+                    log.info(
+                        "=== Touch für %d/%d verifizierte (City, Type) ===",
+                        len(verified_city_types), len(known_ids_by_city_type),
+                    )
+                    for key, ids in known_ids_by_city_type.items():
+                        if not ids or key not in verified_city_types:
+                            continue
+                        try:
+                            touched = touch_last_seen(list(ids))
+                            log.info(
+                                "  touch %s/%s: %d known, %d touched",
+                                key[0], key[1], len(ids), touched,
+                            )
+                        except Exception as e:
+                            log.warning("touch_last_seen(%s, %s) failed: %s", key[0], key[1], e)
 
             # ────────────────────────────────────────────────────────────────
             # PASS 2: Drill+pHash über die in Pass 1 gesammelten Items.
@@ -416,6 +488,23 @@ def main() -> int:
                                      len(to_drill), len(items), RATE_LIMIT_SECONDS)
                             drill_started = time.time()
                             ok = 0
+                            # Zwischenspeichern während des Drills. Bis hier
+                            # lag ein kompletter Subtype ungesichert im
+                            # Prozessspeicher: bei Limassol/sale sind das
+                            # ~700 Items × 3s Rate-Limit = über 35 Minuten
+                            # Arbeit, die ein harter Kill (GH-Cancel, OOM)
+                            # restlos vernichtet. Der Watchdog-Pfad flusht
+                            # zwar, ein SIGKILL nicht.
+                            # Der Backfill-Modus weiter unten macht es seit
+                            # jeher richtig (BATCH_SIZE = 50, "kein 1 RPC pro
+                            # Listing, aber auch nicht alles am Ende").
+                            # Bewusst OHNE grand_totals-Buchung: der
+                            # Schluss-Flush unten upsertet ohnehin alle items
+                            # (dann inkl. pHash) und bleibt die maßgebliche
+                            # Abrechnung. Hier geht es nur um Haltbarkeit.
+                            DRILL_FLUSH_EVERY = 50
+                            drill_buffer: list[RawListing] = []
+                            mid_flushed = 0
                             for idx, it in enumerate(to_drill, start=1):
                                 if time.time() > deadline_at:
                                     drill_aborted = True
@@ -437,6 +526,19 @@ def main() -> int:
                                     ok += 1
                                 drilled_ids.add(it.external_id)
                                 drilled_in_subtype += 1
+                                drill_buffer.append(it)
+                                if len(drill_buffer) >= DRILL_FLUSH_EVERY and not dry_run:
+                                    try:
+                                        upsert_listings(drill_buffer)
+                                        mid_flushed += len(drill_buffer)
+                                        log.info(
+                                            "      drill-checkpoint: %d gesichert (%d in diesem Subtype)",
+                                            len(drill_buffer), mid_flushed,
+                                        )
+                                    except Exception as e:
+                                        log.warning("      drill-checkpoint failed: %s", e)
+                                    finally:
+                                        drill_buffer = []
                                 if idx % 25 == 0:
                                     log.info(
                                         "      drill-progress %d/%d (ok %d, %.1fs)",
@@ -505,7 +607,12 @@ def main() -> int:
                                 result.get("deduped", 0), len(result.get("failed", []) or []),
                             )
                         except Exception as e:
+                            # Anders als der List-Upsert weiter oben setzte
+                            # diese Stelle bisher KEIN Flag — ein verlorener
+                            # Drill-Batch lief also in einen mark_stale-Sweep
+                            # hinein, als wäre nichts gewesen.
                             log.exception("    Drill-Upsert für %s gecrasht: %s", tag, e)
+                            list_phase_complete = False
 
                     grand_totals["drill_subtypes"] += 1
 
@@ -553,16 +660,34 @@ def main() -> int:
             aborted_reason or "siehe Subtype-Errors oben",
         )
 
+    healthy = list_phase_complete and grand_totals["items"] > 0
     log.info(
         "RESULT: ok=%s items=%d inserted=%d updated=%d deduped=%d failed=%d "
-        "list=%d/%d drill=%d/%d aborted=%s",
-        "true" if list_phase_complete else "partial",
+        "list=%d/%d empty=%d drill=%d/%d aborted=%s",
+        "true" if healthy else "partial",
         grand_totals["items"], grand_totals["inserted"], grand_totals["updated"],
         grand_totals["deduped"], grand_totals["failed"],
-        grand_totals["list_subtypes"], len(plan),
+        grand_totals["list_subtypes"], len(plan), empty_subtypes,
         grand_totals["drill_subtypes"], len(collected),
         aborted_reason or "",
     )
+
+    # Der entscheidende Guard. Bis hierher lieferte diese Funktion
+    # bedingungslos 0 — 0 Items, 0 Inserts, alle Subtypes gecrasht, jeder
+    # Upsert gescheitert: alles meldete GitHub Actions "success". Genau so
+    # blieb der Crawler vom 2026-06-03 an 4,5 Monate lang unbemerkt blind,
+    # während 55.715 Inserate einfroren und ihre Bilder beim Anbieter
+    # gelöscht wurden.
+    if grand_totals["items"] == 0:
+        log.error(
+            "0 Items über alle %d Subtypes — Abbruch. Das ist kein "
+            "Normalzustand: entweder sind die Card-Selektoren gewandert "
+            "(crawler.py LIST_EXTRACT_JS filtert auf price != null) oder "
+            "wir werden geblockt.",
+            len(plan),
+        )
+        return 1
+
     return 0
 
 
