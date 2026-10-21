@@ -1,0 +1,88 @@
+name: Media Availability Check (Daily)
+
+# Prüft, ob die Cover-Bilder aktiver Listings noch erreichbar sind, und
+# setzt listings.media_ok. /stoebern blendet media_ok=false aus.
+#
+# Warum: Bazaraki löscht die Bilddatei aus dem GCS-Bucket, sobald das
+# Inserat offline geht (403 AccessDenied). Der Cloudflare-Cache liefert sie
+# danach noch tagelang — die Karte wird erst Tage später leer. Befund
+# 2026-10-21: 11/20 bazaraki-Cover tot, 4/10 index.cy (nginx-500 am Origin).
+#
+# Das ist bewusst ein VOM CRAWLER UNABHÄNGIGES Signal. mark_stale_listings
+# greift bei bazaraki strukturell nicht: der FAST_MODE-Pre-Touch in
+# bazaraki-crawler/src/main.py setzt last_seen für alle bekannten IDs aus
+# UNSERER Datenbank, bevor irgendetwas gecrawlt wurde. last_seen heißt dort
+# also "kennen wir", nicht "existiert noch" — der 14-Tage-Cutoff wird nie
+# erreicht. Ein 404-Bild ist dagegen ein harter externer Beleg.
+#
+# runs-on: mac-mini (NICHT ubuntu-latest). cdn1.bazaraki.com liegt hinter
+# Cloudflare, und CF sperrt Datacenter-IPs gern pauschal. Von einem
+# GitHub-Hosted-Runner sähen wir womöglich 403 für ALLES und würden den
+# halben Katalog ausblenden. Der mac-mini hat eine Cyta-Residential-IP.
+# Zusätzlich bricht das Skript ab, wenn ein Host ≥85 % tot meldet.
+#
+# Required GitHub Secrets:
+#   - SUPABASE_URL
+#   - SUPABASE_SERVICE_ROLE_KEY
+
+on:
+  schedule:
+    # 05:00 UTC — nach den Crawler-Läufen (21:00–04:25), vor mark-stale.
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Anzahl zu prüfender Listings (default 40000)"
+        required: false
+        default: "40000"
+      source:
+        description: "Nur eine Quelle (leer = alle)"
+        required: false
+        type: choice
+        options:
+          - ""
+          - bazaraki
+          - index_cy
+          - bsc
+          - cyprus_real_estate
+      recheck_days:
+        description: "Bereits geprüfte nach N Tagen erneut prüfen (0 = nur ungeprüfte)"
+        required: false
+        default: "0"
+      dry_run:
+        description: "Nur messen, nichts schreiben"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: media-check-daily
+  cancel-in-progress: false
+
+jobs:
+  media-check:
+    runs-on: [self-hosted, mac-mini]
+    # 40k Bilder bei Concurrency 6 und ~250ms/HEAD ≈ 28 min. 90 min Puffer
+    # für langsame Origins (index.cy antwortet teils erst nach Sekunden).
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Run media check
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LIMIT: ${{ inputs.limit || '40000' }}
+          SOURCE: ${{ inputs.source || '' }}
+          RECHECK_DAYS: ${{ inputs.recheck_days || '0' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          CONCURRENCY: "6"
+        run: npx tsx scripts/run-media-check.ts
