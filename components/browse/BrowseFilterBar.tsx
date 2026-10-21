@@ -38,17 +38,24 @@ export function BrowseFilterBar({ initial }: Props) {
   const { t } = useT();
   const [moreOpen, setMoreOpen] = React.useState(false);
 
-  // Single source of truth = URL/SSR initial. Patches gehen direkt in
-  // router.push, der Server-Re-Render bringt das nächste `initial` zurück.
-  // So bleibt Back/Forward konsistent und wir vermeiden setState-in-effect.
-  const filters = initial;
+  // Single source of truth bleibt die URL/SSR-`initial`. useOptimistic legt
+  // den geklickten Stand aber SOFORT drüber, solange die Navigation läuft —
+  // sonst bleibt der Pill eine halbe Sekunde auf dem alten Wert stehen und
+  // der Klick wirkt verschluckt. React verwirft den optimistischen Wert
+  // automatisch, sobald die Transition durch ist (kein setState-in-effect,
+  // Back/Forward bleibt konsistent).
+  const [filters, setOptimisticFilters] = React.useOptimistic(initial);
+  const [isPending, startTransition] = React.useTransition();
   const totalActive = countActiveFilters(filters);
   const advancedActive = countAdvancedFilters(filters);
 
   function applyFilters(next: BrowseFilters) {
     const params = serializeFilters(next);
     const qs = params.toString();
-    router.push(qs ? `/stoebern?${qs}` : "/stoebern", { scroll: false });
+    startTransition(() => {
+      setOptimisticFilters(next);
+      router.push(qs ? `/stoebern?${qs}` : "/stoebern", { scroll: false });
+    });
   }
 
   function patch(partial: Partial<BrowseFilters>) {
@@ -60,7 +67,19 @@ export function BrowseFilterBar({ initial }: Props) {
   }
 
   return (
-    <div className="sticky top-[61px] z-20 bg-[var(--warm-cream)]/95 backdrop-blur border-b border-[var(--border)]">
+    <div
+      className="sticky top-[61px] z-20 bg-[var(--warm-cream)]/95 backdrop-blur border-b border-[var(--border)]"
+      aria-busy={isPending}
+    >
+      {/* Ladebalken statt "nichts passiert": der Klick ist sofort quittiert,
+          auch wenn der Server-Re-Render noch unterwegs ist. */}
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left bg-[var(--brand-gold)] transition-opacity duration-150",
+          isPending ? "opacity-100 animate-pulse" : "opacity-0",
+        )}
+      />
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
         {/* 1. Type */}
         <PillToggle

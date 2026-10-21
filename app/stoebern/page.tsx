@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, MapPin, Bed, Bath, Maximize2 } from "lucide-react";
 import { AuthMenu } from "@/components/auth/AuthMenu";
@@ -14,6 +15,7 @@ import {
   countActiveFilters,
   parseFiltersFromSearchParams,
   serializeFilters,
+  type BrowseFilters,
 } from "@/lib/browse/filters";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/supabase/auth";
@@ -91,70 +93,10 @@ export default async function BrowsePage({
     1,
     Number.parseInt((Array.isArray(sp.p) ? sp.p[0] : sp.p) ?? "1", 10) || 1,
   );
-  const from = (pageNum - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
   const filters = parseFiltersFromSearchParams(sp);
-  const hasFilters = countActiveFilters(filters) > 0;
+  const filterQs = serializeFilters(filters).toString();
 
   const { t, lang } = await getT();
-  const supabase = createSupabaseServiceClient();
-  const user = await getAuthUser();
-
-  let rows: Row[] = [];
-  let total = 0;
-  let savedIds = new Set<string>();
-
-  if (supabase) {
-    // Sortiert nach created_at (echtes Insert-Datum) — NICHT updated_at, sonst
-    // recyceln Crawler-Touches alte Listings nach oben.
-    let query = supabase
-      .from("listings")
-      .select(
-        "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, market_position",
-        { count: "estimated" },
-      )
-      .eq("status", "active")
-      .not("media", "is", null);
-
-    query = applyFiltersToQuery(query, filters);
-
-    const { data, count } = await query
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    rows = ((data ?? []) as Row[]).filter(
-      (r) => Array.isArray(r.media) && r.media.length > 0,
-    );
-    total = count ?? 0;
-
-    // Initial-Favoriten-Status für eingeloggte User in einer Query holen,
-    // damit die Karten direkt korrekt gerendert werden (kein Flicker).
-    if (user && rows.length > 0) {
-      const ids = rows.map((r) => r.id);
-      const { data: bm } = await supabase
-        .from("listing_bookmarks")
-        .select("listing_id")
-        .eq("user_id", user.id)
-        .in("listing_id", ids);
-      savedIds = new Set((bm ?? []).map((b) => b.listing_id as string));
-    }
-  }
-
-  const isAuthenticated = Boolean(user);
-
-  const hasPrev = pageNum > 1;
-  const hasNext = total > pageNum * PAGE_SIZE || rows.length === PAGE_SIZE;
-  const filterQs = serializeFilters(filters).toString();
-  function pageHref(n: number): string {
-    const sp = new URLSearchParams(filterQs);
-    if (n > 1) sp.set("p", String(n));
-    const qs = sp.toString();
-    return qs ? `/stoebern?${qs}` : "/stoebern";
-  }
-  // URL für den Zurück-Button auf der Detail-Seite — encodiert auf den
-  // exakten Stand inkl. Filter + aktueller Seite, damit der User nach
-  // dem Zurück-Klick wieder genau dort landet, wo er die Karte gewählt hat.
-  const backUrlForCards = pageHref(pageNum);
 
   return (
     <main className="min-h-[100dvh] bg-[var(--warm-cream)]">
@@ -182,10 +124,121 @@ export default async function BrowsePage({
 
       <BrowseFilterBar initial={filters} />
 
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-6 sm:pt-8 pb-4">
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-6 sm:pt-8">
         <h1 className="font-display text-3xl sm:text-4xl text-[var(--brand-navy)]">
           {t("browse.heading")}
         </h1>
+      </section>
+
+      {/* Ergebnisse streamen hinter einer EIGENEN Suspense-Boundary. Ohne die
+          bleibt bei router.push aus der Filter-Leiste die komplette alte
+          Seite stehen, bis der Server fertig gerendert hat — der Klick fühlt
+          sich dann wie ein Hänger an. Der `key` erzwingt pro Filter-Stand
+          einen Remount, sonst hält React die alte Liste fest und zeigt den
+          Fallback nicht. */}
+      <Suspense key={`${filterQs}|${pageNum}`} fallback={<ResultsSkeleton />}>
+        <BrowseResults
+          filters={filters}
+          pageNum={pageNum}
+          filterQs={filterQs}
+          t={t}
+          lang={lang}
+        />
+      </Suspense>
+    </main>
+  );
+}
+
+async function BrowseResults({
+  filters,
+  pageNum,
+  filterQs,
+  t,
+  lang,
+}: {
+  filters: BrowseFilters;
+  pageNum: number;
+  filterQs: string;
+  t: T;
+  lang: SupportedLang;
+}) {
+  const from = (pageNum - 1) * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+  const hasFilters = countActiveFilters(filters) > 0;
+  const supabase = createSupabaseServiceClient();
+
+  // Auth-Lookup und Listings-Query laufen parallel — vorher seriell, das
+  // legte den Auth-Roundtrip voll auf die Query-Zeit obendrauf.
+  const [user, listings] = await Promise.all([
+    getAuthUser(),
+    loadListings(),
+  ]);
+
+  async function loadListings(): Promise<{ rows: Row[]; total: number }> {
+    if (!supabase) return { rows: [], total: 0 };
+    // Sortiert nach created_at (echtes Insert-Datum) — NICHT updated_at, sonst
+    // recyceln Crawler-Touches alte Listings nach oben.
+    // Index dafür: listings_browse_created_idx / listings_browse_type_created_idx
+    // (partiell auf status='active' AND is_share=false AND media IS NOT NULL).
+    // Ohne die sortiert Postgres 214k Zeilen per top-N-Heapsort: ~2,2s pro Klick.
+    let query = supabase
+      .from("listings")
+      .select(
+        "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, market_position",
+        { count: "estimated" },
+      )
+      .eq("status", "active")
+      .not("media", "is", null);
+
+    query = applyFiltersToQuery(query, filters);
+
+    const { data, count } = await query
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    return {
+      rows: ((data ?? []) as Row[]).filter(
+        (r) => Array.isArray(r.media) && r.media.length > 0,
+      ),
+      total: count ?? 0,
+    };
+  }
+
+  const { rows, total } = listings;
+
+  // Initial-Favoriten-Status für eingeloggte User in einer Query holen,
+  // damit die Karten direkt korrekt gerendert werden (kein Flicker).
+  let savedIds = new Set<string>();
+  if (supabase && user && rows.length > 0) {
+    const { data: bm } = await supabase
+      .from("listing_bookmarks")
+      .select("listing_id")
+      .eq("user_id", user.id)
+      .in(
+        "listing_id",
+        rows.map((r) => r.id),
+      );
+    savedIds = new Set((bm ?? []).map((b) => b.listing_id as string));
+  }
+
+  const isAuthenticated = Boolean(user);
+  const hasPrev = pageNum > 1;
+  const hasNext = total > pageNum * PAGE_SIZE || rows.length === PAGE_SIZE;
+
+  function pageHref(n: number): string {
+    const sp = new URLSearchParams(filterQs);
+    if (n > 1) sp.set("p", String(n));
+    const qs = sp.toString();
+    return qs ? `/stoebern?${qs}` : "/stoebern";
+  }
+  // URL für den Zurück-Button auf der Detail-Seite — encodiert auf den
+  // exakten Stand inkl. Filter + aktueller Seite, damit der User nach
+  // dem Zurück-Klick wieder genau dort landet, wo er die Karte gewählt hat.
+  const backUrlForCards = pageHref(pageNum);
+
+  return (
+    <>
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 pb-4">
         <p className="mt-2 text-sm text-[var(--warm-bark)]">
           {hasFilters
             ? tFormat(t("browse.resultsCount"), { n: total })
@@ -267,7 +320,43 @@ export default async function BrowsePage({
           </nav>
         )}
       </section>
-    </main>
+    </>
+  );
+}
+
+// Platzhalter in der exakten Geometrie der Karten — die Filter-Leiste bleibt
+// dadurch an ihrem Platz und die Seite springt nicht, wenn die Ergebnisse
+// nachstreamen.
+function ResultsSkeleton() {
+  return (
+    <>
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 pb-4" aria-hidden>
+        <div className="mt-2 h-5 w-48 rounded bg-[var(--muted)] animate-pulse" />
+      </section>
+      <section
+        className="mx-auto max-w-7xl px-4 sm:px-6 pb-12"
+        aria-busy="true"
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex flex-col rounded-2xl overflow-hidden bg-white border border-[var(--border)]"
+            >
+              <div className="aspect-[4/3] bg-[var(--muted)] animate-pulse" />
+              <div className="p-4 flex flex-col gap-2">
+                <div className="h-6 w-28 rounded bg-[var(--muted)] animate-pulse" />
+                <div className="h-4 w-40 rounded bg-[var(--muted)] animate-pulse" />
+                <div className="h-3 w-32 rounded bg-[var(--muted)] animate-pulse" />
+                <div className="mt-2 pt-2 border-t border-[var(--border)]">
+                  <div className="h-3 w-24 rounded bg-[var(--muted)] animate-pulse" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
