@@ -115,7 +115,10 @@ async function checkOne(u: string): Promise<Verdict> {
 }
 
 type HostStat = { ok: number; dead: number; unknown: number };
+/** Nur echte Hosts — Grundlage fuer die Blockade-Erkennung. */
 const hostStats = new Map<string, HostStat>();
+/** Inserate mit leerem media-Array. Kein Host, kein Request, keine Statistik. */
+let noCover = 0;
 
 function note(host: string, verdict: Verdict) {
   const s = hostStats.get(host) ?? { ok: 0, dead: 0, unknown: 0 };
@@ -144,10 +147,14 @@ async function runPool(rows: Row[]): Promise<{ ok: string[]; dead: string[]; unk
       const row = rows[i];
       const cover = row.media?.[0];
       if (!cover) {
-        // Kein Cover trotz media IS NOT NULL — leeres Array. Zeigt im
-        // Grid ohnehin nichts, also raus.
+        // Kein Cover trotz media IS NOT NULL — leeres Array. Zeigt im Grid
+        // ohnehin nichts, also raus. BEWUSST NICHT in hostStats: hier wird
+        // nie ein Request gestellt, der Eintrag waere zwangslaeufig 100%
+        // tot bei 0 Erfolgen und damit exakt das Muster, auf das die
+        // Reissleine anspringt. Genau daran ist der erste volle Lauf nach
+        // 16.500 Inseraten gestorben.
         dead.push(row.id);
-        note("(kein cover)", "dead");
+        noCover++;
         continue;
       }
       const verdict = await checkOne(cover);
@@ -188,6 +195,9 @@ function printHostStats() {
     const judged = s.ok + s.dead;
     const pct = judged > 0 ? ((s.dead / judged) * 100).toFixed(1) : "0.0";
     console.log(`    ${host.padEnd(28)} ok=${s.ok} tot=${s.dead} (${pct}%) unklar=${s.unknown}`);
+  }
+  if (noCover > 0) {
+    console.log(`    ${"(leeres media-Array)".padEnd(28)} tot=${noCover} — nie angefragt`);
   }
 }
 
