@@ -44,7 +44,7 @@ from dotenv import load_dotenv
 
 from .config import PROPERTY_SUBTYPES_BY_TYPE, RATE_LIMIT_SECONDS, env_int, env_str, selected_cities, selected_types
 from datetime import datetime, timezone
-from .crawler import RawListing, crawl_city, crawl_detail, fetch_disallowed_paths, with_browser
+from .crawler import RawListing, crawl_city, crawl_detail, fetch_disallowed_paths, http_client
 from .supabase_writer import (
     fetch_already_drilled_external_ids,
     fetch_already_phashed_external_ids,
@@ -257,8 +257,8 @@ def main() -> int:
                     ids = set()
                 known_ids_by_city_type[key] = ids
 
-    with with_browser() as p:
-        browser = p.chromium.launch(headless=True)
+    with http_client() as http:
+        log.info("HTTP-Session offen — kein Browser nötig (RSC-Payload, siehe flight.py)")
         try:
             # ────────────────────────────────────────────────────────────────
             # PASS 1: List-Phase für ALLE Subtypes. Schnell, billig.
@@ -306,7 +306,8 @@ def main() -> int:
                 )
                 try:
                     items = list(crawl_city(
-                        browser, city, listing_type, subtype, disallowed,
+                        city, listing_type, subtype, disallowed,
+                        client=http,
                         deadline_at=effective_deadline,
                         known_ids=(
                             known_ids_by_city_type.get((city.display, listing_type))
@@ -518,11 +519,15 @@ def main() -> int:
                                     )
                                     break
                                 try:
-                                    crawl_detail(browser, it)
+                                    crawl_detail(it, client=http)
                                 except Exception as e:
                                     log.warning("      drill-fail %s: %s", it.external_id, e)
                                     continue
-                                if it.district or it.size_sqm:
+                                # district/size_sqm kommen seit der RSC-Umstellung
+                                # schon aus Pass 1 — als Drill-Erfolgssignal
+                                # wären sie immer wahr. confidence setzt nur
+                                # crawl_detail(), und nur bei geparstem Payload.
+                                if it.confidence >= 0.85:
                                     ok += 1
                                 drilled_ids.add(it.external_id)
                                 drilled_in_subtype += 1
@@ -622,7 +627,7 @@ def main() -> int:
                     if drill_aborted:
                         break
         finally:
-            browser.close()
+            log.debug("HTTP-Session wird geschlossen")
 
     log.info(
         "Crawl-Ende: %d items in %.1fs (list %d/%d, drill %d/%d Subtypes)",
@@ -681,9 +686,12 @@ def main() -> int:
     if grand_totals["items"] == 0:
         log.error(
             "0 Items über alle %d Subtypes — Abbruch. Das ist kein "
-            "Normalzustand: entweder sind die Card-Selektoren gewandert "
-            "(crawler.py LIST_EXTRACT_JS filtert auf price != null) oder "
-            "wir werden geblockt.",
+            "Normalzustand: entweder hat Bazaraki das Format des "
+            "RSC-Flight-Payloads geändert (flight.py ankert auf "
+            "'\"adverts\":' bzw. '\"data\":{\"id\":N,'; crawl_city loggt dann "
+            "'count>0 bei 0 Items') oder wir werden geblockt — Cloudflare "
+            "liefert Datacenter-IPs keine echte Seite, der Job MUSS auf dem "
+            "mac-mini-Runner laufen.",
             len(plan),
         )
         return 1
@@ -709,7 +717,7 @@ def _run_backfill_drill_queue(log: logging.Logger) -> int:
                                   Watchdog MAX_RUNTIME_S greift zusätzlich.
       MAX_RUNTIME_S=              Wall-Clock-Cap (default 5400 = 90min).
     """
-    from .crawler import RawListing, crawl_detail, with_browser
+    from .crawler import RawListing, crawl_detail, http_client
 
     threshold = env_int("BACKFILL_THRESHOLD", 3)
     limit_raw = env_int("BACKFILL_LIMIT", 0)
@@ -751,8 +759,8 @@ def _run_backfill_drill_queue(log: logging.Logger) -> int:
     upserted = 0
     inserted = updated = deduped = 0
 
-    with with_browser() as p:
-        browser = p.chromium.launch(headless=True)
+    with http_client() as http:
+        log.info("HTTP-Session offen — kein Browser nötig (RSC-Payload, siehe flight.py)")
         try:
             # Batch-Upserts alle 50 Drills — kein "1 RPC pro Listing", aber auch
             # nicht "alles am Ende" (Verlust bei Crash).
@@ -767,7 +775,7 @@ def _run_backfill_drill_queue(log: logging.Logger) -> int:
                     )
                     break
                 try:
-                    crawl_detail(browser, it)
+                    crawl_detail(it, client=http)
                 except Exception as e:
                     failed += 1
                     log.warning("  drill-fail %s: %s", it.external_id, e)
@@ -811,7 +819,7 @@ def _run_backfill_drill_queue(log: logging.Logger) -> int:
                 except Exception as e:
                     log.warning("  tail-upsert fail: %s", e)
         finally:
-            browser.close()
+            log.debug("HTTP-Session wird geschlossen")
 
     elapsed = time.time() - started
     log.info(

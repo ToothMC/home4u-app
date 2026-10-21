@@ -23,6 +23,22 @@ log = logging.getLogger(__name__)
 
 CHUNK_SIZE = 50
 
+# `listings.size_sqm` ist smallint. Zypriotische Grundstücke sprengen das:
+# auf einer einzigen Paphos-Plots-Seite liegen 3 von 60 darüber (87.293 m²,
+# 63.393 m², 60.000 m²). Die RPC castet hart (`::smallint`) — ein einziger
+# Überlauf lässt den ganzen 50er-Chunk mit "smallint out of range" platzen.
+#
+# Dass das vorher nicht auffiel, lag an einem Parser-Fehler: der alte
+# DOM-Pfad las "87.293 m²" mit `re.search(r"(\d+)")` und bekam **87**.
+# Darum ist der DB-Höchstwert für bazaraki bis heute 10.000. Der neue Parser
+# liest korrekt — und stößt damit an die echte Spaltengrenze.
+#
+# Bis `size_sqm` auf integer migriert ist (oder Plot-Flächen in das bereits
+# vorhandene `plot_sqm integer` wandern), lassen wir die Spalte in dem Fall
+# leer und halten den echten Wert in extracted_data fest. Lieber kein Wert
+# als ein falscher — und niemals ein verlorener Chunk.
+SIZE_SQM_MAX = 32767
+
 
 def _build_dedup_hash(external_id: str) -> str:
     """Konsistent mit lib/import/dedup.ts — Bazaraki-IDs sind stabil."""
@@ -39,6 +55,12 @@ def _to_row(item: RawListing) -> dict:
     extracted = dict(item.extracted_data or {})
     if item.detail_url:
         extracted["source_url"] = item.detail_url
+    # Siehe SIZE_SQM_MAX: zu große Flächen gehen in extracted_data statt in
+    # die smallint-Spalte, damit der Chunk nicht platzt.
+    size_sqm = item.size_sqm
+    if size_sqm is not None and size_sqm > SIZE_SQM_MAX:
+        extracted["size_sqm_overflow"] = size_sqm
+        size_sqm = None
     row = {
         "external_id": item.external_id,
         "type": item.listing_type,
@@ -47,7 +69,7 @@ def _to_row(item: RawListing) -> dict:
         "price": item.price,
         "currency": "EUR",
         "rooms": item.rooms,
-        "size_sqm": item.size_sqm,
+        "size_sqm": size_sqm,
         # Spec §4.2: alle Bilder ≥720px (gefiltert via DETAIL_EXTRACT_JS,
         # verifiziert durch tests/test_detail_extract.py).
         "media": media,
