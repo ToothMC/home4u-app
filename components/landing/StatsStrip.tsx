@@ -28,34 +28,58 @@ async function fetchStats(t: T, lang: SupportedLang): Promise<Stat[] | null> {
   // canonical_id IS NULL bedeutet: dieses Listing ist selbst der Master
   // (kein parent). Self-Referenzen (canonical_id = id) gibt's nicht.
 
+  // count: "estimated" statt "exact". Ein exakter COUNT über die
+  // 215k-Zeilen-Tabelle braucht ~86s (gemessen 2026-10-21: Index Scan über
+  // listings_is_share_idx, 144k Zeilen wieder verworfen) und läuft damit
+  // sicher ins PostgREST-Statement-Timeout. Die Folge war kein Fehler,
+  // sondern `count: null` — und das `?? 0` darunter machte daraus vier
+  // Nullen auf der Startseite: "0 Verfügbare Immobilien" bei 160k
+  // sichtbaren Inseraten.
+  // "estimated" nimmt die Planner-Schätzung (im Messfall 70.159 vs. 70.978
+  // real, ~1 % daneben) und ist für eine Landing-Page-Kennzahl genau genug.
+  // /stoebern macht es seit jeher so.
   const [activeRes, newRes, scamRes, priceRes] = await Promise.all([
     supabase
       .from("listings")
-      .select("*", { count: "exact", head: true })
+      .select("*", { count: "estimated", head: true })
       .eq("status", "active")
       .is("canonical_id", null),
     supabase
       .from("listings")
-      .select("*", { count: "exact", head: true })
+      .select("*", { count: "estimated", head: true })
       .eq("status", "active")
       .gte("created_at", since24h)
       .is("canonical_id", null),
     supabase
       .from("listings")
-      .select("*", { count: "exact", head: true })
+      .select("*", { count: "estimated", head: true })
       .eq("status", "active")
       .not("scam_checked_at", "is", null)
       .is("canonical_id", null),
     supabase
       .from("listings")
-      .select("*", { count: "exact", head: true })
+      .select("*", { count: "estimated", head: true })
       .eq("status", "active")
       .not("market_position", "is", null)
       .neq("market_position", "unknown")
       .is("canonical_id", null),
   ]);
 
-  const active = activeRes.count ?? 0;
+  // Fehler sichtbar machen statt sie zu 0 zu verrechnen. Genau dieses
+  // stille `?? 0` hat den Ausfall als echte Zahl getarnt.
+  for (const [name, res] of [
+    ["active", activeRes], ["new24h", newRes],
+    ["scamChecked", scamRes], ["priceRated", priceRes],
+  ] as const) {
+    if (res.error) console.error(`StatsStrip: ${name} fehlgeschlagen:`, res.error.message);
+  }
+
+  // "0 Verfügbare Immobilien" ist für diese Seite nie ein wahrer Zustand —
+  // es heißt immer, die Abfrage ist gescheitert. Dann lieber den ganzen
+  // Streifen weglassen als eine tote Seite vortäuschen.
+  if (!activeRes.count) return null;
+
+  const active = activeRes.count;
   const new24h = newRes.count ?? 0;
   const scamChecked = scamRes.count ?? 0;
   const priceRated = priceRes.count ?? 0;

@@ -15,19 +15,49 @@ import httpx
 log = logging.getLogger(__name__)
 
 
-def compute_phash_from_url(url: str, timeout: float = 15.0) -> Optional[int]:
+def fetch_image(url: str, timeout: float = 15.0) -> tuple[bool, Optional[bytes]]:
+    """Holt ein Bild. Returned (erreichbar, bytes).
+
+    Die Unterscheidung ist der Punkt: `(False, None)` heisst "index.cy
+    liefert dieses Bild nicht" (404/403/Redirect auf HTML) — ein hartes
+    Urteil ueber die URL. `(True, None)` gaebe es nicht; ein Fehler beim
+    Verbindungsaufbau zaehlt bewusst NICHT als tot, sonst wirft eine
+    Netzwerkdelle reihenweise gute Cover weg.
+
+    Hintergrund (2026-10-21): index.cy publiziert in og:image, JSON-LD,
+    data-src UND Sitemap Bild-URLs, die es nicht gibt — beim 10818xxx-Batch
+    sind alle Groessenvarianten auf allen vier Hosts 404. Der Crawler hat
+    sie bis dahin wortgetreu uebernommen, und weil frische Listings
+    `media_ok IS NULL` haben (= ungeprueft, Filter laesst sie durch),
+    standen 17 bildlose Karten ganz oben auf der Startseite.
+    """
     if not url:
-        return None
+        return False, None
     try:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
             resp = client.get(url)
             if resp.status_code != 200:
-                return None
+                log.debug("cover tot (HTTP %d): %s", resp.status_code, url)
+                return False, None
+            # index.cy leitet fehlende Bilder auf eine HTML-404-Seite um, die
+            # mit 200 antwortet. Ohne Content-Type-Pruefung gilt die als Bild.
+            ctype = resp.headers.get("content-type", "")
+            if not ctype.startswith("image/"):
+                log.debug("cover tot (content-type %r): %s", ctype, url)
+                return False, None
             content = resp.content
             if len(content) > 5 * 1024 * 1024:
-                return None
+                return True, None
     except Exception as e:
-        log.debug("phash fetch failed %s: %s", url, e)
+        # Transienter Fehler — URL bekommt den Vorteil des Zweifels.
+        log.debug("cover fetch failed %s: %s", url, e)
+        return True, None
+    return True, content
+
+
+def compute_phash_from_url(url: str, timeout: float = 15.0) -> Optional[int]:
+    _alive, content = fetch_image(url, timeout=timeout)
+    if content is None:
         return None
     return _phash_bytes(content)
 
