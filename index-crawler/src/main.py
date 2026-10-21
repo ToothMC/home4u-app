@@ -32,7 +32,7 @@ import time
 import httpx
 from dotenv import load_dotenv
 
-from .dedup import compute_phash_from_url
+from .dedup import _phash_bytes, fetch_image
 from .detail import ParsedListing, fetch_and_parse
 from .sitemap import discover_all_listings
 from .writer import fetch_already_indexed, mark_stale_old_listings, touch_last_seen, upsert_listings
@@ -145,16 +145,49 @@ def main() -> int:
             nonlocal batch, total_inserted, total_updated, total_deduped, total_failed
             if not batch:
                 return
-            if not skip_phash:
-                phash_ok = 0
-                for it in batch:
-                    cover = it.media[0] if it.media else None
-                    if not cover:
-                        continue
-                    ph = compute_phash_from_url(cover)
+            # Cover verifizieren, BEVOR es in die DB geht. index.cy publiziert
+            # Bild-URLs, die es nicht gibt (siehe dedup.fetch_image) — wir haben
+            # sie bis 2026-10-21 wortgetreu uebernommen, und weil frische
+            # Listings `media_ok IS NULL` tragen und der Frontend-Filter
+            # ungeprueftes durchlaesst, standen bildlose Karten ganz oben.
+            #
+            # Der Download passiert fuer den pHash ohnehin; bisher wurde sein
+            # Scheitern nur verworfen. Geprueft wird NUR das Cover: alle Bilder
+            # zu testen waeren 20+ Requests pro Inserat, und sichtbar ist auf
+            # der Karte ohnehin nur media[0].
+            MAX_COVER_PROBES = 3
+            phash_ok = 0
+            dropped_covers = 0
+            emptied = 0
+            for it in batch:
+                if not it.media:
+                    continue
+                dead_prefix = 0
+                content: bytes | None = None
+                for candidate in it.media[:MAX_COVER_PROBES]:
+                    alive, content = fetch_image(candidate)
+                    if alive:
+                        break
+                    dead_prefix += 1
+                    content = None
+                if dead_prefix:
+                    dropped_covers += dead_prefix
+                    it.media = it.media[dead_prefix:]
+                    if not it.media:
+                        emptied += 1
+                # pHash aus den bereits geladenen Bytes — spart den zweiten
+                # Download, den compute_phash_from_url sonst macht.
+                if not skip_phash and content is not None:
+                    ph = _phash_bytes(content)
                     if ph is not None:
                         it.cover_phash = ph
                         phash_ok += 1
+            if dropped_covers:
+                log.warning(
+                    "  cover-check: %d tote Bild-URLs verworfen, %d Listings ohne Bild",
+                    dropped_covers, emptied,
+                )
+            if not skip_phash:
                 log.info("  phash: %d/%d in batch", phash_ok, len(batch))
             if dry_run:
                 log.info("  DRY_RUN — skip upsert (sample %s)",
