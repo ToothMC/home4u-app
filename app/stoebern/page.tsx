@@ -188,7 +188,12 @@ async function BrowseResults({
         { count: "estimated" },
       )
       .eq("status", "active")
-      .not("media", "is", null);
+      .not("media", "is", null)
+      // media_ok=false = Cover beim Anbieter gelöscht (Bazaraki räumt den
+      // GCS-Bucket auf, sobald das Inserat offline geht). Die Karte wäre
+      // eine graue Fläche und fast immer auch eine Karteileiche.
+      // NULL = noch nicht geprüft und bleibt sichtbar.
+      .not("media_ok", "is", false);
 
     query = applyFiltersToQuery(query, filters);
 

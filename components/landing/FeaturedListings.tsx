@@ -99,11 +99,15 @@ export async function FeaturedListings({
   const SELECT_COLS =
     "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, created_at, canonical_id, source, title";
 
+  // media_ok=false = Cover-Bild ist beim Anbieter gelöscht (siehe
+  // scripts/run-media-check.ts). Solche Karten wären auf der Startseite
+  // eine graue Fläche. NULL (noch ungeprüft) bleibt drin.
   let query = supabase
     .from("listings")
     .select(SELECT_COLS)
     .eq("status", "active")
     .not("media", "is", null)
+    .not("media_ok", "is", false)
     .order("created_at", { ascending: false })
     .limit(region ? 32 : 16);
 
@@ -128,6 +132,7 @@ export async function FeaturedListings({
       .select(SELECT_COLS)
       .eq("status", "active")
       .not("media", "is", null)
+      .not("media_ok", "is", false)
       .order("created_at", { ascending: false })
       .limit(16);
     listings = diversify(withMedia(fallback as FeaturedListing[] | null), 4);
