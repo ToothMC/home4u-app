@@ -32,9 +32,9 @@ on:
   workflow_dispatch:
     inputs:
       limit:
-        description: "Anzahl zu prüfender Listings (default 40000)"
+        description: "Anzahl zu prüfender Listings (default 250000 = alle)"
         required: false
-        default: "40000"
+        default: "250000"
       source:
         description: "Nur eine Quelle (leer = alle)"
         required: false
@@ -62,9 +62,11 @@ concurrency:
 jobs:
   media-check:
     runs-on: [self-hosted, mac-mini]
-    # 40k Bilder bei Concurrency 6 und ~250ms/HEAD ≈ 28 min. 90 min Puffer
-    # für langsame Origins (index.cy antwortet teils erst nach Sekunden).
-    timeout-minutes: 90
+    # Gemessen im ersten Trockenlauf: 250 Bilder in 11s bei Concurrency 6,
+    # also ~25/s. Der volle Bestand (214k) braucht damit ~143 min, bei
+    # Concurrency 8 noch ~108 min. 240 min Puffer, weil index.cy teils erst
+    # nach Sekunden antwortet und der Folgelauf nur noch Deltas prüft.
+    timeout-minutes: 240
 
     steps:
       - uses: actions/checkout@v5
@@ -80,9 +82,9 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          LIMIT: ${{ inputs.limit || '40000' }}
+          LIMIT: ${{ inputs.limit || '250000' }}
           SOURCE: ${{ inputs.source || '' }}
           RECHECK_DAYS: ${{ inputs.recheck_days || '0' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
-          CONCURRENCY: "6"
+          CONCURRENCY: "8"
         run: npx tsx scripts/run-media-check.ts

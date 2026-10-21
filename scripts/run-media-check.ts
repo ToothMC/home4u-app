@@ -44,8 +44,19 @@ const DRY_RUN = process.env.DRY_RUN === "1";
  * geblockt" wahrscheinlicher als "alle Bilder geloescht" — dann lieber hart
  * abbrechen und einen Menschen draufschauen lassen.
  */
-const ABORT_DEAD_PCT = parseInt(process.env.ABORT_DEAD_PCT ?? "85", 10);
+const ABORT_DEAD_PCT = parseInt(process.env.ABORT_DEAD_PCT ?? "95", 10);
 const ABORT_MIN_SAMPLE = parseInt(process.env.ABORT_MIN_SAMPLE ?? "50", 10);
+/**
+ * Entscheidendes Unterscheidungsmerkmal zwischen "geblockt" und "wirklich
+ * kaputt": eine Blockade laesst praktisch NICHTS durch. Solange ein
+ * nennenswerter Anteil 200 liefert, reden wir mit dem echten Origin und die
+ * Ausfaelle sind echt.
+ *
+ * Erster Trockenlauf 2026-10-21 lief mit 85% ohne diese Bedingung in einen
+ * Fehlalarm: index.cy kam auf 87,9% tot bei 58 Proben — aber mit 7 sauberen
+ * 200ern, und eine Messung von einer zweiten Leitung hatte 63% bestaetigt.
+ */
+const ABORT_MAX_OK_PCT = parseInt(process.env.ABORT_MAX_OK_PCT ?? "3", 10);
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -159,11 +170,13 @@ function assertPlausible() {
     const judged = s.ok + s.dead;
     if (judged < ABORT_MIN_SAMPLE) continue;
     const deadPct = (s.dead / judged) * 100;
-    if (deadPct >= ABORT_DEAD_PCT) {
+    const okPct = (s.ok / judged) * 100;
+    if (deadPct >= ABORT_DEAD_PCT && okPct <= ABORT_MAX_OK_PCT) {
       throw new Error(
-        `${host}: ${deadPct.toFixed(1)}% tot bei ${judged} Proben (Schwelle ${ABORT_DEAD_PCT}%). ` +
-          `Das sieht nach Blockade/Ausfall aus, nicht nach geloeschten Bildern — Abbruch, ` +
-          `nichts weiter geschrieben. Von Hand pruefen: curl -I <cover-url> vom selben Runner.`,
+        `${host}: ${deadPct.toFixed(1)}% tot bei ${judged} Proben, nur ${s.ok} erfolgreich ` +
+          `(Schwelle ${ABORT_DEAD_PCT}% tot UND <=${ABORT_MAX_OK_PCT}% ok). ` +
+          `So sieht eine Blockade aus, nicht geloeschte Bilder — Abbruch, nichts geschrieben. ` +
+          `Von Hand pruefen: curl -I <cover-url> vom selben Runner.`,
       );
     }
   }
