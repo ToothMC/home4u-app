@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { Sparkles, KeyRound, ShieldCheck, TrendingUp } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
@@ -15,12 +16,26 @@ const NUMBER_LOCALE: Record<SupportedLang, string> = {
 
 type Stat = { icon: LucideIcon; value: string; label: string };
 
-async function fetchStats(t: T, lang: SupportedLang): Promise<Stat[] | null> {
-  const supabase = createSupabaseServiceClient();
-  if (!supabase) return null;
-  const fmt = new Intl.NumberFormat(NUMBER_LOCALE[lang]);
+type Counts = {
+  active: number | null;
+  new24h: number;
+  scamChecked: number;
+  priceRated: number;
+};
 
-  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+// 5 Minuten. app/page.tsx liest searchParams und ist damit dynamisch — ein
+// `export const revalidate` auf der Seite greift hier also nicht, gecacht
+// werden muss die Abfrage selbst. Ohne das lief sie bei JEDEM Besucher.
+// `cacheComponents` (das `use cache`-Modell von Next 16) ist im Projekt
+// nicht aktiviert; unstable_cache ist der dokumentierte Weg ohne es.
+const STATS_TTL_SECONDS = 300;
+
+const getCounts = unstable_cache(
+  async (): Promise<Counts | null> => {
+    const supabase = createSupabaseServiceClient();
+    if (!supabase) return null;
+
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   // "Verfügbare Immobilien" = unique-Cluster (canonical-Master), nicht
   // alle aktiven Rows. Sonst werden Duplikate (gleiche Wohnung von Bazaraki
@@ -79,16 +94,30 @@ async function fetchStats(t: T, lang: SupportedLang): Promise<Stat[] | null> {
   // Streifen weglassen als eine tote Seite vortäuschen.
   if (!activeRes.count) return null;
 
-  const active = activeRes.count;
-  const new24h = newRes.count ?? 0;
-  const scamChecked = scamRes.count ?? 0;
-  const priceRated = priceRes.count ?? 0;
+    return {
+      active: activeRes.count,
+      new24h: newRes.count ?? 0,
+      scamChecked: scamRes.count ?? 0,
+      priceRated: priceRes.count ?? 0,
+    };
+  },
+  ["landing-stats"],
+  { revalidate: STATS_TTL_SECONDS, tags: ["landing-stats"] },
+);
+
+// Gecacht werden nur die Zahlen, nicht die Beschriftung: `t` ist eine
+// Funktion und damit weder als Cache-Key noch als Cache-Inhalt brauchbar,
+// und die Sprache darf den Cache nicht fünffach aufteilen.
+async function fetchStats(t: T, lang: SupportedLang): Promise<Stat[] | null> {
+  const counts = await getCounts();
+  if (!counts?.active) return null;
+  const fmt = new Intl.NumberFormat(NUMBER_LOCALE[lang]);
 
   return [
-    { icon: Sparkles, value: fmt.format(new24h), label: t("stats.dailyNew") },
-    { icon: KeyRound, value: fmt.format(active), label: t("stats.available") },
-    { icon: ShieldCheck, value: fmt.format(scamChecked), label: t("stats.verified") },
-    { icon: TrendingUp, value: fmt.format(priceRated), label: t("stats.priceRating") },
+    { icon: Sparkles, value: fmt.format(counts.new24h), label: t("stats.dailyNew") },
+    { icon: KeyRound, value: fmt.format(counts.active), label: t("stats.available") },
+    { icon: ShieldCheck, value: fmt.format(counts.scamChecked), label: t("stats.verified") },
+    { icon: TrendingUp, value: fmt.format(counts.priceRated), label: t("stats.priceRating") },
   ];
 }
 
