@@ -1,5 +1,18 @@
 name: Daily Bazaraki Crawl
 
+# runs-on: mac-mini (NICHT ubuntu-latest). Bazaraki liegt hinter Cloudflare,
+# und CF sperrt Datacenter-IPs: von einem GitHub-Hosted-Runner kam nicht die
+# echte Seite, sondern eine Challenge (dokumentiert in
+# probe-bazaraki-dom.yml, das deshalb von Anfang an self-hosted lief). Ein
+# Crawler ohne Payload findet 0 Items — und 0 Items ist seit Commit 8c4f2a0
+# exit 1. Grüner Build, roter Lauf. Der mac-mini hat eine Cyta-Residential-IP.
+# Dasselbe gilt für cdn1.bazaraki.com, das der pHash und der Cover-Breiten-
+# Check brauchen (siehe media-check-daily.yml).
+#
+# Kein Playwright mehr: Bazaraki rendert seit Juni 2026 client-seitig (Next.js
+# App Router), die Inserate stehen im RSC-Flight-Payload des HTML statt im
+# DOM. httpx genügt für Liste UND Detail — siehe bazaraki-crawler/src/flight.py.
+
 on:
   schedule:
     # 4× täglich alle 6h (00, 06, 12, 18 UTC). Pro Lauf max 90min Wall-Clock
@@ -64,12 +77,11 @@ concurrency:
 
 jobs:
   crawl:
-    runs-on: ubuntu-latest
-    # 350min = GH-Free-Cap. Script self-stoppt via MAX_RUNTIME_S (Default
-    # 5400s = 90min), das hier ist nur Safety-Net. Hoch setzen schadet nicht
-    # weil GH nach echter Laufzeit billed, nicht nach Timeout. Mit 350min
-    # können Backfill-Läufe (workflow_dispatch mit max_runtime_s=20000, ~5h)
-    # denselben Workflow nutzen ohne Sondertopf.
+    # Pinned auf mac-mini Label, nicht generisch "self-hosted" — wie bsc-daily.
+    runs-on: [self-hosted, mac-mini]
+    # Script self-stoppt via MAX_RUNTIME_S (Default 5400s = 90min), das hier
+    # ist nur Safety-Net. Mit 350min können Backfill-Läufe (workflow_dispatch
+    # mit max_runtime_s=20000, ~5h) denselben Workflow nutzen.
     timeout-minutes: 350
     defaults:
       run:
@@ -77,18 +89,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Install dependencies
+      - name: Setup venv + deps
+        # MacMini hat Python 3.11 via Homebrew. Eigene venv pro Run statt
+        # System-Site-Packages, sonst kollidieren parallele Branches.
         run: |
-          pip install --upgrade pip
-          pip install -e .
-
-      - name: Install Playwright Chromium
-        run: python -m playwright install --with-deps chromium
+          /opt/homebrew/bin/python3.11 -m venv .venv
+          .venv/bin/pip install --upgrade pip --quiet
+          .venv/bin/pip install -e . --quiet
 
       - name: Run crawler
         env:
@@ -105,4 +112,4 @@ jobs:
           BACKFILL_DRILL_QUEUE: ${{ inputs.backfill_drill_queue && '1' || '' }}
           BACKFILL_THRESHOLD: ${{ inputs.backfill_threshold || '3' }}
           BACKFILL_LIMIT: ${{ inputs.backfill_limit || '0' }}
-        run: python -m src.main
+        run: .venv/bin/python -m src.main

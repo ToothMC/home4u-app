@@ -1,15 +1,16 @@
 name: Probe Bazaraki DOM
 
-# Diagnose-Workflow: öffnet eine konkrete Bazaraki-Detail-URL via Playwright
-# und druckt für jeden Crawler-Selektor (JSON-LD, gallery img, bg-image, ...)
-# die gefundenen URLs. Damit lässt sich nachvollziehen, woher ein Logo in
-# media[0] kommt, ohne den Produktiv-Crawler zu modifizieren.
+# Diagnose-Workflow: holt eine Bazaraki-URL und druckt, was im RSC-Flight-
+# Payload steht — bei einer Listenseite die adverts, bei einer Detailseite die
+# Galerie-Varianten samt gemessener Bildbreite. Damit lässt sich nachvollziehen,
+# woher ein 160px-Thumbnail in media[0] kommt, ohne den Produktiv-Crawler
+# anzufassen. Braucht keinen Browser mehr (siehe bazaraki-crawler/src/flight.py).
 
 on:
   workflow_dispatch:
     inputs:
       url:
-        description: "Bazaraki-Detail-URL (z.B. https://www.bazaraki.com/adv/6489011/)"
+        description: "Bazaraki-URL — Detail (/adv/…) oder Listenseite"
         required: true
 
 jobs:
@@ -30,8 +31,5 @@ jobs:
           .venv/bin/pip install --upgrade pip --quiet
           .venv/bin/pip install -e . --quiet
 
-      - name: Install Playwright Chromium
-        run: .venv/bin/python -m playwright install chromium
-
-      - name: Run DOM probe
+      - name: Run RSC payload probe
         run: .venv/bin/python -m src.probe_dom "${{ inputs.url }}"
