@@ -325,9 +325,14 @@ export function applyFiltersToQuery<Q>(query: Q, f: BrowseFilters): Q {
 
   if (f.type) q = q.eq("type", f.type);
 
-  if (f.region) {
-    const region = CYPRUS_REGIONS.find((r) => r.slug === f.region);
-    if (region) q = q.ilike("location_city", `${region.cityPrefix}%`);
+  // `region` ist ein Computed Field in der DB (public.region(listings) →
+  // listing_region_of(location_city), gleiche Logik wie das frühere
+  // ILIKE 'Paphos%'). Gleichheit auf diesem Ausdruck nutzt den Index
+  // listings_browse_region_type_created_idx. Mit ILIKE musste Postgres die
+  // neuesten Inserate einzeln durchgehen und Tausende verwerfen — das lief
+  // regelmäßig ins 8-s-Statement-Timeout und zeigte dann "0 Treffer".
+  if (f.region && CYPRUS_REGIONS.some((r) => r.slug === f.region)) {
+    q = q.eq("region", f.region);
   }
 
   // Sub-Area: ILIKE-OR über alle Aliase auf location_district UND
