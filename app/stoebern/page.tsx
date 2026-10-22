@@ -174,18 +174,37 @@ async function BrowseResults({
     loadListings(),
   ]);
 
-  async function loadListings(): Promise<{ rows: Row[]; total: number }> {
-    if (!supabase) return { rows: [], total: 0 };
+  async function loadListings(): Promise<ListingsResult> {
+    if (!supabase) return { ok: false };
+    // Ein Timeout ist bei kaltem Cache oft beim zweiten Versuch weg (die
+    // Seiten liegen dann im RAM). Darum einmal still wiederholen, bevor wir
+    // dem User einen Fehler zeigen.
+    const first = await queryListings();
+    if (first.ok) return first;
+    const second = await queryListings();
+    if (!second.ok) {
+      console.error("stoebern: Listings-Abfrage zweimal fehlgeschlagen:", second.error);
+    }
+    return second;
+  }
+
+  async function queryListings(): Promise<ListingsResult & { error?: string }> {
+    if (!supabase) return { ok: false };
     // Sortiert nach created_at (echtes Insert-Datum) — NICHT updated_at, sonst
     // recyceln Crawler-Touches alte Listings nach oben.
-    // Index dafür: listings_browse_created_idx / listings_browse_type_created_idx
-    // (partiell auf status='active' AND is_share=false AND media IS NOT NULL).
-    // Ohne die sortiert Postgres 214k Zeilen per top-N-Heapsort: ~2,2s pro Klick.
+    // Indizes: listings_browse_type_created_ok_idx, bei Regionsfilter
+    // listings_browse_region_type_created_idx.
+    //
+    // count: "planned" = reine Planner-Schätzung, KEIN Durchzählen.
+    // "estimated" zählt in PostgREST erst bis db-max-rows exakt (ein zweiter
+    // Scan über bis zu 1000 passende Zeilen pro Klick) und hat die Abfrage
+    // damit regelmäßig über das 8-s-Timeout geschoben.
+    // Ob es eine nächste Seite gibt, entscheidet eine Zeile mehr (PAGE_SIZE+1).
     let query = supabase
       .from("listings")
       .select(
         "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, market_position",
-        { count: "estimated" },
+        { count: "planned" },
       )
       .eq("status", "active")
       .not("media", "is", null)
@@ -197,19 +216,38 @@ async function BrowseResults({
 
     query = applyFiltersToQuery(query, filters);
 
-    const { data, count } = await query
+    const { data, count, error } = await query
       .order("created_at", { ascending: false })
-      .range(from, to);
+      .range(from, to + 1);
+
+    // Fehler NICHT als leere Liste ausgeben — genau das war "0 Treffer"
+    // bei Timeouts.
+    if (error) return { ok: false, error: error.message };
+
+    const all = (data ?? []) as Row[];
+    const hasNext = all.length > PAGE_SIZE;
+    const pageRows = all.slice(0, PAGE_SIZE);
+    // Letzte Seite → exakte Zahl ist bekannt. Sonst Planner-Schätzung,
+    // mindestens aber so viele, wie wir sicher gesehen haben.
+    const seen = from + all.length;
+    const total = hasNext ? Math.max(count ?? 0, seen) : seen;
 
     return {
-      rows: ((data ?? []) as Row[]).filter(
+      ok: true,
+      rows: pageRows.filter(
         (r) => Array.isArray(r.media) && r.media.length > 0,
       ),
-      total: count ?? 0,
+      total,
+      totalIsExact: !hasNext,
+      hasNext,
     };
   }
 
-  const { rows, total } = listings;
+  if (!listings.ok) {
+    return <LoadError t={t} href={currentHref(filterQs, pageNum)} />;
+  }
+
+  const { rows, total, totalIsExact, hasNext } = listings;
 
   // Initial-Favoriten-Status für eingeloggte User in einer Query holen,
   // damit die Karten direkt korrekt gerendert werden (kein Flicker).
@@ -228,14 +266,7 @@ async function BrowseResults({
 
   const isAuthenticated = Boolean(user);
   const hasPrev = pageNum > 1;
-  const hasNext = total > pageNum * PAGE_SIZE || rows.length === PAGE_SIZE;
-
-  function pageHref(n: number): string {
-    const sp = new URLSearchParams(filterQs);
-    if (n > 1) sp.set("p", String(n));
-    const qs = sp.toString();
-    return qs ? `/stoebern?${qs}` : "/stoebern";
-  }
+  const pageHref = (n: number) => currentHref(filterQs, n);
   // URL für den Zurück-Button auf der Detail-Seite — encodiert auf den
   // exakten Stand inkl. Filter + aktueller Seite, damit der User nach
   // dem Zurück-Klick wieder genau dort landet, wo er die Karte gewählt hat.
@@ -246,7 +277,10 @@ async function BrowseResults({
       <section className="mx-auto max-w-7xl px-4 sm:px-6 pb-4">
         <p className="mt-2 text-sm text-[var(--warm-bark)]">
           {hasFilters
-            ? tFormat(t("browse.resultsCount"), { n: total })
+            ? tFormat(
+                t(totalIsExact ? "browse.resultsCount" : "browse.resultsCountApprox"),
+                { n: new Intl.NumberFormat(NUMBER_LOCALE[lang]).format(total) },
+              )
             : t("browse.subtitle")}
         </p>
       </section>
@@ -326,6 +360,38 @@ async function BrowseResults({
         )}
       </section>
     </>
+  );
+}
+
+type ListingsResult =
+  | {
+      ok: true;
+      rows: Row[];
+      total: number;
+      totalIsExact: boolean;
+      hasNext: boolean;
+    }
+  | { ok: false };
+
+function currentHref(filterQs: string, n: number): string {
+  const sp = new URLSearchParams(filterQs);
+  if (n > 1) sp.set("p", String(n));
+  const qs = sp.toString();
+  return qs ? `/stoebern?${qs}` : "/stoebern";
+}
+
+// Fehlerzustand statt "0 Treffer". Plain <a> statt <Link>, damit "Erneut
+// laden" garantiert frisch vom Server rendert und nicht aus dem Router-Cache.
+function LoadError({ t, href }: { t: T; href: string }) {
+  return (
+    <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-6 pb-12">
+      <div className="rounded-2xl border border-dashed border-[var(--border)] bg-white p-12 text-center">
+        <p className="text-[var(--warm-bark)] mb-6">{t("browse.loadError")}</p>
+        <Button asChild>
+          <a href={href}>{t("browse.retry")}</a>
+        </Button>
+      </div>
+    </section>
   );
 }
 

@@ -1041,6 +1041,9 @@ const de = {
   "browse.page": "Seite {n}",
   "browse.startSearch": "Lass Sophie deine Suche starten",
   "browse.resultsCount": "{n} Treffer",
+  "browse.resultsCountApprox": "ca. {n} Treffer",
+  "browse.loadError": "Die Ergebnisse konnten gerade nicht geladen werden.",
+  "browse.retry": "Erneut laden",
 
   // === Browse filter bar ===
   "filter.type.label": "Angebot",
@@ -2119,6 +2122,9 @@ const en: Dict = {
   "browse.page": "Page {n}",
   "browse.startSearch": "Let Sophie start your search",
   "browse.resultsCount": "{n} results",
+  "browse.resultsCountApprox": "approx. {n} results",
+  "browse.loadError": "The results could not be loaded right now.",
+  "browse.retry": "Try again",
 
   // === Browse filter bar ===
   "filter.type.label": "Listing",
@@ -3193,6 +3199,9 @@ const ru: Dict = {
   "browse.page": "Страница {n}",
   "browse.startSearch": "Начать поиск с Софи",
   "browse.resultsCount": "{n} объектов",
+  "browse.resultsCountApprox": "около {n} объектов",
+  "browse.loadError": "Не удалось загрузить результаты.",
+  "browse.retry": "Загрузить снова",
 
   // === Browse filter bar ===
   "filter.type.label": "Тип",
@@ -4267,6 +4276,9 @@ const el: Dict = {
   "browse.page": "Σελίδα {n}",
   "browse.startSearch": "Ξεκινήστε την αναζήτηση με τη Sophie",
   "browse.resultsCount": "{n} αποτελέσματα",
+  "browse.resultsCountApprox": "περίπου {n} αποτελέσματα",
+  "browse.loadError": "Δεν ήταν δυνατή η φόρτωση των αποτελεσμάτων.",
+  "browse.retry": "Δοκιμάστε ξανά",
 
   // === Browse filter bar ===
   "filter.type.label": "Τύπος",
@@ -5341,6 +5353,9 @@ const zh: Dict = {
   "browse.page": "第 {n} 页",
   "browse.startSearch": "让 Sophie 开启你的搜索",
   "browse.resultsCount": "{n} 条结果",
+  "browse.resultsCountApprox": "约 {n} 条结果",
+  "browse.loadError": "暂时无法加载结果。",
+  "browse.retry": "重新加载",
 
   // === Browse filter bar ===
   "filter.type.label": "类型",
