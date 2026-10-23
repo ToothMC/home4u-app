@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 from .dedup import _phash_bytes, fetch_image
 from .detail import ParsedListing, fetch_and_parse
 from .sitemap import discover_all_listings
-from .writer import fetch_already_indexed, mark_stale_old_listings, touch_last_seen, upsert_listings
+from .writer import mark_stale_old_listings, touch_known_ids, upsert_listings
 
 
 def _setup_logging() -> None:
@@ -92,25 +92,26 @@ def main() -> int:
             todo = all_urls
             already_seen_ids: list[str] = []
         else:
-            log.info("Lade Set bereits indexierter external_ids …")
-            try:
-                indexed = fetch_already_indexed(client)
-                log.info("Schon indexiert: %d", len(indexed))
-            except Exception as e:
-                log.warning("fetch_already_indexed failed: %s — fallback full", e)
-                indexed = set()
-            todo = [u for u in all_urls if u.listing_id not in indexed]
-            already_seen_ids = [u.listing_id for u in all_urls if u.listing_id in indexed]
+            # Bekannte IDs paketweise nachschlagen und dabei last_seen
+            # auffrischen — sonst rostet last_seen ein, Health-Check und
+            # mark-stale-Gate brechen ab (Inzident 2026-05-07; seit 2026-05-25
+            # täglich). Läuft nur, wenn discover() URLs geliefert hat (oben
+            # Abbruch bei 0) — sonst würde ein toter Crawler maskiert.
+            ids = list(dict.fromkeys(u.listing_id for u in all_urls))
+            log.info("Bekannte external_ids nachschlagen%s (Pakete à 1000) …",
+                     "" if dry_run else " + touchen")
+            t_lookup = time.time()
+            known, unresolved = touch_known_ids(client, ids, touch=not dry_run)
+            log.info("  bekannt: %d, ungeklärt: %d (%.1fs)",
+                     len(known), len(unresolved), time.time() - t_lookup)
+            if unresolved and len(unresolved) > len(ids) // 2:
+                log.error("Nachschlagen für %d von %d IDs fehlgeschlagen — Abbruch",
+                          len(unresolved), len(ids))
+                return 1
+            todo = [u for u in all_urls
+                    if u.listing_id not in known and u.listing_id not in unresolved]
+            already_seen_ids = sorted(known)
             log.info("Neu zu fetchen: %d von %d", len(todo), len(all_urls))
-
-        # Bekannte URLs touchen — sonst rostet last_seen ein und Health-Check
-        # bricht ab (Inzident 2026-05-07: 2265/20160 in 24h gesehen). Nur
-        # wenn discover() URLs geliefert hat — bei leerem discover NICHT
-        # touchen, sonst maskiert man einen toten Crawler.
-        if already_seen_ids and not dry_run:
-            touched = touch_last_seen(client, already_seen_ids)
-            log.info("  %d/%d known URLs touched (last_seen refreshed)",
-                     touched, len(already_seen_ids))
 
         if max_listings:
             todo = todo[:max_listings]

@@ -149,69 +149,53 @@ def mark_stale_old_listings(stale_days: int = 3) -> int:
         return 0
 
 
-def touch_last_seen(client: httpx.Client, listing_ids: list[str]) -> int:
-    """Aktualisiert last_seen für bestehende index_cy-Listings ohne Re-Fetch.
+LOOKUP_BATCH = 1000
 
-    Wird vom main-Loop für URLs gerufen, die in Phase 1 wieder auftauchen
-    aber bereits vollständig indexiert sind — sonst rostet last_seen ein
-    und mark_stale_listings würde sie nach 7d killen ODER die Health-Check-
-    Schwelle reißen (Inzident 2026-05-07: nur 2265/20160 in 24h gesehen).
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
+def _touch_known_batch(client: httpx.Client, ids: list[str], touch: bool = True) -> list[str]:
+    rpc = "touch_known_listings" if touch else "listings_known_external_ids"
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    resp = client.post(
+        f"{url_base}/rest/v1/rpc/{rpc}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+        },
+        json={"p_source": SOURCE, "p_external_ids": ids},
+        timeout=90,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"{rpc} HTTP {resp.status_code}: {resp.text[:300]}")
+    return resp.json() or []
+
+
+def touch_known_ids(
+    client: httpx.Client, listing_ids: list[str], touch: bool = True,
+) -> tuple[set[str], set[str]]:
+    """Bekannte Sitemap-IDs nachschlagen UND last_seen auffrischen, paketweise
+    (1000) über die RPC touch_known_listings.
+
+    Vorher: alle ~44k IDs vorab per Range-Paging laden (Seq Scan → Timeout
+    → "fallback full") und dann 33k IDs in EINEM Touch-Call (Read-Timeout).
+    Folge: last_seen wurde seit Mai nicht aufgefrischt, mark-stale-Gate brach
+    täglich ab. Die RPC touched höchstens einmal pro ~20 h pro Zeile.
+
+    touch=False: nur nachschlagen (DRY_RUN), nichts schreiben.
+
+    Returns (known, unresolved): unresolved = IDs aus Paketen, die auch nach
+    Retries fehlschlugen — weder neu noch bekannt.
     """
-    if not listing_ids:
-        return 0
-    url_base = os.environ["SUPABASE_URL"].rstrip("/")
-    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    url = f"{url_base}/rest/v1/rpc/touch_listings_last_seen"
-    headers = {
-        "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
-        "Content-Type": "application/json",
-    }
-    try:
-        resp = client.post(
-            url, headers=headers,
-            json={"p_source": SOURCE, "p_external_ids": listing_ids},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return int(resp.json() or 0)
-    except Exception as e:
-        log.warning("touch_last_seen(%d ids) failed: %s", len(listing_ids), e)
-        return 0
-
-
-def fetch_already_indexed(client: httpx.Client) -> set[str]:
-    """Set aller external_ids die wir schon haben — für Inkrement-Filter
-    (wir wollen Detail-Pages der bekannten Listings nicht jeden Tag neu fetchen)."""
-    url_base = os.environ["SUPABASE_URL"].rstrip("/")
-    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    headers = {
-        "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
-    }
-    seen: set[str] = set()
-    offset, page = 0, 1000
-    while True:
-        url = (
-            f"{url_base}/rest/v1/listings"
-            f"?source=eq.index_cy&select=external_id"
-        )
-        resp = client.get(
-            url,
-            headers={
-                **headers,
-                "Range-Unit": "items",
-                "Range": f"{offset}-{offset + page - 1}",
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        rows = resp.json() or []
-        for r in rows:
-            ext = r.get("external_id")
-            if ext:
-                seen.add(str(ext))
-        if len(rows) < page:
-            break
-        offset += page
-    return seen
+    known: set[str] = set()
+    unresolved: set[str] = set()
+    for i in range(0, len(listing_ids), LOOKUP_BATCH):
+        batch = listing_ids[i : i + LOOKUP_BATCH]
+        try:
+            known.update(str(x) for x in _touch_known_batch(client, batch, touch))
+        except Exception as e:
+            log.warning("touch_known_ids: Paket %d fehlgeschlagen: %s",
+                        i // LOOKUP_BATCH + 1, e)
+            unresolved.update(batch)
+    return known, unresolved

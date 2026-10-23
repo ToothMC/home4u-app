@@ -212,16 +212,39 @@ def _extract_cover_url(html: str) -> str | None:
     return og_url
 
 
+STATUS_ACTIVE = "active"
+STATUS_ARCHIVED = "archived"
+STATUS_ERROR = "error"
+
+
 def parse_detail(session: BscSession, listing: "object") -> ParsedListing | None:
     """Detail-Page fetchen + parsen. Returns None für archived/parse-failed.
 
     `listing` muss `.listing_id`, `.detail_url`, `.city_slug` haben (ListingURL aus sitemap.py).
     """
+    return check_detail(session, listing)[1]
+
+
+def check_detail(session: BscSession, listing: "object") -> tuple[str, ParsedListing | None]:
+    """Wie parse_detail, unterscheidet aber WARUM nichts zurückkommt:
+
+    - STATUS_ACTIVE:   Seite da, €-Preis im Title → ParsedListing
+    - STATUS_ARCHIVED: Title ohne €-Preis, oder HTTP 404/410 → Inserat weg
+    - STATUS_ERROR:    Netzwerk, Cloudflare (403), 5xx, Title nicht parsebar
+
+    Nur ARCHIVED darf zur Stilllegung führen. Ein Fehler beim Abruf ist kein
+    Beweis, dass das Inserat weg ist.
+    """
     try:
-        body = session.get_text(listing.detail_url, timeout=30)
+        status, body = session.get(listing.detail_url, timeout=30)
     except Exception as e:
         log.debug("fetch failed for %s: %s", listing.detail_url, e)
-        return None
+        return STATUS_ERROR, None
+    if status in (404, 410):
+        return STATUS_ARCHIVED, None
+    if status != 200:
+        log.debug("HTTP %s for %s", status, listing.detail_url)
+        return STATUS_ERROR, None
 
     # Title bevorzugt aus <title>, Fallback og:title
     title_m = _TITLE_TAG_RE.search(body)
@@ -233,14 +256,14 @@ def parse_detail(session: BscSession, listing: "object") -> ParsedListing | None
     parsed = parse_title(title_text)
     if not parsed:
         log.debug("title-parse miss for %s — title=%r", listing.detail_url, title_text[:80])
-        return None
+        return STATUS_ERROR, None
 
     # Aktiv-Heuristik: BSC behält archived Listings in der Sitemap, die
     # haben keinen €-Preis im Title. Skip — sonst pumpen wir tausende
     # zombie-Listings in die DB die nichts wert sind.
     if parsed["price"] is None:
         log.debug("skip archived (no price): %s", listing.detail_url)
-        return None
+        return STATUS_ARCHIVED, None
 
     sqm = parsed.get("sqm_title")
     if sqm is None:
@@ -262,7 +285,7 @@ def parse_detail(session: BscSession, listing: "object") -> ParsedListing | None
 
     city, district = _strip_district_suffix(parsed["location_raw"], listing.city_slug)
 
-    return ParsedListing(
+    return STATUS_ACTIVE, ParsedListing(
         listing_id=parsed["listing_id"],
         listing_type=parsed["sale_type"],
         detail_url=listing.detail_url,
