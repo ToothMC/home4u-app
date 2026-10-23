@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { ArrowRight, MapPin, Bed, Bath, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
@@ -76,6 +77,59 @@ function roomsTitle(
   return `${rooms}${t("listing.fallbackTitle.roomsSuffix")} ${typeLabel}`.trim();
 }
 
+const SELECT_COLS =
+  "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, created_at, canonical_id, source, title";
+
+// Läuft bei JEDEM Startseiten-Aufruf (auch Bots). Vorher fehlte
+// is_share=false → keiner der partiellen Browse-Indizes passte → jeder
+// Aufruf las ~40k Seiten (fast die ganze Tabelle) und sortierte (Ø 3,5 s,
+// gemessen 2026-10-23). Mit is_share=false: Index-Scan, ~4 ms.
+// Anteils-Inserate gehören ohnehin nicht auf die Startseite (/stoebern
+// blendet sie per Default auch aus).
+// Zusätzlich 5 min gecacht — "neu reingekommen" muss nicht sekundengenau sein.
+const FEATURED_TTL_SECONDS = 300;
+
+const getFeaturedRows = unstable_cache(
+  async (regionSlug: string | null, limit: number): Promise<FeaturedListing[]> => {
+    const supabase = createSupabaseServiceClient();
+    if (!supabase) return [];
+    // "Neu reingekommen" = created_at (echtes Insert-Datum), NICHT
+    // updated_at — sonst landet nach jedem Crawler-Touch das gleiche alte
+    // Listing wieder oben.
+    // media_ok=false = Cover beim Anbieter gelöscht (scripts/run-media-check.ts),
+    // die Karte wäre eine graue Fläche. NULL (ungeprüft) bleibt drin.
+    let query = supabase
+      .from("listings")
+      .select(SELECT_COLS)
+      .eq("status", "active")
+      .eq("is_share", false)
+      .not("media", "is", null)
+      .not("media_ok", "is", false)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    // `region` = Computed Field in der DB (listing_region_of(location_city),
+    // gleiche Logik wie der frühere ILIKE-Prefix), indexiert.
+    if (regionSlug) query = query.eq("region", regionSlug);
+    const { data, error } = await query;
+    if (error) {
+      console.error("FeaturedListings: Abfrage fehlgeschlagen:", error.message);
+      // Fehler NICHT cachen: werfen, damit unstable_cache das Ergebnis verwirft.
+      throw new Error(error.message);
+    }
+    return (data ?? []) as FeaturedListing[];
+  },
+  ["featured-listings"],
+  { revalidate: FEATURED_TTL_SECONDS, tags: ["featured-listings"] },
+);
+
+async function loadFeatured(regionSlug: string | null, limit: number): Promise<FeaturedListing[]> {
+  try {
+    return await getFeaturedRows(regionSlug, limit);
+  } catch {
+    return [];
+  }
+}
+
 export async function FeaturedListings({
   regionSlug,
 }: {
@@ -90,52 +144,22 @@ export async function FeaturedListings({
   const detected = await detectRegion({ urlSlug: regionSlug });
   const region = detected.region;
 
-  // "Neu reingekommen" = sortiert nach created_at (echtes Insert-Datum), NICHT
-  // updated_at — sonst würde nach jedem Crawler-Touch das gleiche alte Listing
-  // wieder oben landen.
-  // Pool absichtlich groß (32/16) damit der diversify-Filter genug Material
-  // hat um Bauträger-Bulk-Imports (z.B. 5× selbe Maisonette in Zephyros
-  // Village mit unterschiedlichen Unit-Nummern) auf 1 Karte zu reduzieren.
-  const SELECT_COLS =
-    "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, status, created_at, canonical_id, source, title";
-
-  // media_ok=false = Cover-Bild ist beim Anbieter gelöscht (siehe
-  // scripts/run-media-check.ts). Solche Karten wären auf der Startseite
-  // eine graue Fläche. NULL (noch ungeprüft) bleibt drin.
-  let query = supabase
-    .from("listings")
-    .select(SELECT_COLS)
-    .eq("status", "active")
-    .not("media", "is", null)
-    .not("media_ok", "is", false)
-    .order("created_at", { ascending: false })
-    .limit(region ? 32 : 16);
-
-  if (region) {
-    // Prefix-Match deckt "Paphos", "Paphos District", "Paphos – Universal" etc. ab.
-    query = query.ilike("location_city", `${region.cityPrefix}%`);
-  }
-
-  const { data } = await query;
-
-  const withMedia = (rows: FeaturedListing[] | null | undefined) =>
-    (rows ?? []).filter(
+  // Pool absichtlich groß (32/16), damit diversify() Bauträger-Bulk-Imports
+  // (z.B. 5× selbe Maisonette mit unterschiedlichen Unit-Nummern) auf 1 Karte
+  // reduzieren kann.
+  const withMedia = (rows: FeaturedListing[]) =>
+    rows.filter(
       (l): l is FeaturedListing => Array.isArray(l.media) && l.media.length > 0,
     );
 
-  let listings = diversify(withMedia(data as FeaturedListing[] | null), 4);
+  let listings = diversify(
+    withMedia(await loadFeatured(region?.slug ?? null, region ? 32 : 16)),
+    4,
+  );
 
   // Wenn Region-Filter zu wenig liefert (< 2 nach Dedup), greift Fallback auf Mix.
   if (region && listings.length < 2) {
-    const { data: fallback } = await supabase
-      .from("listings")
-      .select(SELECT_COLS)
-      .eq("status", "active")
-      .not("media", "is", null)
-      .not("media_ok", "is", false)
-      .order("created_at", { ascending: false })
-      .limit(16);
-    listings = diversify(withMedia(fallback as FeaturedListing[] | null), 4);
+    listings = diversify(withMedia(await loadFeatured(null, 16)), 4);
   }
 
   if (listings.length === 0) return null;
