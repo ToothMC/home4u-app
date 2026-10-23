@@ -33,3 +33,8 @@ grant execute on function public.region(public.listings) to anon, authenticated,
 create index concurrently if not exists listings_browse_region_type_created_idx
   on public.listings (public.listing_region_of(location_city), type, created_at desc)
   where status = 'active' and is_share = false and media is not null and media_ok is not false;
+
+-- Planner-Statistik für den Regions-Ausdruck (sonst rät Postgres die
+-- Trefferzahl: "Kaufen + Paphos" geschätzt 845 statt real 24.251).
+create statistics if not exists public.listings_region_type_stats (mcv)
+  on (public.listing_region_of(location_city)), type from public.listings;
