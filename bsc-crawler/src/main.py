@@ -3,8 +3,12 @@
 Flow:
   1. Sitemap-Discovery: alle 10 sub-sitemaps walken → ID-eindeutige Detail-URLs
      (~160k inkl. Archive bei BSC)
-  2. Inkrementell: schon-indexierte external_ids ausfiltern, last_seen touchen
-  3. Streaming-Detail-Fetch + Parse + pHash + Upsert pro BATCH_SIZE
+  2. Inkrementell: bekannte external_ids paketweise nachschlagen (RPC)
+  3. Streaming-Detail-Fetch + Parse + pHash + Upsert pro BATCH_SIZE —
+     erst neue Inserate, dann eine Scheibe bekannter zur Nachprüfung
+     (Recheck): aktiv → Upsert frischt last_seen auf, archiviert →
+     direkt stale. BSC lässt archivierte Inserate in der Sitemap, daher ist
+     nur die Detailseite ein verlässliches Lebenszeichen.
   4. mark_stale am Ende — nur wenn vollständig durchgelaufen
 
 Watchdog (MAX_RUNTIME_S, default 90min): stoppt vor dem nächsten Listing,
@@ -25,10 +29,15 @@ Env:
   DRY_RUN=1: kein DB-Write, nur loggen
   SKIP_PHASH=1: pHash-Phase überspringen
   FORCE_REFETCH=1: auch bereits indexierte Listings nochmal fetchen
+  RECHECK_PER_RUN: bekannte Inserate pro Lauf nachprüfen (default 3500,
+    0 = aus). Scheibe = GITHUB_RUN_NUMBER % Anzahl Scheiben → bei ~115k
+    bekannten und 4 Läufen/Tag kommt jedes Inserat ~alle 8 Tage dran,
+    sicher innerhalb des 14-Tage-Cutoffs von mark_stale.
 """
 from __future__ import annotations
 
 import logging
+import math
 import os
 import sys
 import time
@@ -38,12 +47,12 @@ from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .dedup import compute_phash_from_url
-from .detail import ParsedListing, parse_detail
+from .detail import STATUS_ACTIVE, STATUS_ARCHIVED, ParsedListing, check_detail
 from .http_client import BscSession
 from .sitemap import ListingURL, discover_all_listings
 from .writer import (
-    fetch_already_indexed,
-    touch_last_seen,
+    lookup_known_ids,
+    mark_stale_ids,
     upsert_listings,
 )
 
@@ -84,6 +93,23 @@ def _mark_stale_rpc() -> int:
     return int(resp.json() or 0)
 
 
+def _recheck_slice(known_ids: set[str], per_run: int) -> tuple[list[str], int, int]:
+    """Deterministische Scheibe der bekannten IDs für diesen Lauf.
+
+    Ohne Zustand in der DB: Scheibe = GITHUB_RUN_NUMBER % n. Jeder Lauf nimmt
+    die nächste Scheibe, nach n Läufen ist jedes Inserat einmal geprüft.
+    Lokal (ohne Run-Nummer) fällt es auf die 6-h-Uhrzeit-Scheibe zurück.
+    """
+    if per_run <= 0 or not known_ids:
+        return [], 0, 0
+    ids = sorted(known_ids)
+    n = max(1, math.ceil(len(ids) / per_run))
+    run_no = os.getenv("GITHUB_RUN_NUMBER", "").strip()
+    seed = int(run_no) if run_no.isdigit() else int(time.time() // (6 * 3600))
+    slot = seed % n
+    return [lid for k, lid in enumerate(ids) if k % n == slot], slot, n
+
+
 def main() -> int:
     load_dotenv()
     _setup_logging()
@@ -116,36 +142,40 @@ def main() -> int:
         log.error("0 Listings discovered — Abbruch (Sitemaps weg oder geblockt?)")
         return 1
 
-    # Phase 2: inkrementell — schon indexierte ausfiltern
-    already_seen_ids: list[str] = []
+    # Phase 2: inkrementell — bekannte IDs paketweise nachschlagen
+    by_id: dict[str, ListingURL] = {u.listing_id: u for u in all_urls}
+    recheck: list[ListingURL] = []
     if force_refetch:
         log.info("FORCE_REFETCH=1 — alle %d Listings werden gefetched", len(all_urls))
         todo: list[ListingURL] = all_urls
     else:
-        log.info("Lade Set bereits indexierter external_ids …")
-        try:
-            indexed = fetch_already_indexed()
-            log.info("Schon indexiert: %d", len(indexed))
-        except Exception as e:
-            log.warning("fetch_already_indexed failed: %s — fallback full", e)
-            indexed = set()
-        todo = [u for u in all_urls if u.listing_id not in indexed]
-        already_seen_ids = [u.listing_id for u in all_urls if u.listing_id in indexed]
-        log.info("Neu zu fetchen: %d von %d", len(todo), len(all_urls))
-
-    # last_seen für bekannte URLs touchen — sonst rostet das ein und der
-    # mark_stale-Gate würde alle archivieren
-    if already_seen_ids and not dry_run:
-        touched = touch_last_seen(already_seen_ids)
-        log.info("  %d/%d known URLs touched (last_seen refreshed)",
-                 touched, len(already_seen_ids))
+        log.info("Bekannte external_ids nachschlagen (Pakete à 1000) …")
+        t_lookup = time.time()
+        known, unresolved = lookup_known_ids(list(by_id))
+        log.info("  bekannt: %d, neu: %d, ungeklärt: %d (%.1fs)",
+                 len(known), len(by_id) - len(known) - len(unresolved),
+                 len(unresolved), time.time() - t_lookup)
+        if unresolved and len(unresolved) > len(by_id) // 2:
+            # Mehr als die Hälfte nicht nachschlagbar = DB-Problem, kein
+            # Grund, zehntausende Detailseiten blind neu zu holen.
+            log.error("Nachschlagen für %d von %d IDs fehlgeschlagen — Abbruch",
+                      len(unresolved), len(by_id))
+            return 1
+        todo = [u for u in all_urls
+                if u.listing_id not in known and u.listing_id not in unresolved]
+        recheck_per_run = int(os.getenv("RECHECK_PER_RUN", "3500").strip() or "0")
+        slice_ids, slot, n_slices = _recheck_slice(known, recheck_per_run)
+        recheck = [by_id[i] for i in slice_ids]
+        log.info("Neu zu fetchen: %d von %d; Recheck: %d (Scheibe %d/%d)",
+                 len(todo), len(all_urls), len(recheck), slot + 1, n_slices)
 
     if max_listings:
         todo = todo[:max_listings]
-        log.info("MAX_LISTINGS=%d aktiv → %d zu fetchen", max_listings, len(todo))
+        recheck = recheck[:max_listings]
+        log.info("MAX_LISTINGS=%d aktiv → %d neu, %d Recheck", max_listings, len(todo), len(recheck))
 
-    if not todo:
-        log.info("Nichts zu tun — alle bekannten Listings schon indexiert.")
+    if not todo and not recheck:
+        log.info("Nichts zu tun.")
         return 0
 
     # Phase 3: Detail-Fetch + Parse + pHash + Streaming-Upsert
@@ -158,6 +188,10 @@ def main() -> int:
     batch: list[ParsedListing] = []
     total_parsed = 0
     total_skipped_archived = 0
+    total_errors = 0
+    recheck_active = recheck_archived = recheck_errors = 0
+    total_marked_stale = 0
+    archived_known: list[str] = []
     total_inserted = 0
     total_updated = 0
     total_deduped = 0
@@ -197,33 +231,68 @@ def main() -> int:
             )
         batch = []
 
-    for idx, sitemap_listing in enumerate(todo, start=1):
+    def flush_archived() -> None:
+        nonlocal archived_known, total_marked_stale
+        if not archived_known:
+            return
+        if dry_run:
+            log.info("  DRY_RUN — %d verifiziert archivierte NICHT stale gesetzt", len(archived_known))
+        else:
+            try:
+                n = mark_stale_ids(archived_known)
+                total_marked_stale += n
+                log.info("  stale gesetzt (Detailseite archiviert): %d", n)
+            except Exception as e:
+                log.warning("mark_stale_ids(%d) fehlgeschlagen: %s", len(archived_known), e)
+        archived_known = []
+
+    work: list[tuple[ListingURL, bool]] = [(u, False) for u in todo] + [(u, True) for u in recheck]
+    for idx, (sitemap_listing, is_recheck) in enumerate(work, start=1):
         elapsed = time.time() - started
         if elapsed > max_runtime_s:
             aborted_reason = (
                 f"MAX_RUNTIME_S={max_runtime_s}s erreicht nach {elapsed:.0f}s "
-                f"— sauberer Stopp bei Listing {idx}/{len(todo)}"
+                f"— sauberer Stopp bei Listing {idx}/{len(work)}"
             )
             log.warning(aborted_reason)
             all_done = False
             break
-        p = parse_detail(session, sitemap_listing)
-        if p is not None:
+        status, p = check_detail(session, sitemap_listing)
+        if status == STATUS_ACTIVE and p is not None:
+            # Upsert frischt last_seen auf (und reaktiviert ggf. stale).
             batch.append(p)
             total_parsed += 1
-        else:
+            if is_recheck:
+                recheck_active += 1
+        elif status == STATUS_ARCHIVED:
             total_skipped_archived += 1
+            if is_recheck:
+                recheck_archived += 1
+                archived_known.append(sitemap_listing.listing_id)
+        else:
+            total_errors += 1
+            if is_recheck:
+                recheck_errors += 1
         if len(batch) >= BATCH_SIZE:
             flush_batch()
+        if len(archived_known) >= 200:
+            flush_archived()
         if idx % 50 == 0:
             log.info(
-                "  detail-progress %d/%d (parsed %d, archived/skip %d, %.1fs)",
-                idx, len(todo), total_parsed, total_skipped_archived,
+                "  detail-progress %d/%d (parsed %d, archived %d, errors %d, %.1fs)",
+                idx, len(work), total_parsed, total_skipped_archived, total_errors,
                 time.time() - detail_started,
             )
         time.sleep(rate_limit)
 
     flush_batch()
+    flush_archived()
+    log.info(
+        "Recheck: %d aktiv (last_seen frisch), %d archiviert (davon %d stale gesetzt), %d Fehler",
+        recheck_active, recheck_archived, total_marked_stale, recheck_errors,
+    )
+    if recheck_errors and recheck_errors > (recheck_active + recheck_archived):
+        log.warning("Recheck: mehr Fehler als Ergebnisse — Cloudflare/Netz prüfen")
     log.info(
         "Detail+Upsert-Phase fertig: %d parsed, %d archived/skip, %d ins, %d upd, "
         "%d dedup, %d failed in %.1fs",

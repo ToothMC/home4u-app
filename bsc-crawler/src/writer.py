@@ -158,69 +158,64 @@ def upsert_listings(items: Iterable[ParsedListing]) -> dict:
     }
 
 
-def touch_last_seen(listing_ids: list[str]) -> int:
-    """last_seen für bestehende bsc-Listings aktualisieren, ohne sie neu zu
-    fetchen. Sonst rostet last_seen ein und mark_stale-Gate würde alle
-    bekannten Listings nach 14d archivieren.
+LOOKUP_BATCH = 1000
+
+
+def _rpc(name: str, payload: dict, timeout: float = 90):
+    url_base = os.environ["SUPABASE_URL"].rstrip("/")
+    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    resp = httpx.post(
+        f"{url_base}/rest/v1/rpc/{name}",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=timeout,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"{name} HTTP {resp.status_code}: {resp.text[:300]}")
+    return resp.json()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
+def _known_batch(ids: list[str]) -> list[str]:
+    return _rpc("listings_known_external_ids",
+                {"p_source": SOURCE, "p_external_ids": ids}) or []
+
+
+def lookup_known_ids(listing_ids: list[str]) -> tuple[set[str], set[str]]:
+    """Welche der Sitemap-IDs kennen wir schon? Paketweise (1000) über die
+    RPC listings_known_external_ids — statt vorab alle ~115k IDs per
+    Offset-Paging zu laden (das lief als Seq Scan ins Timeout, seit Mai).
+
+    BSC lässt archivierte Inserate in der Sitemap stehen. Deshalb wird hier
+    bewusst NICHT last_seen getoucht — "steht in der Sitemap" ist kein
+    Lebenszeichen. Frisch gehalten werden bekannte Inserate über den
+    Recheck in main.py (Detailseite prüfen).
+
+    Returns (known, unresolved): unresolved = IDs aus Paketen, die auch nach
+    Retries fehlschlugen. Die dürfen weder als neu noch als bekannt gelten.
     """
+    known: set[str] = set()
+    unresolved: set[str] = set()
+    for i in range(0, len(listing_ids), LOOKUP_BATCH):
+        batch = listing_ids[i : i + LOOKUP_BATCH]
+        try:
+            known.update(str(x) for x in _known_batch(batch))
+        except Exception as e:
+            log.warning("lookup_known_ids: Paket %d fehlgeschlagen: %s",
+                        i // LOOKUP_BATCH + 1, e)
+            unresolved.update(batch)
+    return known, unresolved
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
+def mark_stale_ids(listing_ids: list[str]) -> int:
+    """Auf der Detailseite VERIFIZIERT archivierte Inserate stilllegen
+    (status='stale', reversibel — ein späterer Upsert reaktiviert)."""
     if not listing_ids:
         return 0
-    url_base = os.environ["SUPABASE_URL"].rstrip("/")
-    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    url = f"{url_base}/rest/v1/rpc/touch_listings_last_seen"
-    headers = {
-        "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
-        "Content-Type": "application/json",
-    }
-    try:
-        resp = httpx.post(
-            url, headers=headers,
-            json={"p_source": SOURCE, "p_external_ids": listing_ids},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return int(resp.json() or 0)
-    except Exception as e:
-        log.warning("touch_last_seen(%d ids) failed: %s", len(listing_ids), e)
-        return 0
-
-
-def fetch_already_indexed() -> set[str]:
-    """Set aller external_ids die wir schon haben — für inkrement-Filter.
-
-    PostgREST paginieren wir per `limit`/`offset`-Query (statt Range-Header)
-    plus deterministisches Order auf external_id. Range hat in der vorigen
-    Variante HTTP 400 geworfen; konkreter Error-JSON wird jetzt geloggt.
-    """
-    url_base = os.environ["SUPABASE_URL"].rstrip("/")
-    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    headers = {
-        "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
-    }
-    seen: set[str] = set()
-    offset, page = 0, 1000
-    with httpx.Client(timeout=30) as client:
-        while True:
-            url = (
-                f"{url_base}/rest/v1/listings"
-                f"?source=eq.{SOURCE}"
-                f"&select=external_id"
-                f"&order=external_id.asc"
-                f"&limit={page}&offset={offset}"
-            )
-            resp = client.get(url, headers=headers)
-            if resp.status_code >= 400:
-                log.warning("fetch_already_indexed HTTP %d: %s",
-                            resp.status_code, resp.text[:300])
-                resp.raise_for_status()
-            rows = resp.json() or []
-            for r in rows:
-                ext = r.get("external_id")
-                if ext:
-                    seen.add(str(ext))
-            if len(rows) < page:
-                break
-            offset += page
-    return seen
+    return int(_rpc("mark_listings_stale_by_ids",
+                    {"p_source": SOURCE, "p_external_ids": listing_ids}) or 0)
