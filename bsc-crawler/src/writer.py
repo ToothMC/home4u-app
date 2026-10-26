@@ -269,3 +269,28 @@ def recompute_market_pending(limit: int = 8000) -> dict:
     Inserat statt ~3 s im Trigger). Server-Timeout 600 s."""
     return _rpc("recompute_market_positions_pending", {"p_limit": limit},
                 timeout=660) or {}
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
+def recheck_candidates(min_age_days: float, limit: int) -> list[dict]:
+    """Aktive Inserate, die am längsten nicht gesehen wurden (älteste
+    zuerst), mit gespeicherter Detail-URL und Preis. Quelle ist die DB,
+    nicht die Sitemap: ~27 % der aktiven BSC-Inserate fehlen in der Sitemap,
+    sind aber live (Stichprobe 2026-10-26)."""
+    if limit <= 0:
+        return []
+    return _rpc(
+        "listings_recheck_candidates",
+        {"p_source": SOURCE, "p_min_age": f"{float(min_age_days)} days", "p_limit": int(limit)},
+    ) or []
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
+def touch_ids(listing_ids: list[str]) -> int:
+    """Auf der Detailseite VERIFIZIERT lebende, unveränderte Inserate:
+    nur last_seen auffrischen (kein voller Upsert, kein pHash). Die RPC
+    schreibt eine Zeile höchstens alle 20 h."""
+    if not listing_ids:
+        return 0
+    return int(_rpc("touch_listings_last_seen",
+                    {"p_source": SOURCE, "p_external_ids": listing_ids}) or 0)
