@@ -29,6 +29,10 @@ Env:
   DRY_RUN=1: kein DB-Write, nur loggen
   SKIP_PHASH=1: pHash-Phase überspringen
   FORCE_REFETCH=1: auch bereits indexierte Listings nochmal fetchen
+  UPSERT_CHUNK_SIZE: Zeilen pro Upsert-RPC (default 25)
+  DEFER_MARKET_POSITION=1: Marktposition nicht pro Zeile im Upsert rechnen,
+    sondern am Laufende gesammelt (recompute_market_positions_pending).
+    Für den Backfill-Rückstau; pro Zeile kostet sie sonst ~3 s.
   RECHECK_PER_RUN: bekannte Inserate pro Lauf nachprüfen (default 3500,
     0 = aus). Scheibe = GITHUB_RUN_NUMBER % Anzahl Scheiben → bei ~115k
     bekannten und 4 Läufen/Tag kommt jedes Inserat ~alle 8 Tage dran,
@@ -53,6 +57,7 @@ from .sitemap import ListingURL, discover_all_listings
 from .writer import (
     lookup_known_ids,
     mark_stale_ids,
+    recompute_market_pending,
     upsert_listings,
 )
 
@@ -192,6 +197,7 @@ def main() -> int:
     recheck_active = recheck_archived = recheck_errors = 0
     total_marked_stale = 0
     archived_known: list[str] = []
+    total_attempted = 0  # Zeilen, die an die Upsert-RPC gingen
     total_inserted = 0
     total_updated = 0
     total_deduped = 0
@@ -200,7 +206,7 @@ def main() -> int:
     all_done = True
 
     def flush_batch() -> None:
-        nonlocal batch, total_inserted, total_updated, total_deduped, total_failed
+        nonlocal batch, total_attempted, total_inserted, total_updated, total_deduped, total_failed
         if not batch:
             return
         if not skip_phash:
@@ -219,6 +225,7 @@ def main() -> int:
                      batch[0].listing_id if batch else "")
         else:
             result = upsert_listings(batch)
+            total_attempted += len(batch)
             total_inserted += int(result.get("inserted", 0))
             total_updated += int(result.get("updated", 0))
             total_deduped += int(result.get("deduped", 0))
@@ -314,6 +321,19 @@ def main() -> int:
         log.warning("mark_stale übersprungen — Lauf nicht vollständig (%s)",
                     aborted_reason or "siehe Errors")
 
+    # Marktposition für die mit DEFER_MARKET_POSITION angelegten Inserate.
+    # Läuft auch nach Watchdog-Abbruch; was hier scheitert, holt der
+    # nächste Lauf nach (market_updated_at bleibt NULL).
+    if os.getenv("DEFER_MARKET_POSITION", "").strip() == "1" and not dry_run:
+        t_mp = time.time()
+        try:
+            mp = recompute_market_pending()
+            log.info("Marktposition nachgerechnet: %s Inserate (%.1fs)",
+                     mp.get("updated", 0), time.time() - t_mp)
+        except Exception as e:
+            log.warning("Marktposition nachrechnen fehlgeschlagen (%.1fs): %s",
+                        time.time() - t_mp, e)
+
     log.info(
         "RESULT: ok=%s parsed=%d archived=%d inserted=%d updated=%d deduped=%d failed=%d elapsed=%.1fs aborted=%s",
         "true" if all_done else "partial",
@@ -321,6 +341,19 @@ def main() -> int:
         total_deduped, total_failed, time.time() - started,
         aborted_reason or "",
     )
+
+    # Ein Lauf ohne Wirkung muss rot werden (2026-10-23..26: 4 Läufe/Tag
+    # grün, 0 Writes, erst der Health-Check hat es nach 3 Tagen gemerkt).
+    if not dry_run and total_attempted > 0:
+        written = total_inserted + total_updated
+        if written == 0:
+            log.error("FEHLER: %d Zeilen an die DB geschickt, 0 geschrieben.",
+                      total_attempted)
+            return 1
+        if total_failed * 2 > total_attempted:
+            log.error("FEHLER: %d von %d Zeilen fehlgeschlagen (> 50 %%).",
+                      total_failed, total_attempted)
+            return 1
     return 0
 
 
