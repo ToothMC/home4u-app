@@ -4,6 +4,7 @@ import { buildSourceUrl } from "@/lib/listings/source-url";
 import { getT } from "@/lib/i18n/server";
 import { tFormat } from "@/lib/i18n/dict";
 import type { SupportedLang } from "@/lib/lang/preferred-language";
+import { SOURCE_LABELS } from "@/lib/listings/source-labels";
 
 const NUMBER_LOCALE: Record<SupportedLang, string> = {
   de: "de-DE",
@@ -11,15 +12,6 @@ const NUMBER_LOCALE: Record<SupportedLang, string> = {
   ru: "ru-RU",
   el: "el-GR",
   zh: "zh-CN",
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-  bazaraki: "Bazaraki",
-  index_cy: "INDEX.cy",
-  cyprus_real_estate: "Cyprus-Real.Estate",
-  fb: "Facebook",
-  direct: "Home4U",
-  other: "—",
 };
 
 type Offer = {

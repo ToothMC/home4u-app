@@ -27,6 +27,7 @@ import { SophieDrawerTrigger } from "@/components/chat/SophieDrawer";
 import { getT } from "@/lib/i18n/server";
 import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
 import type { SupportedLang } from "@/lib/lang/preferred-language";
+import { SOURCE_LABELS } from "@/lib/listings/source-labels";
 
 export const dynamic = "force-dynamic";
 
@@ -551,15 +552,6 @@ function PriceBox({
     </section>
   );
 }
-
-const SOURCE_LABELS: Record<string, string> = {
-  bazaraki: "Bazaraki",
-  index_cy: "INDEX.cy",
-  cyprus_real_estate: "Cyprus-Real.Estate",
-  fb: "Facebook",
-  direct: "Home4U",
-  other: "—",
-};
 
 function FooterMeta({
   externalId,
