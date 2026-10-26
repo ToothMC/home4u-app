@@ -207,23 +207,30 @@ async function BrowseResults({
     // Indizes: listings_browse_type_created_ok_idx, bei Regionsfilter
     // listings_browse_region_type_created_idx.
     //
+    // Liste und Zählung sind ZWEI Anfragen (parallel). Hängt count an der
+    // Liste, prüft PostgREST den Offset gegen die Zählung und antwortet mit
+    // 416, sobald der Offset darüber liegt. Bei count: "planned" ist das
+    // eine Schätzung: Miete/Paphos/Pegeia schätzte 54 statt 100 Treffer,
+    // Seite 4 (Offset 72) brach dann immer ab (2026-10-26).
+    //
     // count: "planned" = reine Planner-Schätzung, KEIN Durchzählen.
     // "estimated" zählt in PostgREST erst bis db-max-rows exakt (ein zweiter
     // Scan über bis zu 1000 passende Zeilen pro Klick) und hat die Abfrage
     // damit regelmäßig über das 8-s-Timeout geschoben.
     // Ob es eine nächste Seite gibt, entscheidet eine Zeile mehr (PAGE_SIZE+1).
-    const query = visibleListings(
+    const listQuery = visibleListings(
       "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, market_position",
-      { count: "planned" },
     );
-    if (!query) return { ok: false };
+    const countQuery = visibleListings("id", { count: "planned", head: true });
+    if (!listQuery || !countQuery) return { ok: false };
 
-    const { data, count, error } = await query
-      .order("created_at", { ascending: false })
-      .range(from, to + 1);
+    const [{ data, error }, { count }] = await Promise.all([
+      listQuery.order("created_at", { ascending: false }).range(from, to + 1),
+      countQuery,
+    ]);
 
     // Fehler NICHT als leere Liste ausgeben — genau das war "0 Treffer"
-    // bei Timeouts.
+    // bei Timeouts. Fehlt nur die Schätzung, zählt unten `seen`.
     if (error) return { ok: false, error: error.message };
 
     const all = (data ?? []) as unknown as Row[];
@@ -257,7 +264,7 @@ async function BrowseResults({
   // gelöscht markiert, plus Nutzer-Filter. Eine Stelle für Liste und Zählung.
   function visibleListings(
     columns: string,
-    opts: { count: "planned" | "exact"; head?: boolean },
+    opts?: { count: "planned" | "exact"; head?: boolean },
   ) {
     if (!supabase) return null;
     const q = supabase
