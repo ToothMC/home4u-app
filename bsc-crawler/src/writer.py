@@ -13,14 +13,41 @@ import os
 from typing import Iterable
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from .detail import ParsedListing
 
 log = logging.getLogger(__name__)
 
-CHUNK_SIZE = 50
+# Klein halten: jede Zeile kostet in der RPC ~0,5 s pHash-Suche (+ ~3 s
+# Marktposition ohne DEFER_MARKET_POSITION). 25 Zeilen bleiben sicher unter
+# dem 120-s-statement_timeout der RPC.
+CHUNK_SIZE = int(os.getenv("UPSERT_CHUNK_SIZE", "25").strip() or "25")
 SOURCE = "bsc"
+
+# Client wartet länger als der Server (statement_timeout 120 s). So bricht
+# bei Überlast der Server sauber ab, statt dass der Client aufgibt und ein
+# Retry mit dem noch laufenden ersten Versuch um dieselben Zeilen kämpft
+# (2026-10-23..26: ShareLock-Warten, 3 Tage 0 Writes).
+UPSERT_TIMEOUT_S = 150
+
+
+def _defer_market() -> bool:
+    return os.getenv("DEFER_MARKET_POSITION", "").strip() == "1"
+
+
+def _is_transient(e: BaseException) -> bool:
+    """Nur wiederholen, wenn der Server die Anfrage sicher nicht mehr
+    bearbeitet: Verbindungsfehler oder Gateway-Fehler. KEIN Retry bei
+    ReadTimeout (Server rechnet evtl. noch) und bei 500 (statement timeout
+    — derselbe Block scheitert wieder gleich)."""
+    if isinstance(e, httpx.ReadTimeout):
+        return False
+    if isinstance(e, httpx.TransportError):
+        return True
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response.status_code in (502, 503, 504)
+    return False
 
 
 def _smallint_or_none(v):
@@ -80,13 +107,23 @@ def _to_row(item: ParsedListing) -> dict:
     return row
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(min=2, max=20),
+    retry=retry_if_exception(_is_transient),
+    reraise=True,
+)
 def _post_chunk(url: str, headers: dict, payload: list[dict]) -> dict:
+    body: dict = {"p_source": SOURCE, "p_rows": payload}
+    if _defer_market():
+        # Marktposition nicht pro Zeile im Upsert rechnen, sondern am Ende
+        # des Laufs gesammelt (recompute_market_positions_pending).
+        body["p_defer_market"] = True
     resp = httpx.post(
         url,
         headers=headers,
-        json={"p_source": SOURCE, "p_rows": payload},
-        timeout=60,
+        json=body,
+        timeout=UPSERT_TIMEOUT_S,
     )
     if resp.status_code >= 400:
         log.error("RPC failed (%d): %s", resp.status_code, resp.text[:500])
@@ -115,8 +152,13 @@ def upsert_listings(items: Iterable[ParsedListing]) -> dict:
         try:
             result = _post_chunk(url, headers, chunk)
         except Exception as e:
-            log.warning("chunk %d failed: %s", chunks + 1, e)
-            failed.append({"chunk": chunks + 1, "error": str(e)})
+            log.warning("chunk %d failed (%d Zeilen): %s: %s",
+                        chunks + 1, len(chunk), type(e).__name__, e)
+            # Pro Zeile zählen, sonst sieht "50 Zeilen verloren" aus wie 1.
+            failed.extend(
+                {"index": k, "chunk": chunks + 1, "reason": f"{type(e).__name__}: {e}"}
+                for k in range(len(chunk))
+            )
             chunks += 1
             continue
         chunks += 1
@@ -219,3 +261,11 @@ def mark_stale_ids(listing_ids: list[str]) -> int:
         return 0
     return int(_rpc("mark_listings_stale_by_ids",
                     {"p_source": SOURCE, "p_external_ids": listing_ids}) or 0)
+
+
+def recompute_market_pending(limit: int = 8000) -> dict:
+    """Marktposition für Inserate nachrechnen, die mit p_defer_market
+    angelegt wurden. Ein Durchlauf über die Vergleichsinserate (~0,03 s pro
+    Inserat statt ~3 s im Trigger). Server-Timeout 600 s."""
+    return _rpc("recompute_market_positions_pending", {"p_limit": limit},
+                timeout=660) or {}

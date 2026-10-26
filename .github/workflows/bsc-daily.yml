@@ -54,7 +54,8 @@ jobs:
     # weitere Self-hosted-Runner für andere Sources hinzufügen, vermeidet das
     # versehentliches Mit-Crawlen auf falscher Hardware.
     runs-on: [self-hosted, mac-mini]
-    timeout-minutes: 100
+    # 90 min Crawl-Budget + bis 10 min Marktposition nachrechnen + Setup
+    timeout-minutes: 115
     defaults:
       run:
         working-directory: ./bsc-crawler
@@ -79,4 +80,8 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           SKIP_PHASH: ${{ inputs.skip_phash && '1' || '' }}
           FORCE_REFETCH: ${{ inputs.force_refetch && '1' || '' }}
+          # Rückstau (~100k neue Inserate, Stand 2026-10-26): Marktposition
+          # nicht pro Zeile im Upsert (~3 s/Zeile → Timeouts), sondern am
+          # Laufende gesammelt. Kann bleiben, kostet im Normalbetrieb nichts.
+          DEFER_MARKET_POSITION: "1"
         run: .venv/bin/python -m src.main
