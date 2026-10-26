@@ -452,10 +452,27 @@ def fetch_already_phashed_external_ids() -> set[str]:
     return phashed
 
 
+def is_touchable(row: dict) -> bool:
+    """Darf der Pre-Touch dieses Inserat als "gesehen" markieren?
+
+    Nur aktive Inserate mit intaktem Titelbild. media_ok=false heißt bei
+    Bazaraki fast immer "Inserat gelöscht" (Stichprobe 2026-10-26: 23 von 25
+    liefern 404) — die frischte der Pre-Touch bisher bei jedem Lauf auf, so
+    dass ~31k Leichen nie stale wurden. Ob sie leben, entscheidet jetzt die
+    Seitenprüfung (scripts/run-bazaraki-page-check.ts): 200 → Touch, 404 →
+    stale. Stale-Inserate frischt der Touch auch nicht mehr auf.
+    """
+    return row.get("status") == "active" and row.get("media_ok") is not False
+
+
 def fetch_known_external_ids_for_city_type(
     city_display: str, listing_type: str
-) -> set[str]:
-    """Alle bekannten external_ids für (source=bazaraki, location_city LIKE City%, type).
+) -> tuple[set[str], set[str]]:
+    """Bekannte external_ids für (source=bazaraki, location_city LIKE City%, type).
+
+    Liefert (alle, touchbar): `alle` für den Smart-Stop (jede ID, die wir
+    schon kennen, egal welcher Status), `touchbar` für den Pre-Touch
+    (siehe is_touchable).
 
     Wird im FAST_MODE genutzt, damit crawl_city während der Pagination
     "all_known → break"-Smart-Stop machen kann. Granularität auf
@@ -470,6 +487,7 @@ def fetch_known_external_ids_for_city_type(
         "Authorization": f"Bearer {service_key}",
     }
     ids: set[str] = set()
+    touchable: set[str] = set()
     offset = 0
     page_size = 1000
     while True:
@@ -478,7 +496,7 @@ def fetch_known_external_ids_for_city_type(
             f"?source=eq.bazaraki"
             f"&location_city=ilike.{city_display}*"
             f"&type=eq.{listing_type}"
-            f"&select=external_id"
+            f"&select=external_id,status,media_ok"
         )
         try:
             resp = httpx.get(
@@ -496,16 +514,18 @@ def fetch_known_external_ids_for_city_type(
                 "fetch_known_external_ids(%s, %s) failed at offset %d: %s — fallback empty",
                 city_display, listing_type, offset, e,
             )
-            return set()
+            return set(), set()
         rows = resp.json() or []
         for row in rows:
             ext = row.get("external_id")
             if ext:
                 ids.add(str(ext))
+                if is_touchable(row):
+                    touchable.add(str(ext))
         if len(rows) < page_size:
             break
         offset += page_size
-    return ids
+    return ids, touchable
 
 
 def touch_last_seen(external_ids: list[str]) -> int:

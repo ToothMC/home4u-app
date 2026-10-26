@@ -243,6 +243,9 @@ def main() -> int:
     # bereits, dort kommentiert mit "sonst maskieren wir einen toten
     # Crawler".
     known_ids_by_city_type: dict[tuple[str, str], set[str]] = {}
+    # Teilmenge für den Pre-Touch: nur aktive Inserate mit intaktem Titelbild
+    # (supabase_writer.is_touchable). Smart-Stop nutzt weiter alle bekannten.
+    touchable_by_city_type: dict[tuple[str, str], set[str]] = {}
     # (City, Type)-Paare, die in Pass 1 mindestens ein echtes Item hatten.
     verified_city_types: set[tuple[str, str]] = set()
     if fast_mode:
@@ -251,11 +254,12 @@ def main() -> int:
             for ltype in types:
                 key = (city.display, ltype)
                 try:
-                    ids = fetch_known_external_ids_for_city_type(city.display, ltype)
+                    ids, touchable = fetch_known_external_ids_for_city_type(city.display, ltype)
                 except Exception as e:
                     log.warning("fetch_known(%s, %s) failed: %s — skip touch", city.display, ltype, e)
-                    ids = set()
+                    ids, touchable = set(), set()
                 known_ids_by_city_type[key] = ids
+                touchable_by_city_type[key] = touchable
 
     with http_client() as http:
         log.info("HTTP-Session offen — kein Browser nötig (RSC-Payload, siehe flight.py)")
@@ -409,14 +413,15 @@ def main() -> int:
                         "=== Touch für %d/%d verifizierte (City, Type) ===",
                         len(verified_city_types), len(known_ids_by_city_type),
                     )
-                    for key, ids in known_ids_by_city_type.items():
+                    for key, ids in touchable_by_city_type.items():
                         if not ids or key not in verified_city_types:
                             continue
                         try:
                             touched = touch_last_seen(list(ids))
                             log.info(
-                                "  touch %s/%s: %d known, %d touched",
-                                key[0], key[1], len(ids), touched,
+                                "  touch %s/%s: %d known, %d touchbar, %d touched",
+                                key[0], key[1], len(known_ids_by_city_type.get(key, ())),
+                                len(ids), touched,
                             )
                         except Exception as e:
                             log.warning("touch_last_seen(%s, %s) failed: %s", key[0], key[1], e)
