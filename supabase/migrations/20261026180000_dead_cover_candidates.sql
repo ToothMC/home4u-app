@@ -20,7 +20,9 @@ as $$
   select l.id,
          l.external_id,
          nullif(trim(l.extracted_data->>'source_url'), ''),
-         coalesce(cardinality(l.media), 0) > 0,
+         -- echtes Bild = absolute URL; Bazarakis relativer Platzhalter
+         -- (/static/images/fb/bazaraki.*.png) heißt "kein Foto".
+         coalesce(l.media[1] ~* '^https?://', false),
          l.last_seen
     from listings l
    where l.source = p_source::listing_source
