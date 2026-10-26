@@ -146,8 +146,12 @@ async function runPool(rows: Row[]): Promise<{ ok: string[]; dead: string[]; unk
       if (i >= rows.length) return;
       const row = rows[i];
       const cover = row.media?.[0];
-      if (!cover) {
-        // Kein Cover trotz media IS NOT NULL — leeres Array. Zeigt im Grid
+      if (!cover || !/^https?:\/\//i.test(cover)) {
+        // Kein Cover trotz media IS NOT NULL — leeres Array, oder nur ein
+        // relativer Platzhalter (Bazaraki: /static/images/fb/bazaraki.*.png
+        // = "kein Foto"). Der Platzhalter lief bisher als "unklar", blieb
+        // ungeprüft und stand damit in JEDER Abfrage vorne (2026-10-25:
+        // 249.240 von 250.000 Prüfungen waren dieselben 88 Zeilen). Zeigt im Grid
         // ohnehin nichts, also raus. BEWUSST NICHT in hostStats: hier wird
         // nie ein Request gestellt, der Eintrag waere zwangslaeufig 100%
         // tot bei 0 Erfolgen und damit exakt das Muster, auf das die
@@ -251,6 +255,16 @@ async function main() {
     }
 
     const { ok, dead, unknown } = await runPool(rows);
+
+    // Kein einziges Ergebnis: Diese Zeilen kommen beim nächsten Abruf
+    // unverändert wieder (media_checked_at bleibt NULL). Weiterzumachen
+    // wäre eine Endlosschleife bis LIMIT.
+    if (ok.length === 0 && dead.length === 0) {
+      console.log(`  ${rows.length} Zeilen ohne Ergebnis (alle unklar) — Stopp, nächster Lauf versucht es erneut.`);
+      totalUnknown += unknown;
+      seen += rows.length;
+      break;
+    }
 
     // Erst Plausibilitaet, dann schreiben — ein geblockter Runner darf
     // keine Zeile anfassen.
