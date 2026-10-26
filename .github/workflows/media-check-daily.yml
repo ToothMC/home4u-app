@@ -15,6 +15,10 @@ name: Media Availability Check (Daily)
 # also "kennen wir", nicht "existiert noch" — der 14-Tage-Cutoff wird nie
 # erreicht. Ein 404-Bild ist dagegen ein harter externer Beleg.
 #
+# Seit 2026-10-26: Der Pre-Touch lässt media_ok=false aus, und der letzte
+# Schritt (Bazaraki page check) prüft genau diese Inserate auf der Seite:
+# 404 → stale, 200 → last_seen frisch.
+#
 # runs-on: mac-mini (NICHT ubuntu-latest). cdn1.bazaraki.com liegt hinter
 # Cloudflare, und CF sperrt Datacenter-IPs gern pauschal. Von einem
 # GitHub-Hosted-Runner sähen wir womöglich 403 für ALLES und würden den
@@ -48,7 +52,11 @@ on:
       recheck_days:
         description: "Bereits geprüfte nach N Tagen erneut prüfen (0 = nur ungeprüfte)"
         required: false
-        default: "0"
+        default: "7"
+      page_check_limit:
+        description: "Bazaraki-Seitenprüfung: max. Inserate (Smoke-Test: klein halten)"
+        required: false
+        default: "15000"
       dry_run:
         description: "Nur messen, nichts schreiben"
         required: false
@@ -84,7 +92,24 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           LIMIT: ${{ inputs.limit || '250000' }}
           SOURCE: ${{ inputs.source || '' }}
-          RECHECK_DAYS: ${{ inputs.recheck_days || '0' }}
+          # Alle 7 Tage neu prüfen: mit 0 wurde jedes Bild nur EINMAL
+          # geprüft — ein später gelöschtes Inserat fiel nie mehr auf.
+          # ~214k/7 ≈ 30k Bilder/Tag bei ~25/s ≈ 20 min.
+          RECHECK_DAYS: ${{ inputs.recheck_days || '7' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           CONCURRENCY: "8"
         run: npx tsx scripts/run-media-check.ts
+
+      # Gelöschte Bazaraki-Inserate verifiziert stilllegen: Titelbild weg
+      # (media_ok=false, oben gesetzt) UND Seite 404 → stale; Seite 200 →
+      # last_seen frisch. Der Crawler-Pre-Touch lässt media_ok=false aus,
+      # das hier ist ihr einziges Lebenszeichen. Details im Skript-Kopf.
+      - name: Bazaraki page check
+        if: ${{ !inputs.source || inputs.source == 'bazaraki' }}
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          LIMIT: ${{ inputs.page_check_limit || '15000' }}
+          MAX_MINUTES: "50"
+        run: npx tsx scripts/run-bazaraki-page-check.ts
