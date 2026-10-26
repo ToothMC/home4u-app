@@ -3,6 +3,7 @@
 import { Phone, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useT } from "@/lib/i18n/client";
+import { sourceLabel } from "@/lib/listings/source-labels";
 
 type RevealedContact = { phone: string | null; email: string | null };
 
@@ -165,15 +166,3 @@ function formatPhone(raw: string): string {
   return raw.startsWith("+") ? raw : `+${digits}`;
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-  bazaraki: "Bazaraki",
-  index_cy: "INDEX.cy",
-  cyprus_real_estate: "Cyprus-Real.Estate",
-  fb: "Facebook",
-  direct: "Home4U",
-  other: "—",
-};
-
-function sourceLabel(source: string): string {
-  return SOURCE_LABELS[source] ?? source;
-}

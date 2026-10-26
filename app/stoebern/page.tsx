@@ -27,6 +27,14 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 24;
 
+// Bis zu dieser geschätzten Trefferzahl wird exakt nachgezählt. Die
+// Planer-Schätzung rechnet mit dem Typ-Anteil der GANZEN Tabelle (inkl.
+// stillgelegter und ausgeblendeter Zeilen) und lag bei "Miete" 64 % zu hoch
+// (16.376 statt 10.002, 2026-10-26). Exakt zählen kostet bei ~10k Treffern
+// ~0,3 s, bei 175k aber 11 s — darum nur für kleine Mengen, mit Zeitlimit.
+const EXACT_COUNT_MAX = 20_000;
+const EXACT_COUNT_TIMEOUT_MS = 2_000;
+
 const NUMBER_LOCALE: Record<SupportedLang, string> = {
   de: "de-DE",
   en: "en-GB",
@@ -57,6 +65,10 @@ type Row = {
   media: string[] | null;
   market_position: MarketPosition | null;
 };
+
+/** "N ähnliche Inserate · günstigste ab €X" — gleiche Regel wie bei den
+ *  Sophie-Treffern (RPC browse_cluster_stats). Nichts wird ausgeblendet. */
+type ClusterInfo = { offers: number; minPrice: number | null };
 
 function fmt(price: number, currency: string, lang: SupportedLang) {
   return new Intl.NumberFormat(NUMBER_LOCALE[lang], {
@@ -200,21 +212,11 @@ async function BrowseResults({
     // Scan über bis zu 1000 passende Zeilen pro Klick) und hat die Abfrage
     // damit regelmäßig über das 8-s-Timeout geschoben.
     // Ob es eine nächste Seite gibt, entscheidet eine Zeile mehr (PAGE_SIZE+1).
-    let query = supabase
-      .from("listings")
-      .select(
-        "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, market_position",
-        { count: "planned" },
-      )
-      .eq("status", "active")
-      .not("media", "is", null)
-      // media_ok=false = Cover beim Anbieter gelöscht (Bazaraki räumt den
-      // GCS-Bucket auf, sobald das Inserat offline geht). Die Karte wäre
-      // eine graue Fläche und fast immer auch eine Karteileiche.
-      // NULL = noch nicht geprüft und bleibt sichtbar.
-      .not("media_ok", "is", false);
-
-    query = applyFiltersToQuery(query, filters);
+    const query = visibleListings(
+      "id, type, rooms, size_sqm, bathrooms, price, currency, location_city, location_district, property_type, media, market_position",
+      { count: "planned" },
+    );
+    if (!query) return { ok: false };
 
     const { data, count, error } = await query
       .order("created_at", { ascending: false })
@@ -224,13 +226,21 @@ async function BrowseResults({
     // bei Timeouts.
     if (error) return { ok: false, error: error.message };
 
-    const all = (data ?? []) as Row[];
+    const all = (data ?? []) as unknown as Row[];
     const hasNext = all.length > PAGE_SIZE;
     const pageRows = all.slice(0, PAGE_SIZE);
     // Letzte Seite → exakte Zahl ist bekannt. Sonst Planner-Schätzung,
     // mindestens aber so viele, wie wir sicher gesehen haben.
     const seen = from + all.length;
-    const total = hasNext ? Math.max(count ?? 0, seen) : seen;
+    let total = hasNext ? Math.max(count ?? 0, seen) : seen;
+    let totalIsExact = !hasNext;
+    if (hasNext && count != null && count <= EXACT_COUNT_MAX) {
+      const exact = await exactCount();
+      if (exact != null) {
+        total = Math.max(exact, seen);
+        totalIsExact = true;
+      }
+    }
 
     return {
       ok: true,
@@ -238,9 +248,46 @@ async function BrowseResults({
         (r) => Array.isArray(r.media) && r.media.length > 0,
       ),
       total,
-      totalIsExact: !hasNext,
+      totalIsExact,
       hasNext,
     };
+  }
+
+  // Basis-Abfrage für /stoebern: sichtbar = aktiv, mit Bild, Bild nicht als
+  // gelöscht markiert, plus Nutzer-Filter. Eine Stelle für Liste und Zählung.
+  function visibleListings(
+    columns: string,
+    opts: { count: "planned" | "exact"; head?: boolean },
+  ) {
+    if (!supabase) return null;
+    const q = supabase
+      .from("listings")
+      .select(columns, opts)
+      .eq("status", "active")
+      .not("media", "is", null)
+      // media_ok=false = Cover beim Anbieter gelöscht (Bazaraki räumt den
+      // GCS-Bucket auf, sobald das Inserat offline geht). Die Karte wäre
+      // eine graue Fläche und fast immer auch eine Karteileiche.
+      // NULL = noch nicht geprüft und bleibt sichtbar.
+      .not("media_ok", "is", false);
+    return applyFiltersToQuery(q, filters);
+  }
+
+  // Exakte Trefferzahl mit Zeitlimit; null = zu langsam oder Fehler, dann
+  // bleibt die Schätzung stehen.
+  async function exactCount(): Promise<number | null> {
+    const q = visibleListings("id", { count: "exact", head: true });
+    if (!q) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), EXACT_COUNT_TIMEOUT_MS);
+    try {
+      const { count, error } = await q.abortSignal(ctrl.signal);
+      return error || count == null ? null : count;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   if (!listings.ok) {
@@ -249,19 +296,44 @@ async function BrowseResults({
 
   const { rows, total, totalIsExact, hasNext } = listings;
 
-  // Initial-Favoriten-Status für eingeloggte User in einer Query holen,
-  // damit die Karten direkt korrekt gerendert werden (kein Flicker).
-  let savedIds = new Set<string>();
-  if (supabase && user && rows.length > 0) {
+  // Favoriten-Status (eingeloggt) und Badge-Daten für alle Karten der Seite
+  // parallel in je einer Abfrage — kein Flicker, keine Abfrage pro Karte.
+  const ids = rows.map((r) => r.id);
+  const [savedIds, clusterById] = await Promise.all([
+    loadSavedIds(),
+    loadClusterInfo(),
+  ]);
+
+  async function loadSavedIds(): Promise<Set<string>> {
+    if (!supabase || !user || ids.length === 0) return new Set();
     const { data: bm } = await supabase
       .from("listing_bookmarks")
       .select("listing_id")
       .eq("user_id", user.id)
-      .in(
-        "listing_id",
-        rows.map((r) => r.id),
-      );
-    savedIds = new Set((bm ?? []).map((b) => b.listing_id as string));
+      .in("listing_id", ids);
+    return new Set((bm ?? []).map((b) => b.listing_id as string));
+  }
+
+  // Fehler hier dürfen die Seite nicht kippen — dann eben ohne Badge.
+  async function loadClusterInfo(): Promise<Map<string, ClusterInfo>> {
+    const out = new Map<string, ClusterInfo>();
+    if (!supabase || ids.length === 0) return out;
+    const { data, error } = await supabase.rpc("browse_cluster_stats", { p_ids: ids });
+    if (error) {
+      console.error("stoebern: browse_cluster_stats fehlgeschlagen:", error.message);
+      return out;
+    }
+    for (const r of (data ?? []) as {
+      listing_id: string;
+      cluster_offers_count: number;
+      min_cluster_price: number | string | null;
+    }[]) {
+      out.set(r.listing_id, {
+        offers: Number(r.cluster_offers_count) || 1,
+        minPrice: r.min_cluster_price == null ? null : Number(r.min_cluster_price),
+      });
+    }
+    return out;
   }
 
   const isAuthenticated = Boolean(user);
@@ -307,6 +379,7 @@ async function BrowseResults({
                 initialSaved={savedIds.has(l.id)}
                 isAuthenticated={isAuthenticated}
                 backUrl={backUrlForCards}
+                cluster={clusterById.get(l.id)}
               />
             ))}
           </div>
@@ -438,6 +511,7 @@ function BrowseCard({
   initialSaved,
   isAuthenticated,
   backUrl,
+  cluster,
 }: {
   listing: Row;
   t: T;
@@ -445,6 +519,7 @@ function BrowseCard({
   initialSaved: boolean;
   isAuthenticated: boolean;
   backUrl: string;
+  cluster?: ClusterInfo;
 }) {
   const cover = listing.media?.[0];
   const href = `/listings/${listing.id}?back=${encodeURIComponent(backUrl)}`;
@@ -482,6 +557,7 @@ function BrowseCard({
           </div>
           <MarketPositionPill position={listing.market_position} t={t} />
         </div>
+        <ClusterPill listing={listing} cluster={cluster} t={t} lang={lang} />
         <h3 className="text-sm font-medium text-[var(--brand-navy)] leading-snug line-clamp-1">
           {roomsTitle(listing.rooms, listing.property_type, t)}
         </h3>
@@ -515,6 +591,35 @@ function BrowseCard({
         </div>
       </div>
     </Link>
+  );
+}
+
+// Gleicher Hinweis wie auf den Sophie-Treffern (MatchCard), aber als <span>:
+// die Karte ist selbst ein <Link>, ein zweiter Link darin wäre ungültig. Die
+// Liste der ähnlichen Inserate steht auf der Detailseite (#cluster-offers).
+function ClusterPill({
+  listing,
+  cluster,
+  t,
+  lang,
+}: {
+  listing: Row;
+  cluster?: ClusterInfo;
+  t: T;
+  lang: SupportedLang;
+}) {
+  if (!cluster || cluster.offers < 2) return null;
+  const others = cluster.offers - 1;
+  const cheaper = cluster.minPrice != null && cluster.minPrice < listing.price;
+  return (
+    <span className="self-start inline-flex items-center rounded-full bg-amber-100 text-amber-900 border border-amber-200 text-[10px] font-medium px-2 py-0.5">
+      {cheaper
+        ? tFormat(t("matchCard.cheaperElsewhere"), {
+            price: fmt(cluster.minPrice as number, listing.currency, lang),
+            n: others,
+          })
+        : tFormat(t("matchCard.providers"), { n: others })}
+    </span>
   );
 }
 

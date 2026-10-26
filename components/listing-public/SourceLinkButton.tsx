@@ -3,19 +3,7 @@
 import { ExternalLink } from "lucide-react";
 import { useT } from "@/lib/i18n/client";
 import { tFormat } from "@/lib/i18n/dict";
-
-const SOURCE_LABELS: Record<string, string> = {
-  bazaraki: "Bazaraki",
-  index_cy: "INDEX.cy",
-  cyprus_real_estate: "Cyprus-Real.Estate",
-  fb: "Facebook",
-  direct: "Home4U",
-  other: "—",
-};
-
-function sourceLabel(source: string): string {
-  return SOURCE_LABELS[source] ?? source;
-}
+import { sourceLabel } from "@/lib/listings/source-labels";
 
 export function SourceLinkButton({
   sourceUrl,
