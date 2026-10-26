@@ -1,47 +1,69 @@
 """BSC-Crawler Entry-Point.
 
 Flow:
-  1. Sitemap-Discovery: alle 10 sub-sitemaps walken → ID-eindeutige Detail-URLs
-     (~160k inkl. Archive bei BSC)
-  2. Inkrementell: bekannte external_ids paketweise nachschlagen (RPC)
-  3. Streaming-Detail-Fetch + Parse + pHash + Upsert pro BATCH_SIZE —
-     erst neue Inserate, dann eine Scheibe bekannter zur Nachprüfung
-     (Recheck): aktiv → Upsert frischt last_seen auf, archiviert →
-     direkt stale. BSC lässt archivierte Inserate in der Sitemap, daher ist
-     nur die Detailseite ein verlässliches Lebenszeichen.
-  4. mark_stale am Ende — nur wenn vollständig durchgelaufen
+  1. Sitemap-Discovery: alle Sub-Sitemaps laut Index → ID-eindeutige
+     Detail-URLs (~189k inkl. gelöschter, Stand 2026-10)
+  2. Inkrementell: bekannte external_ids paketweise nachschlagen (RPC) →
+     Neu-Schlange (minus lokal gemerkter gelöschter IDs)
+  3. Recheck-Schlange aus der DB: aktive Inserate, die am längsten nicht
+     gesehen wurden (listings_recheck_candidates), mit gespeicherter URL.
+     NICHT aus der Sitemap: ~27 % der aktiven BSC-Inserate fehlen dort,
+     sind aber live (Stichprobe 2026-10-26: 36 von 40).
+  4. Beide Schlangen verschränkt nach Zeitanteil (RECHECK_SHARE), damit der
+     Neu-Rückstau den Recheck nicht verdrängt (bis 2026-10-26 kam der
+     Recheck nie dran: 0 von 3.420 pro Lauf).
+     Recheck-Ergebnis: live + unverändert → nur last_seen antippen,
+     live + Preis/URL neu → Upsert, gelöscht → direkt stale.
+  5. mark_stale am Ende — nur wenn vollständig durchgelaufen
+
+Gelöscht heißt: HTTP 404/410, Titel ohne €-Preis, oder 301 auf Such-/
+Startseite (siehe detail.classify_redirect).
 
 Watchdog (MAX_RUNTIME_S, default 90min): stoppt vor dem nächsten Listing,
-sobald die Wall-Clock das Budget reißt. Workflow-timeout +10min Headroom.
+sobald die Wall-Clock das Budget reißt. Workflow-timeout +25min Headroom.
+
+Kapazität (gemessen 2026-10-26, Runner mac-mini):
+  Detailseite ~1,3 s (inkl. 1,0 s Rate-Limit). Recheck unverändert ≈ 1,3 s
+  (Touch gebündelt, ~0). Neues Inserat ≈ 4–5 s (pHash + Insert-RPC).
+  Lauf 5400 s, davon ~5300 s Detailphase; 4 Läufe/Tag.
+  RECHECK_SHARE=0.7 → ~2.850 Rechecks/Lauf ≈ 11.400/Tag; Neu ≈ 1.600 s/Lauf
+  ≈ 350/Lauf ≈ 1.400/Tag. 115k aktive → ein Recheck-Umlauf ≈ 10 Tage
+  (< 14-Tage-Cutoff von mark_stale). Sind keine Rechecks fällig
+  (RECHECK_MIN_AGE_DAYS), bekommt Neu die ganze Zeit.
 
 BSC-Spezifika:
 - curl_cffi mit Chrome120-TLS-Fingerprint umgeht Cloudflare Managed Challenge
 - Sitemap-`.xml.gz` ist eine Anti-Scraper-Falle (10-Byte-Stub), nur `.xml` nutzen
-- Detail-Page-Aktiv-Filter: Title ohne €-Preis = archived → skip
 - Rate-Limit: 1.0s default, konservativer als andere Sources weil CF mitliest
 
 Env:
   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: Pflicht
   RATE_LIMIT_S: Pause pro Detail-Fetch (default 1.0)
-  MAX_LISTINGS: Cap für Smoke-Tests (default 0 = unbegrenzt)
+  MAX_LISTINGS: Cap für Smoke-Tests, gilt je Schlange (default 0 = unbegrenzt)
   MAX_RUNTIME_S: Wall-Clock-Budget bevor sauberer Stopp (default 5400 = 90min)
   STREAM_BATCH_SIZE: Batch-Size für Streaming-Upsert (default 50)
   DRY_RUN=1: kein DB-Write, nur loggen
   SKIP_PHASH=1: pHash-Phase überspringen
-  FORCE_REFETCH=1: auch bereits indexierte Listings nochmal fetchen
+  FORCE_REFETCH=1: auch bereits indexierte Listings nochmal fetchen (kein Recheck)
   UPSERT_CHUNK_SIZE: Zeilen pro Upsert-RPC (default 25)
   DEFER_MARKET_POSITION=1: Marktposition nicht pro Zeile im Upsert rechnen,
     sondern am Laufende gesammelt (recompute_market_positions_pending).
-    Für den Backfill-Rückstau; pro Zeile kostet sie sonst ~3 s.
-  RECHECK_PER_RUN: bekannte Inserate pro Lauf nachprüfen (default 3500,
-    0 = aus). Scheibe = GITHUB_RUN_NUMBER % Anzahl Scheiben → bei ~115k
-    bekannten und 4 Läufen/Tag kommt jedes Inserat ~alle 8 Tage dran,
-    sicher innerhalb des 14-Tage-Cutoffs von mark_stale.
+  RECHECK_PER_RUN: max. Recheck-Kandidaten pro Lauf (default 4500, 0 = aus;
+    mehr als ~4.000 schafft ein 90-min-Lauf ohnehin nicht)
+  RECHECK_MIN_AGE_DAYS: nur Inserate nachprüfen, die so lange nicht gesehen
+    wurden (default 7)
+  RECHECK_SHARE: Anteil der Laufzeit für Recheck, solange beide Schlangen
+    Arbeit haben (default 0.7)
+  RECHECK_MAX_GONE_SHARE: Notbremse — mehr als dieser Anteil "gelöscht"
+    unter den Rechecks (ab 50 Stück) → nichts mehr stale setzen, Lauf rot
+    (default 0.5; erwartet sind ~5–15 %)
+  ARCHIVED_CACHE_TTL_DAYS: gelöschte Sitemap-IDs so lange nicht neu holen
+    (default 60). Datei: $BSC_STATE_DIR/archived_ids.tsv
+    (default ~/.cache/home4u-bsc/, bleibt auf dem self-hosted Runner liegen)
 """
 from __future__ import annotations
 
 import logging
-import math
 import os
 import sys
 import time
@@ -50,14 +72,17 @@ import httpx
 from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from . import archived_cache
 from .dedup import compute_phash_from_url
 from .detail import STATUS_ACTIVE, STATUS_ARCHIVED, ParsedListing, check_detail
 from .http_client import BscSession
-from .sitemap import ListingURL, discover_all_listings
+from .sitemap import LISTING_URL_PATTERN, ListingURL, discover_all_listings
 from .writer import (
     lookup_known_ids,
     mark_stale_ids,
+    recheck_candidates,
     recompute_market_pending,
+    touch_ids,
     upsert_listings,
 )
 
@@ -73,11 +98,21 @@ def _setup_logging() -> None:
     )
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip().replace(",", ".")
+    return float(raw) if raw else default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    return int(raw) if raw else default
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=20))
 def _mark_stale_rpc() -> int:
     """Stale-Markierung verwendet dieselbe RPC wie alle anderen Sources.
     Schwelle 14d, der Sweep-Gate prüft selbst ob der Crawler frisch genug
-    war (mind. 5000 Listings in 24h gesehen)."""
+    war (mind. 1000 Listings in 24h gesehen)."""
     url_base = os.environ["SUPABASE_URL"].rstrip("/")
     service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     url = f"{url_base}/rest/v1/rpc/mark_stale_listings"
@@ -98,21 +133,65 @@ def _mark_stale_rpc() -> int:
     return int(resp.json() or 0)
 
 
-def _recheck_slice(known_ids: set[str], per_run: int) -> tuple[list[str], int, int]:
-    """Deterministische Scheibe der bekannten IDs für diesen Lauf.
+def build_recheck_items(
+    candidates: list[dict], by_id: dict[str, ListingURL],
+) -> tuple[list[ListingURL], dict[str, dict], int]:
+    """RPC-Kandidaten → ListingURLs. URL aus der DB (source_url), sonst aus
+    der Sitemap. Liefert (items, meta je ID, Anzahl ohne brauchbare URL)."""
+    items: list[ListingURL] = []
+    meta: dict[str, dict] = {}
+    no_url = 0
+    for c in candidates:
+        lid = str(c.get("external_id") or "")
+        if not lid or lid in meta:
+            continue
+        url = c.get("source_url") or ""
+        m = LISTING_URL_PATTERN.match(url)
+        if not m or m.group("id") != lid:
+            sm = by_id.get(lid)
+            if sm is None:
+                no_url += 1
+                continue
+            items.append(sm)
+        else:
+            items.append(ListingURL(
+                listing_id=lid, detail_url=url, city_slug=m.group("city"),
+                district_slug=m.group("district"), type_slug=m.group("slug"),
+            ))
+        meta[lid] = {"price": c.get("price"), "source_url": url}
+    return items, meta, no_url
 
-    Ohne Zustand in der DB: Scheibe = GITHUB_RUN_NUMBER % n. Jeder Lauf nimmt
-    die nächste Scheibe, nach n Läufen ist jedes Inserat einmal geprüft.
-    Lokal (ohne Run-Nummer) fällt es auf die 6-h-Uhrzeit-Scheibe zurück.
-    """
-    if per_run <= 0 or not known_ids:
-        return [], 0, 0
-    ids = sorted(known_ids)
-    n = max(1, math.ceil(len(ids) / per_run))
-    run_no = os.getenv("GITHUB_RUN_NUMBER", "").strip()
-    seed = int(run_no) if run_no.isdigit() else int(time.time() // (6 * 3600))
-    slot = seed % n
-    return [lid for k, lid in enumerate(ids) if k % n == slot], slot, n
+
+def needs_upsert(p: ParsedListing, meta: dict | None) -> bool:
+    """Recheck live: voller Upsert nur, wenn sich Preis oder URL geändert
+    haben (oder wir den alten Stand nicht kennen). Sonst reicht Touch."""
+    if not meta:
+        return True
+    old = meta.get("price")
+    if old is None or p.price is None:
+        return True
+    try:
+        if abs(float(old) - float(p.price)) >= 0.5:
+            return True
+    except (TypeError, ValueError):
+        return True
+    return (meta.get("source_url") or "") != p.detail_url
+
+
+def pick_recheck(t_recheck: float, t_new: float, share: float,
+                 has_recheck: bool, has_new: bool) -> bool:
+    """Nächstes Item aus der Recheck-Schlange? Zeitanteil statt Stückzahl,
+    weil ein neues Inserat (Insert ~3–5 s) viel teurer ist als ein Recheck."""
+    if not has_recheck:
+        return False
+    if not has_new:
+        return True
+    return t_recheck <= share * (t_recheck + t_new)
+
+
+def gone_share_exceeded(gone: int, alive: int, max_share: float, min_n: int = 50) -> bool:
+    n = gone + alive
+    return n >= min_n and gone > max_share * n
 
 
 def main() -> int:
@@ -124,12 +203,18 @@ def main() -> int:
         log.error("SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY müssen gesetzt sein")
         return 1
 
-    rate_limit = float(os.getenv("RATE_LIMIT_S", "1.0").replace(",", "."))
-    max_listings = int(os.getenv("MAX_LISTINGS", "0").strip() or "0") or None
+    rate_limit = _env_float("RATE_LIMIT_S", 1.0)
+    max_listings = _env_int("MAX_LISTINGS", 0) or None
     dry_run = os.getenv("DRY_RUN") == "1"
     skip_phash = os.getenv("SKIP_PHASH") == "1"
     force_refetch = os.getenv("FORCE_REFETCH") == "1"
-    max_runtime_s = int(os.getenv("MAX_RUNTIME_S", "5400").strip() or "5400")
+    max_runtime_s = _env_int("MAX_RUNTIME_S", 5400)
+    recheck_per_run = _env_int("RECHECK_PER_RUN", 4500)
+    recheck_min_age = _env_float("RECHECK_MIN_AGE_DAYS", 7.0)
+    recheck_share = min(1.0, max(0.0, _env_float("RECHECK_SHARE", 0.7)))
+    max_gone_share = _env_float("RECHECK_MAX_GONE_SHARE", 0.5)
+    cache_path = archived_cache.default_path()
+    cache_ttl = _env_int("ARCHIVED_CACHE_TTL_DAYS", 60)
 
     started = time.time()
     session = BscSession()
@@ -140,16 +225,15 @@ def main() -> int:
     log.info("Discovery fertig: %d unique listings", len(all_urls))
     if not all_urls:
         # Gleiche Falle wie bei cre 2026-07-27 bis 2026-09-07 (Sitemaps
-        # umbenannt, CI blieb 6 Wochen grün). Hier kommt die Sitemap-Liste
-        # zwar hart kodiert aus sitemap.py, aber eine Cloudflare-Blockade
-        # oder ein Format-Wechsel sieht identisch aus: 0 URLs. Bei >0 vorher
-        # indexierten Listings ist das ein Fehler — CI muss das rot zeigen.
+        # umbenannt, CI blieb 6 Wochen grün). Eine Cloudflare-Blockade oder
+        # ein Format-Wechsel sieht identisch aus: 0 URLs → CI muss rot sein.
         log.error("0 Listings discovered — Abbruch (Sitemaps weg oder geblockt?)")
         return 1
 
-    # Phase 2: inkrementell — bekannte IDs paketweise nachschlagen
+    # Phase 2: Neu-Schlange (Sitemap minus bekannt) + Recheck-Schlange (DB)
     by_id: dict[str, ListingURL] = {u.listing_id: u for u in all_urls}
     recheck: list[ListingURL] = []
+    recheck_meta: dict[str, dict] = {}
     if force_refetch:
         log.info("FORCE_REFETCH=1 — alle %d Listings werden gefetched", len(all_urls))
         todo: list[ListingURL] = all_urls
@@ -166,13 +250,29 @@ def main() -> int:
             log.error("Nachschlagen für %d von %d IDs fehlgeschlagen — Abbruch",
                       len(unresolved), len(by_id))
             return 1
+        cached_gone = archived_cache.load(cache_path, cache_ttl)
         todo = [u for u in all_urls
-                if u.listing_id not in known and u.listing_id not in unresolved]
-        recheck_per_run = int(os.getenv("RECHECK_PER_RUN", "3500").strip() or "0")
-        slice_ids, slot, n_slices = _recheck_slice(known, recheck_per_run)
-        recheck = [by_id[i] for i in slice_ids]
-        log.info("Neu zu fetchen: %d von %d; Recheck: %d (Scheibe %d/%d)",
-                 len(todo), len(all_urls), len(recheck), slot + 1, n_slices)
+                if u.listing_id not in known and u.listing_id not in unresolved
+                and u.listing_id not in cached_gone]
+        log.info("Neu zu fetchen: %d von %d (%d als gelöscht gemerkt, %s)",
+                 len(todo), len(all_urls), len(cached_gone), cache_path)
+
+        rc_limit = recheck_per_run
+        if max_listings and rc_limit > 0:
+            rc_limit = min(rc_limit, max_listings)
+        if rc_limit > 0:
+            t_rc = time.time()
+            try:
+                cands = recheck_candidates(recheck_min_age, rc_limit)
+            except Exception as e:
+                # Ohne Recheck läuft der Lauf trotzdem (Neu-Schlange).
+                log.warning("Recheck-Kandidaten nicht ladbar: %s", e)
+                cands = []
+            recheck, recheck_meta, no_url = build_recheck_items(cands, by_id)
+            oldest = cands[0].get("last_seen") if cands else "-"
+            log.info("Recheck: %d Kandidaten (älter als %.0f Tage, ältester last_seen %s), "
+                     "%d ohne URL übersprungen (%.1fs)",
+                     len(recheck), recheck_min_age, oldest, no_url, time.time() - t_rc)
 
     if max_listings:
         todo = todo[:max_listings]
@@ -184,19 +284,24 @@ def main() -> int:
         return 0
 
     # Phase 3: Detail-Fetch + Parse + pHash + Streaming-Upsert
-    BATCH_SIZE = int(os.getenv("STREAM_BATCH_SIZE", "50").strip() or "50")
+    BATCH_SIZE = _env_int("STREAM_BATCH_SIZE", 50)
     log.info(
-        "Phase 2: detail-fetch + streaming-upsert (rate %.1fs, batch %d, watchdog %ds) …",
-        rate_limit, BATCH_SIZE, max_runtime_s,
+        "Phase 2: detail-fetch + streaming-upsert (rate %.1fs, batch %d, watchdog %ds, "
+        "Recheck-Anteil %.0f %%) …",
+        rate_limit, BATCH_SIZE, max_runtime_s, recheck_share * 100,
     )
     detail_started = time.time()
     batch: list[ParsedListing] = []
     total_parsed = 0
     total_skipped_archived = 0
     total_errors = 0
-    recheck_active = recheck_archived = recheck_errors = 0
+    rc_alive = rc_touch = rc_upsert = rc_gone = rc_errors = 0
     total_marked_stale = 0
-    archived_known: list[str] = []
+    total_touched = 0
+    gone_known: list[str] = []
+    gone_new: list[str] = []
+    touch_pending: list[str] = []
+    gone_guard_tripped = False
     total_attempted = 0  # Zeilen, die an die Upsert-RPC gingen
     total_inserted = 0
     total_updated = 0
@@ -238,67 +343,126 @@ def main() -> int:
             )
         batch = []
 
-    def flush_archived() -> None:
-        nonlocal archived_known, total_marked_stale
-        if not archived_known:
+    def flush_touch() -> None:
+        nonlocal touch_pending, total_touched
+        if not touch_pending:
             return
         if dry_run:
-            log.info("  DRY_RUN — %d verifiziert archivierte NICHT stale gesetzt", len(archived_known))
+            log.info("  DRY_RUN — %d live+unverändert NICHT angetippt", len(touch_pending))
         else:
             try:
-                n = mark_stale_ids(archived_known)
-                total_marked_stale += n
-                log.info("  stale gesetzt (Detailseite archiviert): %d", n)
+                n = touch_ids(touch_pending)
+                total_touched += n
+                log.info("  last_seen aufgefrischt (live, unverändert): %d von %d",
+                         n, len(touch_pending))
             except Exception as e:
-                log.warning("mark_stale_ids(%d) fehlgeschlagen: %s", len(archived_known), e)
-        archived_known = []
+                log.warning("touch_ids(%d) fehlgeschlagen: %s", len(touch_pending), e)
+        touch_pending = []
 
-    work: list[tuple[ListingURL, bool]] = [(u, False) for u in todo] + [(u, True) for u in recheck]
-    for idx, (sitemap_listing, is_recheck) in enumerate(work, start=1):
+    def flush_gone() -> None:
+        nonlocal gone_known, total_marked_stale, gone_guard_tripped
+        if not gone_known:
+            return
+        if gone_share_exceeded(rc_gone, rc_alive, max_gone_share):
+            if not gone_guard_tripped:
+                log.error(
+                    "NOTBREMSE: %d von %d Rechecks 'gelöscht' (> %.0f %%) — setze nichts "
+                    "stale. BSC-Seitenformat/Redirects prüfen.",
+                    rc_gone, rc_gone + rc_alive, max_gone_share * 100,
+                )
+            gone_guard_tripped = True
+            gone_known = []
+            return
+        if dry_run:
+            log.info("  DRY_RUN — %d verifiziert gelöschte NICHT stale gesetzt", len(gone_known))
+        else:
+            try:
+                n = mark_stale_ids(gone_known)
+                total_marked_stale += n
+                log.info("  stale gesetzt (Detailseite: gelöscht): %d", n)
+            except Exception as e:
+                log.warning("mark_stale_ids(%d) fehlgeschlagen: %s", len(gone_known), e)
+        gone_known = []
+
+    t_spent = {True: 0.0, False: 0.0}
+    qi = {True: 0, False: 0}
+    queues = {True: recheck, False: todo}
+    n_work = len(todo) + len(recheck)
+    idx = 0
+    while qi[True] < len(recheck) or qi[False] < len(todo):
+        idx += 1
         elapsed = time.time() - started
         if elapsed > max_runtime_s:
             aborted_reason = (
                 f"MAX_RUNTIME_S={max_runtime_s}s erreicht nach {elapsed:.0f}s "
-                f"— sauberer Stopp bei Listing {idx}/{len(work)}"
+                f"— sauberer Stopp bei Listing {idx}/{n_work}"
             )
             log.warning(aborted_reason)
             all_done = False
             break
-        status, p = check_detail(session, sitemap_listing)
+        is_recheck = pick_recheck(
+            t_spent[True], t_spent[False], recheck_share,
+            qi[True] < len(recheck), qi[False] < len(todo),
+        )
+        item = queues[is_recheck][qi[is_recheck]]
+        qi[is_recheck] += 1
+        t0 = time.time()
+
+        status, p = check_detail(session, item)
         if status == STATUS_ACTIVE and p is not None:
-            # Upsert frischt last_seen auf (und reaktiviert ggf. stale).
-            batch.append(p)
             total_parsed += 1
             if is_recheck:
-                recheck_active += 1
+                rc_alive += 1
+                if needs_upsert(p, recheck_meta.get(item.listing_id)):
+                    rc_upsert += 1
+                    batch.append(p)
+                else:
+                    rc_touch += 1
+                    touch_pending.append(item.listing_id)
+            else:
+                batch.append(p)
         elif status == STATUS_ARCHIVED:
             total_skipped_archived += 1
             if is_recheck:
-                recheck_archived += 1
-                archived_known.append(sitemap_listing.listing_id)
+                rc_gone += 1
+                gone_known.append(item.listing_id)
+            else:
+                gone_new.append(item.listing_id)
         else:
             total_errors += 1
             if is_recheck:
-                recheck_errors += 1
+                rc_errors += 1
         if len(batch) >= BATCH_SIZE:
             flush_batch()
-        if len(archived_known) >= 200:
-            flush_archived()
+        if len(touch_pending) >= 500:
+            flush_touch()
+        if len(gone_known) >= 200:
+            flush_gone()
         if idx % 50 == 0:
             log.info(
-                "  detail-progress %d/%d (parsed %d, archived %d, errors %d, %.1fs)",
-                idx, len(work), total_parsed, total_skipped_archived, total_errors,
+                "  detail-progress %d/%d (neu %d/%d, recheck %d/%d; parsed %d, gelöscht %d, "
+                "errors %d, %.1fs)",
+                idx, n_work, qi[False], len(todo), qi[True], len(recheck),
+                total_parsed, total_skipped_archived, total_errors,
                 time.time() - detail_started,
             )
         time.sleep(rate_limit)
+        t_spent[is_recheck] += time.time() - t0
 
     flush_batch()
-    flush_archived()
+    flush_touch()
+    flush_gone()
+    if gone_new and not dry_run:
+        archived_cache.append(cache_path, gone_new)
     log.info(
-        "Recheck: %d aktiv (last_seen frisch), %d archiviert (davon %d stale gesetzt), %d Fehler",
-        recheck_active, recheck_archived, total_marked_stale, recheck_errors,
+        "Recheck: %d geprüft — %d live (%d angetippt, %d Upsert), %d gelöscht "
+        "(%d stale gesetzt), %d Fehler; Zeit recheck/neu %.0fs/%.0fs",
+        qi[True], rc_alive, rc_touch, rc_upsert, rc_gone, total_marked_stale,
+        rc_errors, t_spent[True], t_spent[False],
     )
-    if recheck_errors and recheck_errors > (recheck_active + recheck_archived):
+    log.info("Neu: %d geprüft, davon %d gelöscht (gemerkt, nächster Lauf überspringt)",
+             qi[False], len(gone_new))
+    if rc_errors and rc_errors > (rc_alive + rc_gone):
         log.warning("Recheck: mehr Fehler als Ergebnisse — Cloudflare/Netz prüfen")
     log.info(
         "Detail+Upsert-Phase fertig: %d parsed, %d archived/skip, %d ins, %d upd, "
@@ -310,6 +474,8 @@ def main() -> int:
     # mark_stale nur wenn vollständig
     if dry_run:
         log.info("DRY_RUN — kein mark_stale.")
+    elif gone_guard_tripped:
+        log.warning("mark_stale übersprungen — Notbremse ausgelöst")
     elif all_done:
         log.info("Mark stale (>14d unseen, min_recent_seen=1000) …")
         try:
@@ -335,13 +501,16 @@ def main() -> int:
                         time.time() - t_mp, e)
 
     log.info(
-        "RESULT: ok=%s parsed=%d archived=%d inserted=%d updated=%d deduped=%d failed=%d elapsed=%.1fs aborted=%s",
+        "RESULT: ok=%s parsed=%d archived=%d inserted=%d updated=%d deduped=%d failed=%d "
+        "recheck=%d touched=%d stale=%d elapsed=%.1fs aborted=%s",
         "true" if all_done else "partial",
         total_parsed, total_skipped_archived, total_inserted, total_updated,
-        total_deduped, total_failed, time.time() - started,
-        aborted_reason or "",
+        total_deduped, total_failed, qi[True], total_touched, total_marked_stale,
+        time.time() - started, aborted_reason or "",
     )
 
+    if gone_guard_tripped:
+        return 1
     # Ein Lauf ohne Wirkung muss rot werden (2026-10-23..26: 4 Läufe/Tag
     # grün, 0 Writes, erst der Health-Check hat es nach 3 Tagen gemerkt).
     if not dry_run and total_attempted > 0:

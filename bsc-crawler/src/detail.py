@@ -20,7 +20,10 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from urllib.parse import urljoin, urlsplit
+
 from .http_client import BscSession
+from .sitemap import LISTING_URL_PATTERN
 
 log = logging.getLogger(__name__)
 
@@ -212,6 +215,33 @@ def _extract_cover_url(html: str) -> str | None:
     return og_url
 
 
+_REDIRECT_CODES = (301, 302, 303, 307, 308)
+_BSC_HOST = "www.buysellcyprus.com"
+
+
+def classify_redirect(from_url: str, location: str | None, listing_id: str) -> tuple[str, str]:
+    """Redirect einer Detailseite deuten. Liefert (kind, absolute_target):
+
+    - "moved":   Ziel ist eine Detailseite mit DERSELBEN ID (Slug/Bezirk neu)
+    - "removed": Ziel ist die Startseite oder eine Suchseite
+                 (/properties-for-sale/…) — so leitet BSC gelöschte Inserate um
+    - "unknown": alles andere (fremde ID, fremder Host, kein Location-Header)
+    """
+    if not location:
+        return "unknown", ""
+    target = urljoin(from_url, location)
+    m = LISTING_URL_PATTERN.match(target)
+    if m:
+        return ("moved" if m.group("id") == str(listing_id) else "unknown"), target
+    parts = urlsplit(target)
+    if parts.netloc not in (_BSC_HOST, "buysellcyprus.com"):
+        return "unknown", target
+    path = parts.path.rstrip("/")
+    if path == "" or path.startswith("/properties-for-sale/") or path == "/properties-for-sale":
+        return "removed", target
+    return "unknown", target
+
+
 STATUS_ACTIVE = "active"
 STATUS_ARCHIVED = "archived"
 STATUS_ERROR = "error"
@@ -234,16 +264,41 @@ def check_detail(session: BscSession, listing: "object") -> tuple[str, ParsedLis
 
     Nur ARCHIVED darf zur Stilllegung führen. Ein Fehler beim Abruf ist kein
     Beweis, dass das Inserat weg ist.
+
+    Redirects werden selbst ausgewertet (nicht blind gefolgt):
+    - 301 auf dieselbe ID mit anderem Slug/Bezirk → umgezogen, dort parsen
+      (ParsedListing.detail_url ist dann die neue URL)
+    - 301 auf Such- oder Startseite → Inserat gelöscht (ARCHIVED). Vorher
+      folgte der Client dem Redirect, der Title-Parse schlug fehl und das
+      Inserat zählte als ERROR — gelöschte Inserate wurden nie stillgelegt.
+    - jeder andere Redirect → ERROR (unbekanntes Muster, kein Beweis)
     """
-    try:
-        status, body = session.get(listing.detail_url, timeout=30)
-    except Exception as e:
-        log.debug("fetch failed for %s: %s", listing.detail_url, e)
+    url = listing.detail_url
+    city_slug = listing.city_slug
+    for _hop in range(3):
+        try:
+            status, body, location = session.fetch(url, timeout=30, allow_redirects=False)
+        except Exception as e:
+            log.debug("fetch failed for %s: %s", url, e)
+            return STATUS_ERROR, None
+        if status not in _REDIRECT_CODES:
+            break
+        kind, target = classify_redirect(url, location, listing.listing_id)
+        if kind == "moved":
+            url = target
+            city_slug = LISTING_URL_PATTERN.match(target).group("city")
+            continue
+        if kind == "removed":
+            log.debug("removed (redirect → %s): %s", target, listing.detail_url)
+            return STATUS_ARCHIVED, None
+        log.debug("unbekannter Redirect %s → %s", url, target)
         return STATUS_ERROR, None
+    else:
+        return STATUS_ERROR, None  # Redirect-Kette
     if status in (404, 410):
         return STATUS_ARCHIVED, None
     if status != 200:
-        log.debug("HTTP %s for %s", status, listing.detail_url)
+        log.debug("HTTP %s for %s", status, url)
         return STATUS_ERROR, None
 
     # Title bevorzugt aus <title>, Fallback og:title
@@ -255,7 +310,12 @@ def check_detail(session: BscSession, listing: "object") -> tuple[str, ParsedLis
 
     parsed = parse_title(title_text)
     if not parsed:
-        log.debug("title-parse miss for %s — title=%r", listing.detail_url, title_text[:80])
+        log.debug("title-parse miss for %s — title=%r", url, title_text[:80])
+        return STATUS_ERROR, None
+    if str(parsed["listing_id"]) != str(listing.listing_id):
+        # Seite gehört zu einem anderen Inserat — nicht unter falscher ID
+        # schreiben und nicht als Lebenszeichen des angefragten werten.
+        log.debug("ID-Mismatch %s ≠ %s auf %s", parsed["listing_id"], listing.listing_id, url)
         return STATUS_ERROR, None
 
     # Aktiv-Heuristik: BSC behält archived Listings in der Sitemap, die
@@ -283,12 +343,12 @@ def check_detail(session: BscSession, listing: "object") -> tuple[str, ParsedLis
     # Sitemap-Boilerplate ohne das Pattern.
     is_share = bool(_BODY_SHARE_RE.search(body))
 
-    city, district = _strip_district_suffix(parsed["location_raw"], listing.city_slug)
+    city, district = _strip_district_suffix(parsed["location_raw"], city_slug)
 
     return STATUS_ACTIVE, ParsedListing(
         listing_id=parsed["listing_id"],
         listing_type=parsed["sale_type"],
-        detail_url=listing.detail_url,
+        detail_url=url,
         price=parsed["price"],
         currency="EUR",
         title=title_text.strip(),

@@ -43,11 +43,21 @@ class BscSession:
 
     def get(self, url: str, timeout: float = 30.0, retries: int = 3) -> tuple[int, str]:
         """Single GET mit Retry. Liefert (status_code, body_text)."""
+        status, body, _ = self.fetch(url, timeout=timeout, retries=retries)
+        return status, body
+
+    def fetch(
+        self, url: str, timeout: float = 30.0, retries: int = 3,
+        allow_redirects: bool = True,
+    ) -> tuple[int, str, str | None]:
+        """Wie get, liefert zusätzlich den Location-Header. Mit
+        allow_redirects=False sieht der Aufrufer, WOHIN BSC umleitet —
+        gelöschte Inserate leiten auf Suchseite/Startseite um."""
         s = self._ensure_session()
         last_err: Exception | None = None
         for attempt in range(retries):
             try:
-                r = s.get(url, timeout=timeout)
+                r = s.get(url, timeout=timeout, allow_redirects=allow_redirects)
                 # Cloudflare-Challenge nach erfolgreichem Bootstrap signalisiert
                 # einen Reset — Session reseten und einmal nachholen
                 if r.status_code == 403 and "Just a moment" in r.text[:500]:
@@ -57,7 +67,7 @@ class BscSession:
                     if attempt < retries - 1:
                         time.sleep(2 * (attempt + 1))
                         continue
-                return r.status_code, r.text
+                return r.status_code, r.text, r.headers.get("location")
             except Exception as e:
                 last_err = e
                 log.warning("fetch %s attempt %d failed: %s", url, attempt + 1, e)
