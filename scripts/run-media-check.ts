@@ -27,11 +27,13 @@
 import { createClient } from "@supabase/supabase-js";
 
 const LIMIT = parseInt(process.env.LIMIT ?? "5000", 10);
-const BATCH = parseInt(process.env.BATCH ?? "250", 10);
+// 1000 statt 250: weniger Queue-Abfragen (mit Quellenfilter bis ~18 s je Abfrage).
+const BATCH = parseInt(process.env.BATCH ?? "1000", 10);
 const CONCURRENCY = parseInt(process.env.CONCURRENCY ?? "6", 10);
 const TIMEOUT_MS = parseInt(process.env.TIMEOUT_MS ?? "15000", 10);
 const RECHECK_DAYS = parseInt(process.env.RECHECK_DAYS ?? "0", 10);
-const SOURCE = process.env.SOURCE ?? null;
+// Leerer String (Workflow ohne Auswahl) = alle Quellen.
+const SOURCE = process.env.SOURCE?.trim() || null;
 const DRY_RUN = process.env.DRY_RUN === "1";
 
 /**
@@ -206,31 +208,18 @@ function printHostStats() {
 }
 
 async function fetchBatch(size: number, offset: number): Promise<Row[]> {
-  let q = supabase
-    .from("listings")
-    .select("id, media")
-    .eq("status", "active")
-    .not("media", "is", null);
-
-  if (SOURCE) q = q.eq("source", SOURCE);
-
-  if (RECHECK_DAYS > 0) {
-    const cutoff = new Date(Date.now() - RECHECK_DAYS * 86400_000).toISOString();
-    q = q.or(`media_checked_at.is.null,media_checked_at.lt.${cutoff}`);
-  } else {
-    q = q.is("media_checked_at", null);
-  }
-
-  q = q.order("media_checked_at", { ascending: true, nullsFirst: true });
-
-  // Im Normalbetrieb raeumt jeder Batch sich selbst ab (media_checked_at
-  // wird gesetzt), die naechste Abfrage liefert also automatisch die
-  // naechsten. Im Trockenlauf schreiben wir nichts — da muessen wir per
-  // Offset blaettern, sonst pruefen wir ewig dieselben Zeilen.
-  const { data, error } = DRY_RUN
-    ? await q.range(offset, offset + size - 1)
-    : await q.limit(size);
-
+  // RPC statt PostgREST-Filter: "ungeprüft ODER älter als N Tage" als ein
+  // OR-Filter lief über den ganzen Index (44 s, 8-s-Limit gerissen). Die
+  // RPC fragt beide Teile getrennt ab (Migration 20261026190000).
+  // Im Normalbetrieb räumt jeder Batch sich selbst ab (media_checked_at
+  // wird gesetzt), also immer Offset 0. Im Trockenlauf schreiben wir nichts
+  // — da müssen wir per Offset blättern, sonst prüfen wir ewig dieselben.
+  const { data, error } = await supabase.rpc("media_check_queue", {
+    p_source: SOURCE,
+    p_recheck_days: RECHECK_DAYS,
+    p_limit: size,
+    p_offset: DRY_RUN ? offset : 0,
+  });
   if (error) throw new Error(`Batch-Query fehlgeschlagen: ${error.message}`);
   return (data ?? []) as Row[];
 }
