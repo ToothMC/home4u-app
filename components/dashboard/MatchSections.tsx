@@ -6,6 +6,7 @@ import { Inbox, Send, Handshake, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { OwnerInboxCard, type OwnerInboxRow } from "./OwnerInboxCard";
 import { AvailabilityChips } from "./AvailabilityChips";
+import { SwipeToDeleteRow } from "./SwipeToDeleteRow";
 import { onMatchesUpdated } from "@/lib/events/match-events";
 import { useT } from "@/lib/i18n/client";
 
@@ -145,9 +146,8 @@ export function MatchSections({
         <div className="space-y-3">
           {outbox.map((m) => {
             const cover = m.listing_media?.[0];
-            return (
+            const row = (
               <Link
-                key={m.match_id}
                 href={`/matches/${m.match_id}`}
                 className={`group flex items-stretch gap-3 rounded-lg border bg-[var(--card)] p-2 hover:bg-[var(--accent)] transition-colors ${
                   ["rented", "sold", "opted_out", "reserved"].includes(m.listing_status)
@@ -218,6 +218,25 @@ export function MatchSections({
                 </div>
                 <ChevronRight className="size-4 self-center text-[var(--muted-foreground)] opacity-0 group-hover:opacity-100 transition-opacity" />
               </Link>
+            );
+            // Abgelehnte Anfragen bleiben stehen (wie auf /matches/[id]):
+            // Zurückziehen würde den Match löschen und eine neue Anfrage an
+            // denselben Anbieter erlauben.
+            if (m.owner_interest === false) {
+              return <div key={m.match_id}>{row}</div>;
+            }
+            return (
+              <SwipeToDeleteRow
+                key={m.match_id}
+                endpoint="/api/matches/withdraw"
+                method="POST"
+                body={{ match_id: m.match_id }}
+                what={t("outbox.withdrawWhat")}
+                confirmLabel={t("withdraw.confirm")}
+                onDeleted={load}
+              >
+                {row}
+              </SwipeToDeleteRow>
             );
           })}
         </div>
