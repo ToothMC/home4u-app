@@ -18,6 +18,11 @@ import { extractTextListing } from "@/lib/scam/extract-text";
 import { extractImageListing } from "@/lib/scam/extract-image";
 import { dhashBuffer } from "@/lib/scam/phash";
 import { checkScamQuota } from "@/lib/scam/quota";
+import {
+  SCORE_LISTING_COLUMNS,
+  scoreAndPersistListing,
+  type ScoreableListing,
+} from "@/lib/scam/worker";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,9 +115,7 @@ async function handleUrlIndexLookup(
   // Index-Cache-Hit: Listing nach (source, external_id) suchen.
   const { data: listing, error } = await sb
     .from("listings")
-    .select(
-      "id, source, external_id, type, location_city, location_district, price, rooms, scam_score, scam_flags, contact_phone_hash",
-    )
+    .select(`${SCORE_LISTING_COLUMNS}, external_id, rooms, scam_score, scam_flags, scam_checked_at`)
     .eq("source", classified.source)
     .eq("external_id", classified.externalId)
     .eq("status", "active")
@@ -133,9 +136,40 @@ async function handleUrlIndexLookup(
     );
   }
 
-  // Score liegt schon vor → Result-Shape direkt rendern.
-  const flags = (listing.scam_flags as string[] | null) ?? [];
-  const score = Number(listing.scam_score ?? 0);
+  // scam_score = 0 ist der Spalten-Default und heißt "nicht geprüft"
+  // (Migration 0022) — nur mit scam_checked_at ist der Wert ein Ergebnis.
+  // Ungeprüfte Inserate jetzt bewerten (wie der Batch-Worker) und das
+  // Ergebnis am Listing speichern, statt 0 als "clean" auszugeben.
+  let flags: string[];
+  let score: number;
+  let similarListingIds: string[] = [listing.id];
+  let resultSource: "index_cache_hit" | "index_scored_now";
+  if (listing.scam_checked_at) {
+    flags = (listing.scam_flags as string[] | null) ?? [];
+    score = Number(listing.scam_score ?? 0);
+    resultSource = "index_cache_hit";
+  } else {
+    try {
+      const scored = await scoreAndPersistListing(sb, listing as ScoreableListing, {
+        imageTimeoutMs: 5_000,
+      });
+      flags = scored.flags;
+      score = scored.score;
+      similarListingIds = [listing.id, ...scored.similarListingIds.filter((id) => id !== listing.id)];
+      resultSource = "index_scored_now";
+    } catch (err) {
+      // Kein Ergebnis → nichts in scam_checks schreiben, Kontingent bleibt.
+      console.error("[scam-check] live scoring failed", listing.id, err);
+      return Response.json(
+        {
+          error: "score_failed",
+          reason:
+            "Dieses Inserat wurde noch nicht geprüft und die Prüfung ist gerade fehlgeschlagen. Bitte später erneut versuchen.",
+        },
+        { status: 503 },
+      );
+    }
+  }
   const explanation = renderUrlExplanation(listing, flags, score);
 
   // In scam_checks für Quota + History persistieren.
@@ -149,7 +183,7 @@ async function handleUrlIndexLookup(
       input_url: url.slice(0, 500),
       score,
       flags,
-      similar_listing_ids: [listing.id],
+      similar_listing_ids: similarListingIds,
       explanation_md: explanation,
       contact_phone_hash: (listing as { contact_phone_hash?: string | null }).contact_phone_hash ?? null,
     })
@@ -163,7 +197,7 @@ async function handleUrlIndexLookup(
     verdict: verdictFor(score),
     flags,
     explanation_md: explanation,
-    similar_listing_ids: [listing.id],
+    similar_listing_ids: similarListingIds,
     extracted: {
       listing_type: listing.type,
       price: listing.price != null ? Number(listing.price) : null,
@@ -173,7 +207,7 @@ async function handleUrlIndexLookup(
     },
     remaining_quota: Number.isFinite(quota.remaining) ? quota.remaining - 1 : null,
     tier: quota.tier,
-    source: "index_cache_hit",
+    source: resultSource,
   });
 }
 
