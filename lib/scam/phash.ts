@@ -84,7 +84,11 @@ export async function dhashFromUrl(url: string, timeoutMs = 10_000): Promise<big
 export function hamming(a: bigint, b: bigint): number {
   const ONE = BigInt(1);
   const ZERO = BigInt(0);
-  let x = a ^ b;
+  // Auf 64 Bit maskieren: Die Hashes sind signed (Postgres int8). Ohne Maske
+  // ist a ^ b bei unterschiedlichen Vorzeichen negativ, und `x &= x - 1`
+  // erreicht bei negativen BigInts nie 0 → Endlosschleife (hat Scam-Worker,
+  // Bild-Upload und URL-Check aufgehängt).
+  let x = (a ^ b) & MASK_64;
   let count = 0;
   while (x !== ZERO) {
     x &= x - ONE; // clear lowest set bit
