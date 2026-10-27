@@ -14,9 +14,24 @@ type Props = {
   endpoint: string;
   what: string;
   children: React.ReactNode;
+  /** Default DELETE ohne Body. POST + body z.B. für /api/matches/withdraw. */
+  method?: "DELETE" | "POST";
+  body?: unknown;
+  /** Text im roten Bestätigungs-Button, Default "Wirklich löschen?". */
+  confirmLabel?: string;
+  /** Für Client-Listen, die router.refresh() nicht neu lädt. */
+  onDeleted?: () => void;
 };
 
-export function SwipeToDeleteRow({ endpoint, what, children }: Props) {
+export function SwipeToDeleteRow({
+  endpoint,
+  what,
+  children,
+  method = "DELETE",
+  body,
+  confirmLabel,
+  onDeleted,
+}: Props) {
   const router = useRouter();
   const { t } = useT();
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -97,13 +112,23 @@ export function SwipeToDeleteRow({ endpoint, what, children }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch(endpoint, { method: "DELETE" });
+      const res = await fetch(
+        endpoint,
+        body === undefined
+          ? { method }
+          : {
+              method,
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            }
+      );
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}));
         setError(detail.detail ?? detail.error ?? `${t("phone.reveal.errorPrefix")} ${res.status}`);
         setSubmitting(false);
         return;
       }
+      onDeleted?.();
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("btn.networkError"));
@@ -142,7 +167,7 @@ export function SwipeToDeleteRow({ endpoint, what, children }: Props) {
             ) : (
               <Trash2 className="size-4" />
             )}
-            {t("swipe.confirmLabel")}
+            {confirmLabel ?? t("swipe.confirmLabel")}
           </button>
         ) : (
           <button
