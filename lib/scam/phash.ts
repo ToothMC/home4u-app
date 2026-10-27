@@ -48,14 +48,16 @@ export async function dhashBuffer(buf: Buffer): Promise<bigint> {
  * ganzen Score-Pass zu killen.
  */
 export async function dhashFromUrl(url: string, timeoutMs = 10_000): Promise<bigint | null> {
+  // Timeout gilt bis der Body komplett gelesen ist. Vorher wurde er schon nach
+  // den Headern gelöscht — ein CDN, das danach den Body nicht liefert, konnte
+  // den Aufrufer (Worker, Scam-Check-Route) unbegrenzt hängen lassen.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     const resp = await fetch(url, {
       signal: ctrl.signal,
       headers: { "User-Agent": "Home4U-ScamWorker/1.0" },
     });
-    clearTimeout(timer);
     if (!resp.ok) {
       console.warn("[scam/phash] fetch failed", url, resp.status);
       return null;
@@ -70,6 +72,8 @@ export async function dhashFromUrl(url: string, timeoutMs = 10_000): Promise<big
   } catch (err) {
     console.warn("[scam/phash] dhashFromUrl failed", url, err);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

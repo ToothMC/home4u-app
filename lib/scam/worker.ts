@@ -14,7 +14,7 @@
  */
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { dhashFromUrl } from "./phash";
-import { computeScamScore } from "./score";
+import { computeScamScore, type ScamResult } from "./score";
 
 export type ScoreBatchOptions = {
   /** Wie viele Listings pro Lauf maximal scoren. Schutz vor Quota-Spike. */
@@ -48,7 +48,7 @@ export async function runScoreBatch(opts: ScoreBatchOptions = {}): Promise<Score
   // damit Bestandslistings rückwirkend gescort werden.
   let q = sb
     .from("listings")
-    .select("id, source, type, location_city, location_district, price, contact_phone_hash, media, extracted_data")
+    .select(SCORE_LISTING_COLUMNS)
     .eq("status", "active")
     .is("scam_checked_at", null)
     .order("first_seen", { ascending: true })
@@ -74,75 +74,7 @@ export async function runScoreBatch(opts: ScoreBatchOptions = {}): Promise<Score
 
   for (const l of candidates) {
     try {
-      // 1) Bilder hashen + persistieren
-      const hashes: bigint[] = [];
-      const media: string[] = Array.isArray(l.media) ? l.media : [];
-      // Begrenze auf erste 6 Bilder pro Listing — Cover ist Index 0, der
-      // Rest dient nur Sicherheit. Mehr ist Cost ohne Mehrwert.
-      for (const url of media.slice(0, 6)) {
-        const h = await dhashFromUrl(url);
-        if (h != null) hashes.push(h);
-      }
-
-      if (!opts.dryRun && hashes.length > 0) {
-        const rows = hashes.map((h, idx) => ({
-          phash: h.toString(),
-          listing_id: l.id,
-          media_url: media[idx],
-        }));
-        const { error: hashErr } = await sb.from("image_hashes").upsert(rows, {
-          onConflict: "phash,listing_id",
-          ignoreDuplicates: true,
-        });
-        if (hashErr) console.warn("[worker] image_hashes upsert failed", l.id, hashErr.message);
-      }
-
-      // 2) Score berechnen
-      const scoreResult = await computeScamScore({
-        listingId: l.id,
-        type: l.type as "rent" | "sale",
-        city: l.location_city,
-        district: l.location_district,
-        price: l.price != null ? Number(l.price) : null,
-        phoneHash: l.contact_phone_hash,
-        imageHashes: hashes,
-      });
-
-      // 3) Listing-Update mit Sticky-Trigger (scam_checked_at gesetzt).
-      // extracted_data wird gemergt — LLM-Rohextraktion vom Crawler bleibt
-      // erhalten, Worker hängt nur seinen scam-Sub-Key dran.
-      if (!opts.dryRun) {
-        const existing =
-          (l.extracted_data && typeof l.extracted_data === "object" && !Array.isArray(l.extracted_data)
-            ? (l.extracted_data as Record<string, unknown>)
-            : {}) ?? {};
-        const merged = {
-          ...existing,
-          scam: {
-            explanation_md: scoreResult.explanation,
-            similar_listing_ids: scoreResult.similarListingIds,
-            computed_at: new Date().toISOString(),
-            worker_version: 1,
-          },
-        };
-        const { error: updErr } = await sb
-          .from("listings")
-          .update({
-            scam_score: scoreResult.score,
-            scam_flags: scoreResult.flags,
-            scam_checked_at: new Date().toISOString(),
-            extracted_data: merged,
-          })
-          .eq("id", l.id);
-        if (updErr) {
-          result.failed++;
-          if (result.errors.length < 5) {
-            result.errors.push({ listingId: l.id, error: updErr.message });
-          }
-          continue;
-        }
-      }
-
+      await scoreAndPersistListing(sb, l, { dryRun: opts.dryRun });
       result.scored++;
     } catch (err) {
       result.failed++;
@@ -162,4 +94,99 @@ export async function runScoreBatch(opts: ScoreBatchOptions = {}): Promise<Score
   }
 
   return result;
+}
+
+/** Spalten, die scoreAndPersistListing() braucht. */
+export const SCORE_LISTING_COLUMNS =
+  "id, source, type, location_city, location_district, price, contact_phone_hash, media, extracted_data";
+
+export type ScoreableListing = {
+  id: string;
+  type: string;
+  location_city: string | null;
+  location_district: string | null;
+  price: number | string | null;
+  contact_phone_hash: string | null;
+  media: unknown;
+  extracted_data: unknown;
+};
+
+/**
+ * Bewertet EIN Listing und schreibt das Ergebnis zurück (scam_score,
+ * scam_flags, scam_checked_at, extracted_data.scam). Wirft bei DB-Fehlern.
+ *
+ * Genutzt vom Batch-Worker und vom Scam-Check-URL-Pfad, wenn ein Nutzer ein
+ * noch ungeprüftes Inserat prüft (scam_checked_at = null).
+ */
+export async function scoreAndPersistListing(
+  sb: NonNullable<ReturnType<typeof createSupabaseServiceClient>>,
+  l: ScoreableListing,
+  opts: { dryRun?: boolean; imageTimeoutMs?: number } = {}
+): Promise<ScamResult> {
+  // 1) Bilder hashen + persistieren. Max. 6 Bilder (Cover ist Index 0, der
+  // Rest dient nur Sicherheit), parallel geladen — sonst addieren sich die
+  // Timeouts und der Nutzer-Pfad läuft ins Funktions-Limit.
+  const media: string[] = Array.isArray(l.media)
+    ? (l.media as unknown[]).filter((m): m is string => typeof m === "string").slice(0, 6)
+    : [];
+  const hashed = await Promise.all(
+    media.map(async (url) => ({ url, hash: await dhashFromUrl(url, opts.imageTimeoutMs) }))
+  );
+  const withHash = hashed.filter((h): h is { url: string; hash: bigint } => h.hash != null);
+  const hashes = withHash.map((h) => h.hash);
+
+  if (!opts.dryRun && withHash.length > 0) {
+    const rows = withHash.map((h) => ({
+      phash: h.hash.toString(),
+      listing_id: l.id,
+      media_url: h.url,
+    }));
+    const { error: hashErr } = await sb.from("image_hashes").upsert(rows, {
+      onConflict: "phash,listing_id",
+      ignoreDuplicates: true,
+    });
+    if (hashErr) console.warn("[worker] image_hashes upsert failed", l.id, hashErr.message);
+  }
+
+  // 2) Score berechnen
+  const scoreResult = await computeScamScore({
+    listingId: l.id,
+    type: l.type as "rent" | "sale",
+    city: l.location_city,
+    district: l.location_district,
+    price: l.price != null ? Number(l.price) : null,
+    phoneHash: l.contact_phone_hash,
+    imageHashes: hashes,
+  });
+
+  // 3) Listing-Update mit Sticky-Trigger (scam_checked_at gesetzt).
+  // extracted_data wird gemergt — LLM-Rohextraktion vom Crawler bleibt
+  // erhalten, Worker hängt nur seinen scam-Sub-Key dran.
+  if (!opts.dryRun) {
+    const existing =
+      l.extracted_data && typeof l.extracted_data === "object" && !Array.isArray(l.extracted_data)
+        ? (l.extracted_data as Record<string, unknown>)
+        : {};
+    const merged = {
+      ...existing,
+      scam: {
+        explanation_md: scoreResult.explanation,
+        similar_listing_ids: scoreResult.similarListingIds,
+        computed_at: new Date().toISOString(),
+        worker_version: 1,
+      },
+    };
+    const { error: updErr } = await sb
+      .from("listings")
+      .update({
+        scam_score: scoreResult.score,
+        scam_flags: scoreResult.flags,
+        scam_checked_at: new Date().toISOString(),
+        extracted_data: merged,
+      })
+      .eq("id", l.id);
+    if (updErr) throw new Error(updErr.message);
+  }
+
+  return scoreResult;
 }
