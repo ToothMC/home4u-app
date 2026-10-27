@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  createSupabaseServerClient,
+  createSupabaseServiceClient,
+} from "@/lib/supabase/server";
 import { ANONYMOUS_COOKIE_NAME } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -42,11 +45,17 @@ export async function POST(req: NextRequest) {
 
   const user = verifyResult.data.user;
 
-  // profiles-Row synchron halten (email, auth-Trigger legt bereits an)
-  await supabase
-    .from("profiles")
-    .update({ email: user.email })
-    .eq("id", user.id);
+  // profiles-Row synchron halten (email, auth-Trigger legt bereits an).
+  // Service-Client: profiles.email ist für Nutzer nicht mehr schreibbar
+  // (Migration 20261027180000). Wert kommt aus dem verifizierten Auth-User.
+  const service = createSupabaseServiceClient();
+  if (service) {
+    const { error: syncErr } = await service
+      .from("profiles")
+      .update({ email: user.email })
+      .eq("id", user.id);
+    if (syncErr) console.error("[verify-otp] profile email sync failed", syncErr);
+  }
 
   // Anonymous-Session übernehmen
   const anonymousId = req.cookies.get(ANONYMOUS_COOKIE_NAME)?.value;

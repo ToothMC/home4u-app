@@ -49,29 +49,38 @@ export async function POST(req: NextRequest) {
     return json({ error: "supabase_not_configured" }, 500);
   }
 
+  // Service-Role-Admin-Client (auth schema)
+  const adminClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+
   // 1) profiles.telegram_user_id Lookup → existing auth.users
   let userId: string | null = null;
   let userEmail: string | null = null;
   const { data: existingProfile } = await service
     .from("profiles")
-    .select("id, email")
+    .select("id")
     .eq("telegram_user_id", tg.id)
     .maybeSingle();
   if (existingProfile?.id) {
     userId = existingProfile.id;
-    userEmail = existingProfile.email ?? null;
+    // Login-Mail NUR aus auth.users — nie aus profiles.email. Die Profil-
+    // Spalte war früher vom Nutzer selbst änderbar; eine fremde Adresse dort
+    // hätte generateLink() eine Sitzung für ein fremdes Konto erzeugen lassen.
+    const { data: authUser, error: authErr } =
+      await adminClient.auth.admin.getUserById(existingProfile.id);
+    if (authErr || !authUser?.user) {
+      console.error("[telegram-login] getUserById failed", authErr);
+      return json({ error: "user_lookup_failed" }, 500);
+    }
+    userEmail = authUser.user.email ?? null;
   }
 
   // 2) Falls nicht gefunden → User anlegen (admin createUser via Service-Role)
   if (!userId) {
     const fakeEmail = `tg-${tg.id}@telegram.home4u.local`;
-
-    // Service-Role-Admin-Client (auth schema)
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-    const adminClient = createClient(url, serviceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
 
     const created = await adminClient.auth.admin.createUser({
       email: fakeEmail,
@@ -136,11 +145,6 @@ export async function POST(req: NextRequest) {
     return json({ error: "missing_email" }, 500);
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  const adminClient = createClient(url, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
   const { data: linkData, error: linkErr } =
     await adminClient.auth.admin.generateLink({
       type: "magiclink",
