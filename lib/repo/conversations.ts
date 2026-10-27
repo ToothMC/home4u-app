@@ -88,9 +88,17 @@ export type UsageLike = {
   output_tokens?: number | null;
 };
 
+/**
+ * Lädt die zuletzt aktive Konversation samt Nachrichten.
+ * updated_at = letzte Aktivität (Trigger messages_touch_conversation).
+ *
+ * activeWithinMs: nur Konversationen, deren letzte Aktivität höchstens so
+ * lange her ist — ältere gelten als abgeschlossen (→ null, frischer Chat).
+ */
 export async function loadLastConversation(params: {
   anonymousId?: string | null;
   userId?: string | null;
+  activeWithinMs?: number;
 }): Promise<{ conversationId: string; messages: HistoryMessage[] } | null> {
   const supabase = createSupabaseServiceClient();
   if (!supabase) return null;
@@ -101,6 +109,13 @@ export async function loadLastConversation(params: {
     .select("id, updated_at, user_id, anonymous_id")
     .order("updated_at", { ascending: false })
     .limit(1);
+
+  if (params.activeWithinMs !== undefined) {
+    query = query.gte(
+      "updated_at",
+      new Date(Date.now() - params.activeWithinMs).toISOString()
+    );
+  }
 
   if (params.userId && params.anonymousId) {
     // Eingeloggt: eigene user_id ODER der Anon-Cookie aus der Pre-Login-Phase.
