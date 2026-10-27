@@ -176,7 +176,10 @@ export function ChatView({
       }
 
       let assistantText = "";
-      const toolCalls: ToolCall[] = [];
+      // Alle Tool-Calls des Streams (für tool_result-Lookup) vs. nur die der
+      // aktuellen Bubble (für die Chips).
+      const allToolCalls: ToolCall[] = [];
+      let toolCalls: ToolCall[] = [];
       let currentTool: ToolCall | null = null;
       // Wenn ein neuer Turn (Sophie spricht erneut nach einem Tool-Call) Text
       // produziert, beginnt eine NEUE Assistant-Bubble. Vorher wurden alle
@@ -215,6 +218,7 @@ export function ChatView({
             if (pendingNewBubble) {
               pendingNewBubble = false;
               assistantText = "";
+              toolCalls = [];
               setMessages((prev) => [
                 ...prev,
                 { role: "assistant", content: "", toolCalls: [] },
@@ -228,6 +232,7 @@ export function ChatView({
           ) {
             currentTool = { id: evt.id, name: evt.name, input: "" };
             toolCalls.push(currentTool);
+            allToolCalls.push(currentTool);
           } else if (
             evt.type === "tool_input_delta" &&
             typeof evt.delta === "string" &&
@@ -235,7 +240,7 @@ export function ChatView({
           ) {
             currentTool.input += evt.delta;
           } else if (evt.type === "tool_result" && typeof evt.id === "string") {
-            const tc = toolCalls.find((t) => t.id === evt.id);
+            const tc = allToolCalls.find((t) => t.id === evt.id);
             if (tc) {
               tc.result = {
                 ok: Boolean(evt.ok),

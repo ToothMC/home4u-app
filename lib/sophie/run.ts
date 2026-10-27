@@ -21,7 +21,7 @@ import {
   SOPHIE_SYSTEM_PROMPT,
   SOPHIE_PROMPT_VERSION,
 } from "@/lib/sophie/system-prompt";
-import { SOPHIE_TOOLS } from "@/lib/sophie/tools";
+import { sophieToolsFor, turnEndsAfterTools } from "@/lib/sophie/tools";
 import { executeTool, type ToolContext } from "@/lib/sophie/tool-handlers";
 import {
   appendMessage,
@@ -207,7 +207,7 @@ export async function runSophieBlocking(
       model: MODEL_SONNET,
       max_tokens: 1024,
       system: systemBlocks,
-      tools: SOPHIE_TOOLS,
+      tools: sophieToolsFor({ authenticated: Boolean(input.userId) }),
       messages: conversation,
       metadata: { user_id: `prompt_version=${SOPHIE_PROMPT_VERSION}` },
     });
@@ -276,6 +276,20 @@ export async function runSophieBlocking(
         content: JSON.stringify(result),
         is_error: !result.ok,
       });
+    }
+
+    if (
+      turnEndsAfterTools(
+        toolUses.map((tu) => tu.name),
+        assistantText
+      )
+    ) {
+      return {
+        conversationId,
+        assistantText: collectedText.join("\n").trim(),
+        toolCalls,
+        truncated: false,
+      };
     }
 
     conversation.push({ role: "user", content: toolResultsForLlm });

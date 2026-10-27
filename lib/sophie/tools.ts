@@ -4,7 +4,7 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
   {
     name: "set_user_role",
     description:
-      "Markiert die primäre Absicht des Nutzers fürs Dashboard: 'seeker' = sucht, 'owner' = bietet eigene Immobilie an, 'agent' = Makler. Das ist NUR ein Dashboard-Fokus — technisch darf der Nutzer jederzeit beides machen (suchen UND inserieren). Nutze das Tool, sobald die Hauptabsicht klar ist, damit das Dashboard auf die passende Ansicht voreingestellt ist. Bei Wechsel der Hauptabsicht einfach neu setzen.",
+      "Markiert die primäre Absicht des Nutzers fürs Dashboard: 'seeker' = sucht, 'owner' = bietet eigene Immobilie an, 'agent' = Makler. Das ist NUR ein Dashboard-Fokus — technisch darf der Nutzer jederzeit beides machen (suchen UND inserieren). Nutze das Tool, sobald die Hauptabsicht klar ist, damit das Dashboard auf die passende Ansicht voreingestellt ist. Bei Wechsel der Hauptabsicht einfach neu setzen. Stilles Hintergrund-Tool: schreib deine vollständige Antwort im selben Zug wie den Aufruf — danach bekommst du keine weitere Runde und erwähnst das Setzen der Rolle nicht.",
     input_schema: {
       type: "object",
       properties: {
@@ -404,3 +404,33 @@ export const SOPHIE_TOOLS: Anthropic.Tool[] = [
     },
   },
 ];
+
+/**
+ * Stille Tools setzen nur Hintergrund-Zustand; ihr Ergebnis braucht keine
+ * Reaktion von Sophie. Hat Sophie im selben Zug schon geantwortet, endet der
+ * Turn nach der Ausführung — eine weitere Modell-Runde würde nur eine zweite
+ * Antwort-Bubble erzeugen (meist eine Wiederholung der ersten).
+ */
+const SILENT_TOOLS: ReadonlySet<string> = new Set(["set_user_role"]);
+
+export function turnEndsAfterTools(
+  toolNames: readonly string[],
+  assistantText: string
+): boolean {
+  return (
+    assistantText.trim() !== "" &&
+    toolNames.length > 0 &&
+    toolNames.every((n) => SILENT_TOOLS.has(n))
+  );
+}
+
+/**
+ * Tools passend zum Login-Status. set_user_role schreibt ins Profil und
+ * scheitert ohne Login immer mit not_authenticated — anonym bieten wir es
+ * gar nicht erst an, sonst ruft Sophie es auf und wiederholt danach ihre
+ * Frage (Doppel-Antwort im Chat).
+ */
+export function sophieToolsFor(opts: { authenticated: boolean }): Anthropic.Tool[] {
+  if (opts.authenticated) return SOPHIE_TOOLS;
+  return SOPHIE_TOOLS.filter((t) => t.name !== "set_user_role");
+}

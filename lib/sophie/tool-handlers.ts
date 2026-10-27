@@ -45,15 +45,10 @@ const handlers: Record<string, Handler> = {
     if (!["seeker", "owner", "agent"].includes(role)) {
       return { ok: false, error: "invalid_role" };
     }
+    // Wird anonymen Nutzern nicht angeboten (sophieToolsFor) — hier nur
+    // als Absicherung.
     if (!ctx.userId) {
-      return {
-        ok: false,
-        error: "not_authenticated",
-        data: {
-          message:
-            "Ich merke mir das gerne — aber damit's sich auf deinen Account legt, melde dich bitte oben rechts an. Dann setze ich die Rolle fest.",
-        },
-      };
+      return { ok: false, error: "not_authenticated" };
     }
     const supabase = createSupabaseServiceClient();
     if (!supabase) return { ok: false, error: "supabase_not_configured" };
@@ -68,18 +63,8 @@ const handlers: Record<string, Handler> = {
       return { ok: false, error: error.message };
     }
 
-    return {
-      ok: true,
-      data: {
-        role,
-        message:
-          role === "seeker"
-            ? "Rolle auf 'Suchender' gesetzt. Lass uns dein Profil anlegen."
-            : role === "owner"
-              ? "Rolle auf 'Eigentümer' gesetzt. Beschreib mir deine Immobilie."
-              : "Rolle auf 'Makler' gesetzt. Ich helfe dir mit deinen Inseraten.",
-      },
-    };
+    // Stilles Tool (siehe SILENT_TOOLS): kein Text für Sophie zum Weitersagen.
+    return { ok: true, data: { role } };
   },
 
   async create_search_profile(input, ctx) {

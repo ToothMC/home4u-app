@@ -6,7 +6,7 @@ import {
   SOPHIE_SYSTEM_PROMPT,
   SOPHIE_PROMPT_VERSION,
 } from "@/lib/sophie/system-prompt";
-import { SOPHIE_TOOLS } from "@/lib/sophie/tools";
+import { sophieToolsFor, turnEndsAfterTools } from "@/lib/sophie/tools";
 import { executeTool, type ToolContext } from "@/lib/sophie/tool-handlers";
 import { getOrCreateAnonymousSession } from "@/lib/session";
 import { getAuthUser } from "@/lib/supabase/auth";
@@ -146,7 +146,9 @@ export async function POST(req: NextRequest) {
               : "unknown";
       systemBlocks.push({
         type: "text",
-        text: `<user_role>${roleTag}</user_role>\nLeite davon ab, welche Tools du nutzen darfst. Bei 'unknown' oder '*_intent_anonymous' setze die Rolle via set_user_role (nur für eingeloggte Nutzer persistent).`,
+        text: authUser
+          ? `<user_role>${roleTag}</user_role>\nLeite davon ab, welche Tools du nutzen darfst. Bei 'unknown' setze die Rolle via set_user_role.`
+          : `<user_role>${roleTag}</user_role>\nDer Nutzer ist nicht eingeloggt — eine Rolle lässt sich nicht speichern, set_user_role steht nicht zur Verfügung. Nutze die Absicht nur als Kontext für das Gespräch.`,
       });
 
       // Sprach-Präferenz aus Profil oder Cookie. Sophie soll in dieser
@@ -196,7 +198,7 @@ export async function POST(req: NextRequest) {
             model: MODEL_SONNET,
             max_tokens: 1024,
             system: systemBlocks,
-            tools: SOPHIE_TOOLS,
+            tools: sophieToolsFor({ authenticated: Boolean(authUser) }),
             messages: conversation,
             metadata: { user_id: `prompt_version=${SOPHIE_PROMPT_VERSION}` },
           });
@@ -296,6 +298,17 @@ export async function POST(req: NextRequest) {
               content: JSON.stringify(result),
               is_error: !result.ok,
             });
+          }
+
+          if (
+            turnEndsAfterTools(
+              toolUses.map((tu) => tu.name),
+              assistantText
+            )
+          ) {
+            send({ type: "done", stop_reason: "end_turn" });
+            controller.close();
+            return;
           }
 
           conversation.push({ role: "user", content: toolResults });
