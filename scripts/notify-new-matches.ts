@@ -21,7 +21,7 @@
  *   - SUPABASE_SERVICE_ROLE_KEY
  *   - RESEND_API_KEY
  *   - RESEND_FROM_ADDRESS
- *   - NEXT_PUBLIC_BASE_URL  (z.B. https://home4u.ai — für Listing-Links)
+ *   - NEXT_PUBLIC_BASE_URL  (z.B. https://www.home4u.ai — für Listing-Links)
  *
  * Aufruf:
  *   node --env-file=.env.local --import tsx scripts/notify-new-matches.ts
@@ -40,6 +40,7 @@ import {
   buildNewMatchesEmail,
   type NewMatchItem,
 } from "../lib/email/templates/new-matches";
+import { siteUrl } from "../lib/site-url";
 
 type Opts = {
   dryRun: boolean;
@@ -107,9 +108,7 @@ async function main() {
     process.exit(1);
   }
 
-  const baseUrlRaw =
-    process.env.NEXT_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_VERCEL_URL ?? "https://home4u.ai";
-  const baseUrl = baseUrlRaw.startsWith("http") ? baseUrlRaw : `https://${baseUrlRaw}`;
+  const baseUrl = siteUrl(process.env.NEXT_PUBLIC_VERCEL_URL);
 
   const supabase = createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },

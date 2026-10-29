@@ -28,12 +28,11 @@ import { getT } from "@/lib/i18n/server";
 import { tFormat, type T, type TKey } from "@/lib/i18n/dict";
 import type { SupportedLang } from "@/lib/lang/preferred-language";
 import { SOURCE_LABELS } from "@/lib/listings/source-labels";
+import { siteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
-const SITE_URL = (
-  process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai"
-).replace(/\/$/, "");
+const SITE_URL = siteUrl();
 
 export async function generateMetadata({
   params,

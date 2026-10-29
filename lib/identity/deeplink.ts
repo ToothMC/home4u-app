@@ -4,6 +4,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { siteUrl } from "@/lib/site-url";
 
 export type DeeplinkDirection = "to_telegram" | "to_web";
 export type DeeplinkIntent =
@@ -109,13 +110,10 @@ export async function consumeDeeplinkToken(
  * URL-Builder für Deeplinks.
  */
 export function buildWebDeeplinkUrl(token: string, baseUrl?: string): string {
-  const base =
-    baseUrl ??
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    process.env.NEXT_PUBLIC_VERCEL_URL ??
-    "https://home4u.ai";
-  const url = base.startsWith("http") ? base : `https://${base}`;
-  return `${url.replace(/\/$/, "")}/d/${token}`;
+  const base = baseUrl
+    ? (baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`).replace(/\/$/, "")
+    : siteUrl(process.env.NEXT_PUBLIC_VERCEL_URL);
+  return `${base}/d/${token}`;
 }
 
 export function buildTelegramDeeplinkUrl(

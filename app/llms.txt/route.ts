@@ -1,9 +1,8 @@
 export const revalidate = 86400;
+import { siteUrl } from "@/lib/site-url";
 
 export async function GET() {
-  const baseUrl = (
-    process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai"
-  ).replace(/\/$/, "");
+  const baseUrl = siteUrl();
 
   const body = `# Home4U
 
@@ -17,7 +16,7 @@ export async function GET() {
 
 ## Listings
 - Detailseite: \`${baseUrl}/listings/{uuid}\` (voll SSR-gerendert mit JSON-LD Product/Offer)
-- Sitemap-Chunks: \`${baseUrl}/listings/sitemap/0.xml\` ... (5000 URLs/Chunk, ~10 Chunks)
+- Sitemap-Chunks: \`${baseUrl}/listings/sitemap/0.xml\` bis \`63.xml\` (nach id-Bereich aufgeteilt, alle in robots.txt gelistet)
 - Felder: Titel, Beschreibung, Bilder, Stadt, Bezirk, Preis (EUR), Typ (rent/sale), Zimmer, Bäder, m², Baujahr
 
 ## Hinweise für AI-Agents

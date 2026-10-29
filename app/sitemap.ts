@@ -1,9 +1,8 @@
 import type { MetadataRoute } from "next";
+import { siteUrl } from "@/lib/site-url";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = (
-    process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai"
-  ).replace(/\/$/, "");
+  const baseUrl = siteUrl();
   const now = new Date();
 
   return [

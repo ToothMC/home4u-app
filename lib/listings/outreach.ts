@@ -34,6 +34,7 @@ import {
 } from "@/lib/identity/deeplink";
 import { translate } from "@/lib/translation/translate";
 import type { Lang } from "@/lib/translation/glossary";
+import { siteUrl } from "@/lib/site-url";
 
 export type OutreachResult = {
   channel: "telegram" | "email" | "whatsapp" | "skipped";
@@ -151,11 +152,7 @@ export async function triggerOutreachForMatch(matchId: string): Promise<Outreach
   }
 
   // 4) Mail-Inhalt rendern
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    process.env.NEXT_PUBLIC_VERCEL_URL ??
-    "https://home4u.ai";
-  const baseUrlNorm = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
+  const baseUrlNorm = siteUrl(process.env.NEXT_PUBLIC_VERCEL_URL);
 
   let subject: string;
   let html: string;
@@ -356,7 +353,7 @@ async function tryTelegramOutreach(args: {
     channelIdentityId: identity.id,
     ttlMinutes: 60 * 24, // 24h für Lead-Button — länger als Login-Tokens
   });
-  const webUrl = deeplink ? buildWebDeeplinkUrl(deeplink.token) : "https://home4u.ai/dashboard/requests";
+  const webUrl = deeplink ? buildWebDeeplinkUrl(deeplink.token) : `${siteUrl()}/dashboard/requests`;
 
   // Bridge-Outreach-Text in Owner-Sprache
   const text = await renderBridgeOutreachText({
