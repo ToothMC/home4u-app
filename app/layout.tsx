@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { getT } from "@/lib/i18n/server";
 import { LangProvider } from "@/lib/i18n/provider";
+import { siteUrl } from "@/lib/site-url";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,9 +22,7 @@ const cormorant = Cormorant_Garamond({
   display: "swap",
 });
 
-const SITE_URL = (
-  process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai"
-).replace(/\/$/, "");
+const SITE_URL = siteUrl();
 
 const SITE_TITLE = "Home4U — Schreib Sophie. Sie findet dein Zuhause.";
 const SITE_DESCRIPTION =

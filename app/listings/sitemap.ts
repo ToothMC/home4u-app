@@ -4,6 +4,7 @@ import {
   LISTING_SITEMAP_BUCKETS,
   listingSitemapRange,
 } from "@/lib/listings/sitemap-buckets";
+import { siteUrl } from "@/lib/site-url";
 
 export async function generateSitemaps() {
   return Array.from({ length: LISTING_SITEMAP_BUCKETS }, (_, i) => ({ id: i }));
@@ -24,9 +25,7 @@ export default async function sitemap({
     return [];
   }
 
-  const baseUrl = (
-    process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai"
-  ).replace(/\/$/, "");
+  const baseUrl = siteUrl();
 
   const { from, to } = listingSitemapRange(bucket);
   const rows = await listActiveListingIdsInRange(from, to);

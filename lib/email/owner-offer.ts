@@ -14,6 +14,7 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/send";
 import { buildOwnerOfferEmail } from "@/lib/email/templates/owner-offer";
+import { siteUrl } from "@/lib/site-url";
 
 type Args = {
   matchId: string;
@@ -29,7 +30,7 @@ export async function sendOwnerOfferEmail(args: Args): Promise<void> {
     return;
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai";
+  const baseUrl = siteUrl();
 
   // Sucher-Profil + zugehörige user_id
   const { data: profile, error: profileErr } = await supabase

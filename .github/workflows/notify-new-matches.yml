@@ -14,7 +14,7 @@ name: Daily „Neue Inserate"-Mails
 #   - SUPABASE_SERVICE_ROLE_KEY
 #   - RESEND_API_KEY
 #   - RESEND_FROM_ADDRESS
-#   - PUBLIC_BASE_URL  (z.B. https://home4u.ai — für Listing-Links in der Mail)
+#   - PUBLIC_BASE_URL  (z.B. https://www.home4u.ai — für Listing-Links in der Mail)
 
 on:
   schedule:

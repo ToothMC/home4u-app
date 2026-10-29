@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { LISTING_SITEMAP_BUCKETS } from "@/lib/listings/sitemap-buckets";
+import { siteUrl } from "@/lib/site-url";
 
 const DISALLOW = [
   "/api/",
@@ -13,9 +14,7 @@ const DISALLOW = [
 ];
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = (
-    process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai"
-  ).replace(/\/$/, "");
+  const baseUrl = siteUrl();
 
   // Feste Anzahl Teil-Sitemaps (id-Bereiche) — kein COUNT mehr pro Stunde.
   const listingSitemaps = Array.from(

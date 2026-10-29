@@ -15,6 +15,7 @@ import {
   createDeeplinkToken,
   buildWebDeeplinkUrl,
 } from "@/lib/identity/deeplink";
+import { siteUrl } from "@/lib/site-url";
 
 type NotifyArgs = {
   matchId: string;
@@ -69,9 +70,7 @@ export async function notifyTelegramOnNewMessage(
     channelIdentityId: identity.id,
     ttlMinutes: 60 * 24,
   });
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai";
-  const baseUrlNorm = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
+  const baseUrlNorm = siteUrl();
   const webUrl = deeplink
     ? buildWebDeeplinkUrl(deeplink.token)
     : `${baseUrlNorm}/matches/${args.matchId}`;
