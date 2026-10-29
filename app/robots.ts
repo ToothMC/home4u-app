@@ -1,9 +1,5 @@
 import type { MetadataRoute } from "next";
-import { countActiveListings } from "@/lib/repo/public-listing";
-
-export const revalidate = 3600;
-
-const CHUNK_SIZE = 5000;
+import { LISTING_SITEMAP_BUCKETS } from "@/lib/listings/sitemap-buckets";
 
 const DISALLOW = [
   "/api/",
@@ -16,15 +12,14 @@ const DISALLOW = [
   "/admin/",
 ];
 
-export default async function robots(): Promise<MetadataRoute.Robots> {
+export default function robots(): MetadataRoute.Robots {
   const baseUrl = (
     process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai"
   ).replace(/\/$/, "");
 
-  const total = await countActiveListings().catch(() => 0);
-  const chunkCount = Math.max(1, Math.ceil(total / CHUNK_SIZE));
+  // Feste Anzahl Teil-Sitemaps (id-Bereiche) — kein COUNT mehr pro Stunde.
   const listingSitemaps = Array.from(
-    { length: chunkCount },
+    { length: LISTING_SITEMAP_BUCKETS },
     (_, i) => `${baseUrl}/listings/sitemap/${i}.xml`,
   );
 
