@@ -1,15 +1,12 @@
 import type { MetadataRoute } from "next";
+import { listActiveListingIdsInRange } from "@/lib/repo/public-listing";
 import {
-  countActiveListings,
-  listActiveListingIds,
-} from "@/lib/repo/public-listing";
-
-const CHUNK_SIZE = 5000;
+  LISTING_SITEMAP_BUCKETS,
+  listingSitemapRange,
+} from "@/lib/listings/sitemap-buckets";
 
 export async function generateSitemaps() {
-  const total = await countActiveListings();
-  const chunkCount = Math.max(1, Math.ceil(total / CHUNK_SIZE));
-  return Array.from({ length: chunkCount }, (_, i) => ({ id: i }));
+  return Array.from({ length: LISTING_SITEMAP_BUCKETS }, (_, i) => ({ id: i }));
 }
 
 export default async function sitemap({
@@ -17,13 +14,22 @@ export default async function sitemap({
 }: {
   id: Promise<string>;
 }): Promise<MetadataRoute.Sitemap> {
-  const idStr = await id;
-  const offset = Number(idStr) * CHUNK_SIZE;
+  // Die Sitemap wird beim Build vorgerendert. Preview-Deployments braucht
+  // keine Suchmaschine; dort ~64 Abfragen pro Push zu sparen ist gut die
+  // Hälfte der Build-Last auf der Datenbank.
+  if (process.env.VERCEL_ENV === "preview") return [];
+
+  const bucket = Number(await id);
+  if (!Number.isInteger(bucket) || bucket < 0 || bucket >= LISTING_SITEMAP_BUCKETS) {
+    return [];
+  }
+
   const baseUrl = (
     process.env.NEXT_PUBLIC_BASE_URL ?? "https://home4u.ai"
   ).replace(/\/$/, "");
 
-  const rows = await listActiveListingIds(offset, CHUNK_SIZE);
+  const { from, to } = listingSitemapRange(bucket);
+  const rows = await listActiveListingIdsInRange(from, to);
 
   return rows.map((r) => ({
     url: `${baseUrl}/listings/${r.id}`,

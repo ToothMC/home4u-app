@@ -7,34 +7,52 @@ import type {
 } from "@/components/listing-public/types";
 import { buildSourceUrl } from "@/lib/listings/source-url";
 
-export async function countActiveListings(): Promise<number> {
-  const supabase = createSupabaseServiceClient();
-  if (!supabase) return 0;
-  const { count, error } = await supabase
-    .from("listings")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "active");
-  if (error) return 0;
-  return count ?? 0;
-}
+// PostgREST liefert höchstens max-rows (in diesem Projekt 1.000) Zeilen pro
+// Anfrage, egal welches limit man schickt. Die alte Sitemap fragte 5.000 an
+// und bekam still 1.000 — 4 von 5 Inseraten fehlten. Darum seitenweise.
+const SITEMAP_PAGE_SIZE = 1000;
 
-export async function listActiveListingIds(
-  offset: number,
-  limit: number,
+/**
+ * Aktive Inserate mit id in [from, to), aufsteigend nach id.
+ * Keyset-Paging über listings_pkey: jede Seite liest nur ihren Bereich.
+ */
+export async function listActiveListingIdsInRange(
+  from: string,
+  to: string | null,
 ): Promise<Array<{ id: string; updated_at: string | null }>> {
   const supabase = createSupabaseServiceClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from("listings")
-    .select("id, updated_at")
-    .eq("status", "active")
-    .order("updated_at", { ascending: false, nullsFirst: false })
-    .range(offset, offset + limit - 1);
-  if (error) return [];
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    updated_at: (r.updated_at as string | null) ?? null,
-  }));
+
+  const rows: Array<{ id: string; updated_at: string | null }> = [];
+  let after: string | null = null;
+
+  for (;;) {
+    let q = supabase
+      .from("listings")
+      .select("id, updated_at")
+      .eq("status", "active")
+      .order("id", { ascending: true })
+      .limit(SITEMAP_PAGE_SIZE);
+    q = after ? q.gt("id", after) : q.gte("id", from);
+    if (to) q = q.lt("id", to);
+
+    const { data, error } = await q;
+    if (error) {
+      console.error("listActiveListingIdsInRange:", error.message);
+      break;
+    }
+    const page = data ?? [];
+    for (const r of page) {
+      rows.push({
+        id: r.id as string,
+        updated_at: (r.updated_at as string | null) ?? null,
+      });
+    }
+    if (page.length < SITEMAP_PAGE_SIZE) break;
+    after = page[page.length - 1].id as string;
+  }
+
+  return rows;
 }
 
 export async function loadPublicListing(
