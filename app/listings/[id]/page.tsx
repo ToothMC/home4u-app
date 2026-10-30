@@ -228,35 +228,71 @@ export default async function PublicListingPage({
       value: listing.year_built,
     });
 
+  // Immobilie als RealEstateListing statt Product: Product+Offer löst bei
+  // Google die Händler-Checks aus (Versand, Rückgabe, Bewertungen), die
+  // für Inserate keinen Sinn ergeben.
+  const listingUrl = `${SITE_URL}/listings/${listing.id}`;
+  const pt = (listing.property_type ?? "").toLowerCase();
+  const entityType = ["apartment", "flat", "studio", "penthouse", "maisonette"].includes(pt)
+    ? "Apartment"
+    : ["house", "villa", "townhouse", "bungalow", "detached", "semi-detached"].includes(pt)
+      ? "House"
+      : pt === "room"
+        ? "Room"
+        : ["plot", "land", "commercial", "office", "shop", "warehouse", "building"].includes(pt)
+          ? "Place"
+          : "Accommodation";
+  const isAccommodation = entityType !== "Place";
   const offerPrice = listing.price_warm ?? listing.price;
   const productJsonLd = {
     "@context": "https://schema.org",
-    "@type": "Product",
-    "@id": `${SITE_URL}/listings/${listing.id}`,
+    "@type": "RealEstateListing",
+    "@id": listingUrl,
+    url: listingUrl,
     name: listing.title ?? fallbackTitleStr,
     description: (listing.description ?? "").slice(0, 500) || undefined,
     image: jsonLdImages.length > 0 ? jsonLdImages : undefined,
-    category: listing.property_type ?? undefined,
-    additionalProperty:
-      jsonLdAdditional.length > 0 ? jsonLdAdditional : undefined,
+    datePosted: listing.created_at ?? undefined,
     offers: offerPrice
       ? {
           "@type": "Offer",
           price: offerPrice,
           priceCurrency: listing.currency ?? "EUR",
+          businessFunction:
+            listing.type === "rent"
+              ? "http://purl.org/goodrelations/v1#LeaseOut"
+              : "http://purl.org/goodrelations/v1#Sell",
           availability:
             listing.status === "active"
               ? "https://schema.org/InStock"
               : listing.status === "reserved"
                 ? "https://schema.org/PreOrder"
                 : "https://schema.org/SoldOut",
-          url: `${SITE_URL}/listings/${listing.id}`,
+          url: listingUrl,
           ...(listing.type === "rent"
-            ? { priceSpecification: { "@type": "UnitPriceSpecification", referenceQuantity: { "@type": "QuantitativeValue", unitCode: "MON", value: 1 } } }
+            ? { priceSpecification: { "@type": "UnitPriceSpecification", price: offerPrice, priceCurrency: listing.currency ?? "EUR", referenceQuantity: { "@type": "QuantitativeValue", unitCode: "MON", value: 1 } } }
             : {}),
         }
       : undefined,
-    address: jsonLdAddress,
+    mainEntity: {
+      "@type": entityType,
+      name: listing.title ?? fallbackTitleStr,
+      address: jsonLdAddress,
+      ...(isAccommodation && listing.rooms != null
+        ? { numberOfRooms: listing.rooms }
+        : {}),
+      ...(isAccommodation && listing.bathrooms != null
+        ? { numberOfBathroomsTotal: listing.bathrooms }
+        : {}),
+      ...(isAccommodation && listing.size_sqm != null
+        ? { floorSize: { "@type": "QuantitativeValue", value: listing.size_sqm, unitCode: "MTK" } }
+        : {}),
+      ...(isAccommodation && listing.year_built != null
+        ? { yearBuilt: listing.year_built }
+        : {}),
+      additionalProperty:
+        jsonLdAdditional.length > 0 ? jsonLdAdditional : undefined,
+    },
   };
 
   return (
