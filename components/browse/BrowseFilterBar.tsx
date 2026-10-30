@@ -33,6 +33,11 @@ type Props = {
   initial: BrowseFilters;
 };
 
+// "Mehr Filter" vorerst aus: Merkmale, Möblierung, Bäder & Co. sind nur bei
+// 1–17 % der Listings befüllt, der Filter würde fast alles wegfiltern.
+// Alte URLs mit diesen Parametern greifen weiter; "Zurücksetzen" bleibt sichtbar.
+const SHOW_ADVANCED_FILTERS = false;
+
 export function BrowseFilterBar({ initial }: Props) {
   const router = useRouter();
   const { t } = useT();
@@ -166,24 +171,28 @@ export function BrowseFilterBar({ initial }: Props) {
           width="w-24"
         />
 
-        <Separator />
+        {SHOW_ADVANCED_FILTERS && (
+          <>
+            <Separator />
 
-        {/* Mehr Filter */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="rounded-full"
-          onClick={() => setMoreOpen(true)}
-        >
-          <Filter className="size-3.5" />
-          {t("filter.more")}
-          {advancedActive > 0 && (
-            <span className="ml-1 inline-flex items-center justify-center rounded-full bg-[var(--brand-gold)] px-1.5 min-w-5 text-[10px] font-semibold text-white">
-              {advancedActive}
-            </span>
-          )}
-        </Button>
+            {/* Mehr Filter */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setMoreOpen(true)}
+            >
+              <Filter className="size-3.5" />
+              {t("filter.more")}
+              {advancedActive > 0 && (
+                <span className="ml-1 inline-flex items-center justify-center rounded-full bg-[var(--brand-gold)] px-1.5 min-w-5 text-[10px] font-semibold text-white">
+                  {advancedActive}
+                </span>
+              )}
+            </Button>
+          </>
+        )}
 
         {totalActive > 0 && (
           <button
