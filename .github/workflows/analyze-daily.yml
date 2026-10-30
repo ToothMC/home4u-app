@@ -1,16 +1,12 @@
 name: Daily Auto-Analyze (Vision-Backfill)
 
-# Läuft täglich nach den Crawler-Daily-Runs und analysiert die neu
-# importierten Listings via Sophie-Vision-Pipeline. Keine User-Action
-# nötig — Coverage bleibt automatisch hoch, neue Listings sind ab Tag 1
-# mit features[] filterbar.
+# Analysiert Crawler-Listings via Sophie-Vision-Pipeline (features[],
+# Raum-Tags, Pro/Contra).
 #
-# Schedule-Layout (UTC):
-#   21:00  bazaraki-daily       — neue Bazaraki-Listings
-#   22:00  index-cy-daily       — neue INDEX.cy-Listings
-#   23:00  cre-daily            — neue cyprus-real.estate-Listings
-#   02:00  analyze-daily (this) — analysiert alle neuen unanalysierten
-#                                 (3h Puffer falls cre länger braucht)
+# Nur noch manuell (seit 2026-10-30): Der tägliche Lauf kostete ~45 $/Monat
+# und schaffte nur ~2 % der aktiven Listings. Eigene Inserate analysiert der
+# Owner selbst über den Dashboard-Button (/api/listings/[id]/analyze) —
+# davon ist dieser Workflow unabhängig.
 #
 # Required GitHub Secrets:
 #   - SUPABASE_URL
@@ -18,8 +14,6 @@ name: Daily Auto-Analyze (Vision-Backfill)
 #   - ANTHROPIC_API_KEY
 
 on:
-  schedule:
-    - cron: "0 2 * * *"
   workflow_dispatch:
     inputs:
       limit:
