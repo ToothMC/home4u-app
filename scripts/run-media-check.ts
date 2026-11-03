@@ -17,8 +17,13 @@
  * Aufruf:
  *   npx tsx scripts/run-media-check.ts                  # 5000 Listings
  *   LIMIT=50000 CONCURRENCY=8 npx tsx scripts/run-media-check.ts
- *   SOURCE=bazaraki npx tsx scripts/run-media-check.ts  # nur eine Quelle
+ *   SOURCE=index_cy npx tsx scripts/run-media-check.ts  # nur eine Quelle
  *   RECHECK_DAYS=30 npx tsx scripts/run-media-check.ts  # Geprüfte auffrischen
+ *
+ * Bazaraki wird seit 2026-11-03 nicht mehr geprüft: Bazaraki sperrt unseren
+ * Indexer gezielt (403 nur für die Home4U-Kennung, derselbe Anschluss mit
+ * anderem User-Agent bekommt 200) — das ist ein Nein, das wir respektieren.
+ * Darum fragt der Lauf jede Quelle einzeln ab und lässt bazaraki aus.
  *
  * Idempotent: nimmt sich immer die am längsten nicht geprüften zuerst
  * (media_checked_at NULLS FIRST), ein Abbruch kostet also nur den
@@ -32,8 +37,16 @@ const BATCH = parseInt(process.env.BATCH ?? "1000", 10);
 const CONCURRENCY = parseInt(process.env.CONCURRENCY ?? "6", 10);
 const TIMEOUT_MS = parseInt(process.env.TIMEOUT_MS ?? "15000", 10);
 const RECHECK_DAYS = parseInt(process.env.RECHECK_DAYS ?? "0", 10);
-// Leerer String (Workflow ohne Auswahl) = alle Quellen.
+// Leerer String (Workflow ohne Auswahl) = alle Quellen außer den gesperrten.
 const SOURCE = process.env.SOURCE?.trim() || null;
+/** Quellen, bei denen wir nichts mehr abrufen (siehe Kopfkommentar). */
+const BLOCKED_SOURCES = new Set(["bazaraki"]);
+const CHECKED_SOURCES = ["bsc", "index_cy", "cyprus_real_estate", "cy_developer", "direct"];
+if (SOURCE && BLOCKED_SOURCES.has(SOURCE)) {
+  console.error(`SOURCE=${SOURCE} ist abgeschaltet — dort rufen wir nichts mehr ab.`);
+  process.exit(1);
+}
+const SOURCES = SOURCE ? [SOURCE] : CHECKED_SOURCES;
 const DRY_RUN = process.env.DRY_RUN === "1";
 
 /**
@@ -207,7 +220,7 @@ function printHostStats() {
   }
 }
 
-async function fetchBatch(size: number, offset: number): Promise<Row[]> {
+async function fetchBatch(source: string, size: number, offset: number): Promise<Row[]> {
   // RPC statt PostgREST-Filter: "ungeprüft ODER älter als N Tage" als ein
   // OR-Filter lief über den ganzen Index (44 s, 8-s-Limit gerissen). Die
   // RPC fragt beide Teile getrennt ab (Migration 20261026190000).
@@ -215,7 +228,7 @@ async function fetchBatch(size: number, offset: number): Promise<Row[]> {
   // wird gesetzt), also immer Offset 0. Im Trockenlauf schreiben wir nichts
   // — da müssen wir per Offset blättern, sonst prüfen wir ewig dieselben.
   const { data, error } = await supabase.rpc("media_check_queue", {
-    p_source: SOURCE,
+    p_source: source,
     p_recheck_days: RECHECK_DAYS,
     p_limit: size,
     p_offset: DRY_RUN ? offset : 0,
@@ -227,7 +240,7 @@ async function fetchBatch(size: number, offset: number): Promise<Row[]> {
 async function main() {
   console.log(
     `media-check: limit=${LIMIT} batch=${BATCH} concurrency=${CONCURRENCY}` +
-      `${SOURCE ? ` source=${SOURCE}` : ""}${RECHECK_DAYS ? ` recheck=${RECHECK_DAYS}d` : ""}`,
+      ` sources=${SOURCES.join(",")}${RECHECK_DAYS ? ` recheck=${RECHECK_DAYS}d` : ""}`,
   );
 
   const t0 = Date.now();
@@ -236,51 +249,57 @@ async function main() {
   let totalDead = 0;
   let totalUnknown = 0;
 
-  while (seen < LIMIT) {
-    const rows = await fetchBatch(Math.min(BATCH, LIMIT - seen), seen);
-    if (rows.length === 0) {
-      console.log("Keine ungeprüften Listings mehr — fertig.");
-      break;
-    }
+  for (const source of SOURCES) {
+    let sourceSeen = 0;
+    console.log(`Quelle ${source}:`);
+    while (seen < LIMIT) {
+      const rows = await fetchBatch(source, Math.min(BATCH, LIMIT - seen), sourceSeen);
+      if (rows.length === 0) {
+        console.log(`  ${source}: keine ungeprüften Listings mehr.`);
+        break;
+      }
 
-    const { ok, dead, unknown } = await runPool(rows);
+      const { ok, dead, unknown } = await runPool(rows);
 
-    // Kein einziges Ergebnis: Diese Zeilen kommen beim nächsten Abruf
-    // unverändert wieder (media_checked_at bleibt NULL). Weiterzumachen
-    // wäre eine Endlosschleife bis LIMIT.
-    if (ok.length === 0 && dead.length === 0) {
-      console.log(`  ${rows.length} Zeilen ohne Ergebnis (alle unklar) — Stopp, nächster Lauf versucht es erneut.`);
-      totalUnknown += unknown;
+      // Kein einziges Ergebnis: Diese Zeilen kommen beim nächsten Abruf
+      // unverändert wieder (media_checked_at bleibt NULL). Weiterzumachen
+      // wäre eine Endlosschleife bis LIMIT.
+      if (ok.length === 0 && dead.length === 0) {
+        console.log(`  ${rows.length} Zeilen ohne Ergebnis (alle unklar) — Stopp, nächster Lauf versucht es erneut.`);
+        totalUnknown += unknown;
+        seen += rows.length;
+        sourceSeen += rows.length;
+        break;
+      }
+
+      // Erst Plausibilitaet, dann schreiben — ein geblockter Runner darf
+      // keine Zeile anfassen.
+      assertPlausible();
+
+      if (DRY_RUN) {
+        console.log(`  [dry-run] wuerde ok=${ok.length} tot=${dead.length} schreiben`);
+      } else {
+        const { error } = await supabase.rpc("set_media_check_results", {
+          p_ok: ok,
+          p_dead: dead,
+        });
+        if (error) throw new Error(`Schreiben fehlgeschlagen: ${error.message}`);
+      }
+
       seen += rows.length;
-      break;
+      sourceSeen += rows.length;
+      totalOk += ok.length;
+      totalDead += dead.length;
+      totalUnknown += unknown;
+
+      const pct = totalOk + totalDead > 0
+        ? ((totalDead / (totalOk + totalDead)) * 100).toFixed(1)
+        : "0.0";
+      console.log(
+        `  ${seen}/${LIMIT} geprüft — ok=${totalOk} tot=${totalDead} (${pct}%) ` +
+          `unklar=${totalUnknown} — ${Math.round((Date.now() - t0) / 1000)}s`,
+      );
     }
-
-    // Erst Plausibilitaet, dann schreiben — ein geblockter Runner darf
-    // keine Zeile anfassen.
-    assertPlausible();
-
-    if (DRY_RUN) {
-      console.log(`  [dry-run] wuerde ok=${ok.length} tot=${dead.length} schreiben`);
-    } else {
-      const { error } = await supabase.rpc("set_media_check_results", {
-        p_ok: ok,
-        p_dead: dead,
-      });
-      if (error) throw new Error(`Schreiben fehlgeschlagen: ${error.message}`);
-    }
-
-    seen += rows.length;
-    totalOk += ok.length;
-    totalDead += dead.length;
-    totalUnknown += unknown;
-
-    const pct = totalOk + totalDead > 0
-      ? ((totalDead / (totalOk + totalDead)) * 100).toFixed(1)
-      : "0.0";
-    console.log(
-      `  ${seen}/${LIMIT} geprüft — ok=${totalOk} tot=${totalDead} (${pct}%) ` +
-        `unklar=${totalUnknown} — ${Math.round((Date.now() - t0) / 1000)}s`,
-    );
   }
 
   const mins = ((Date.now() - t0) / 60000).toFixed(1);

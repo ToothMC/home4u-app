@@ -19,6 +19,10 @@ name: Media Availability Check (Daily)
 # Schritt (Bazaraki page check) prüft genau diese Inserate auf der Seite:
 # 404 → stale, 200 → last_seen frisch.
 #
+# Seit 2026-11-03 ohne Bazaraki: Bazaraki sperrt unseren Indexer gezielt,
+# wir rufen dort nichts mehr ab (weder Bilder noch Seiten). Das Skript lässt
+# bazaraki aus, der Bazaraki page check ist entfernt.
+#
 # runs-on: mac-mini (NICHT ubuntu-latest). cdn1.bazaraki.com liegt hinter
 # Cloudflare, und CF sperrt Datacenter-IPs gern pauschal. Von einem
 # GitHub-Hosted-Runner sähen wir womöglich 403 für ALLES und würden den
@@ -45,7 +49,6 @@ on:
         type: choice
         options:
           - ""
-          - bazaraki
           - index_cy
           - bsc
           - cyprus_real_estate
@@ -53,10 +56,6 @@ on:
         description: "Bereits geprüfte nach N Tagen erneut prüfen (0 = nur ungeprüfte)"
         required: false
         default: "7"
-      page_check_limit:
-        description: "Bazaraki-Seitenprüfung: max. Inserate (Smoke-Test: klein halten)"
-        required: false
-        default: "15000"
       dry_run:
         description: "Nur messen, nichts schreiben"
         required: false
@@ -99,17 +98,3 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           CONCURRENCY: "8"
         run: npx tsx scripts/run-media-check.ts
-
-      # Gelöschte Bazaraki-Inserate verifiziert stilllegen: Titelbild weg
-      # (media_ok=false, oben gesetzt) UND Seite 404 → stale; Seite 200 →
-      # last_seen frisch. Der Crawler-Pre-Touch lässt media_ok=false aus,
-      # das hier ist ihr einziges Lebenszeichen. Details im Skript-Kopf.
-      - name: Bazaraki page check
-        if: ${{ !inputs.source || inputs.source == 'bazaraki' }}
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
-          LIMIT: ${{ inputs.page_check_limit || '15000' }}
-          MAX_MINUTES: "50"
-        run: npx tsx scripts/run-bazaraki-page-check.ts

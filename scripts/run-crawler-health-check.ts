@@ -27,8 +27,9 @@ type SourceConfig = {
 // INDEX.cy ~20k, CRE ~1k, cy_developer ~100. Schwellen liegen bei ~25-50%
 // vom typischen Tagesdurchsatz, damit ein einzelner partieller Lauf reicht
 // um den Alarm fern zu halten, zwei in Folge aber zuschlagen.
+// bazaraki ist seit 2026-11-03 raus: Bazaraki sperrt unseren Indexer, der
+// Crawler ist abgeschaltet. Ein Check darauf wäre dauerhaft rot.
 const SOURCES: SourceConfig[] = [
-  { source: "bazaraki", minSeen24h: 5000, maxHoursSinceSeen: 30 },
   { source: "index_cy", minSeen24h: 5000, maxHoursSinceSeen: 30 },
   // bsc fehlte hier, obwohl crawler_health_snapshot die Zahlen seit
   // Migration 20260907120000 ausdrücklich mitliefert ("cover bsc/fb") —
@@ -99,73 +100,6 @@ async function main() {
         `${cfg.source}: nur ${r.seen_24h} Listings in 24h gesehen (min ${cfg.minSeen24h}) — Crawler partiell.`,
       );
     }
-  }
-
-  // ──────────────────────────────────────────────────────────────────────
-  // City-aware Check (Bazaraki)
-  // ──────────────────────────────────────────────────────────────────────
-  // Source-Aggregat allein hat den 22-Tage-Ausfall von Nicosia/Famagusta
-  // nicht erwischt — bazaraki insgesamt war grün, weil Limassol/Paphos
-  // weiter crawlten. Hier prüfen wir pro (bazaraki, City) ob in den letzten
-  // CITY_MAX_HOURS Stunden ein last_seen registriert wurde.
-  //
-  // 48h als Schwelle: Workflow läuft 4×/Tag, also alle 6h sollte refresh
-  // kommen. 48h ≈ 8 fehlgeschlagene Iterationen — definitiv kein normaler
-  // Aussetzer. Bei Fail bekommt man eine Mail VIEL früher als bei 22 Tagen.
-  const CITIES = ["Paphos", "Limassol", "Nicosia", "Larnaca", "Famagusta"];
-  const CITY_MAX_HOURS = 48;
-  console.log(
-    `\nCity-aware Check (bazaraki, max ${CITY_MAX_HOURS}h pro City):`,
-  );
-  // Zwei Stufen, damit der teure top-N Sort über 26k Limassol-Zeilen nicht
-  // ins Statement-Timeout läuft (Inzident 2026-05-27, 8s service_role-Limit):
-  //   1) schneller Probe-Query mit last_seen-Zeitfenster → Index-Lookup, <1ms
-  //   2) nur bei Miss der teure Sort, um das tatsächliche max(last_seen) für
-  //      die Fehlermeldung zu finden.
-  const cutoffIso = new Date(Date.now() - CITY_MAX_HOURS * 3600_000).toISOString();
-  for (const city of CITIES) {
-    const { data: fresh, error: probeErr } = await supabase
-      .from("listings")
-      .select("last_seen")
-      .eq("source", "bazaraki")
-      .eq("location_city", city)
-      .gt("last_seen", cutoffIso)
-      .limit(1);
-    if (probeErr) {
-      failures.push(`bazaraki/${city}: Query-Fehler — ${probeErr.message}`);
-      continue;
-    }
-    if (fresh && fresh.length > 0) {
-      const lastSeen = fresh[0].last_seen as string;
-      const hoursSince = (Date.now() - new Date(lastSeen).getTime()) / 3600_000;
-      console.log(`  ✓ bazaraki/${city.padEnd(10)} last_seen=${lastSeen} (${hoursSince.toFixed(1)}h)`);
-      continue;
-    }
-    // Kein frisches Listing — jetzt teurer Sort für den genauen Wert.
-    const { data: stale, error: staleErr } = await supabase
-      .from("listings")
-      .select("last_seen")
-      .eq("source", "bazaraki")
-      .eq("location_city", city)
-      .order("last_seen", { ascending: false })
-      .limit(1);
-    if (staleErr) {
-      failures.push(`bazaraki/${city}: Query-Fehler — ${staleErr.message}`);
-      continue;
-    }
-    const lastSeen = stale?.[0]?.last_seen ?? null;
-    if (!lastSeen) {
-      console.log(`  ✗ bazaraki/${city.padEnd(10)} kein Listing in der DB`);
-      failures.push(
-        `bazaraki/${city}: kein einziges Listing in der DB — Crawler-Pfad kaputt?`,
-      );
-      continue;
-    }
-    const hoursSince = (Date.now() - new Date(lastSeen).getTime()) / 3600_000;
-    console.log(`  ✗ bazaraki/${city.padEnd(10)} last_seen=${lastSeen} (${hoursSince.toFixed(1)}h)`);
-    failures.push(
-      `bazaraki/${city}: last_seen vor ${hoursSince.toFixed(1)}h (max ${CITY_MAX_HOURS}h) — diese City wird nicht mehr gecrawlt, obwohl andere Cities frisch sind.`,
-    );
   }
 
   if (failures.length > 0) {
