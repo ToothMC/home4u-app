@@ -55,8 +55,13 @@ Env:
   RECHECK_SHARE: Anteil der Laufzeit für Recheck, solange beide Schlangen
     Arbeit haben (default 0.7)
   RECHECK_MAX_GONE_SHARE: Notbremse — mehr als dieser Anteil "gelöscht"
-    unter den Rechecks (ab 50 Stück) → nichts mehr stale setzen, Lauf rot
-    (default 0.5; erwartet sind ~5–15 %)
+    → nichts mehr stale setzen, Lauf rot (default 0.5). Maßstab sind die
+    NEUEN Inserate aus der Sitemap (ab 30 Stück): die sind fast alle live,
+    werden sie massenhaft "gelöscht", ist die Erkennung kaputt. Die Rechecks
+    selbst taugen nicht als Maßstab — sie kommen älteste zuerst, und die
+    ältesten sind oft wirklich weg (2026-11-01: ~400 Inserate von Mai, 100 %
+    gelöscht, Bremse griff jeden Lauf und legte sie nie still). Nur ohne
+    genug neue Inserate gilt der Recheck-Anteil (ab 50 Stück).
   ARCHIVED_CACHE_TTL_DAYS: gelöschte Sitemap-IDs so lange nicht neu holen
     (default 60). Datei: $BSC_STATE_DIR/archived_ids.tsv
     (default ~/.cache/home4u-bsc/, bleibt auf dem self-hosted Runner liegen)
@@ -194,6 +199,28 @@ def gone_share_exceeded(gone: int, alive: int, max_share: float, min_n: int = 50
     return n >= min_n and gone > max_share * n
 
 
+GUARD_OK, GUARD_WAIT, GUARD_TRIP = "ok", "wait", "trip"
+CANARY_MIN_N = 30
+
+
+def gone_guard(rc_gone: int, rc_alive: int, new_gone: int, new_alive: int,
+               max_share: float, *, final: bool) -> str:
+    """Notbremse: dürfen verifiziert gelöschte Rechecks stale gesetzt werden?
+
+    Kontrollgruppe sind die neuen Inserate aus der aktuellen Sitemap. Ist die
+    Löscherkennung kaputt (Format, Redirects), sind auch sie "gelöscht".
+    Fehlt die Kontrollgruppe noch, entscheidet der Recheck-Anteil; liegt der
+    zu hoch, wird gewartet (nicht verworfen) und erst am Laufende gebremst.
+    """
+    if new_gone + new_alive >= CANARY_MIN_N:
+        if gone_share_exceeded(new_gone, new_alive, max_share, min_n=CANARY_MIN_N):
+            return GUARD_TRIP
+        return GUARD_OK
+    if not gone_share_exceeded(rc_gone, rc_alive, max_share):
+        return GUARD_OK
+    return GUARD_TRIP if final else GUARD_WAIT
+
+
 def main() -> int:
     load_dotenv()
     _setup_logging()
@@ -296,6 +323,7 @@ def main() -> int:
     total_skipped_archived = 0
     total_errors = 0
     rc_alive = rc_touch = rc_upsert = rc_gone = rc_errors = 0
+    nw_alive = 0  # neue Inserate, die live waren (Kontrollgruppe der Notbremse)
     total_marked_stale = 0
     total_touched = 0
     gone_known: list[str] = []
@@ -359,17 +387,33 @@ def main() -> int:
                 log.warning("touch_ids(%d) fehlgeschlagen: %s", len(touch_pending), e)
         touch_pending = []
 
-    def flush_gone() -> None:
-        nonlocal gone_known, total_marked_stale, gone_guard_tripped
+    guard_wait_logged = False
+
+    def flush_gone(final: bool = False) -> None:
+        nonlocal gone_known, total_marked_stale, gone_guard_tripped, guard_wait_logged
         if not gone_known:
             return
-        if gone_share_exceeded(rc_gone, rc_alive, max_gone_share):
-            if not gone_guard_tripped:
-                log.error(
-                    "NOTBREMSE: %d von %d Rechecks 'gelöscht' (> %.0f %%) — setze nichts "
-                    "stale. BSC-Seitenformat/Redirects prüfen.",
-                    rc_gone, rc_gone + rc_alive, max_gone_share * 100,
+        if gone_guard_tripped:
+            gone_known = []
+            return
+        verdict = gone_guard(rc_gone, rc_alive, len(gone_new), nw_alive,
+                             max_gone_share, final=final)
+        if verdict == GUARD_WAIT:
+            if not guard_wait_logged:
+                log.info(
+                    "  Notbremse wartet: %d von %d Rechecks 'gelöscht', aber erst %d neue "
+                    "als Kontrolle — halte %d zurück",
+                    rc_gone, rc_gone + rc_alive, len(gone_new) + nw_alive, len(gone_known),
                 )
+                guard_wait_logged = True
+            return
+        if verdict == GUARD_TRIP:
+            log.error(
+                "NOTBREMSE: neue Inserate %d von %d 'gelöscht', Rechecks %d von %d "
+                "(Grenze %.0f %%) — setze nichts stale. BSC-Seitenformat/Redirects prüfen.",
+                len(gone_new), len(gone_new) + nw_alive,
+                rc_gone, rc_gone + rc_alive, max_gone_share * 100,
+            )
             gone_guard_tripped = True
             gone_known = []
             return
@@ -420,6 +464,7 @@ def main() -> int:
                     rc_touch += 1
                     touch_pending.append(item.listing_id)
             else:
+                nw_alive += 1
                 batch.append(p)
         elif status == STATUS_ARCHIVED:
             total_skipped_archived += 1
@@ -451,7 +496,7 @@ def main() -> int:
 
     flush_batch()
     flush_touch()
-    flush_gone()
+    flush_gone(final=True)
     if gone_new and not dry_run:
         archived_cache.append(cache_path, gone_new)
     log.info(

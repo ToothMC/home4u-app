@@ -132,6 +132,19 @@ def test_gone_share_guard():
     assert m.gone_share_exceeded(60, 40, 0.5)
 
 
+def test_gone_guard_uses_new_listings_as_control():
+    ok, wait, trip = m.GUARD_OK, m.GUARD_WAIT, m.GUARD_TRIP
+    # alte Rechecks 100 % weg, neue alle live → echte Löschungen, stilllegen
+    assert m.gone_guard(400, 0, 0, 60, 0.5, final=False) == ok
+    # neue auch massenhaft "weg" → Erkennung kaputt
+    assert m.gone_guard(400, 0, 40, 20, 0.5, final=False) == trip
+    # noch keine Kontrollgruppe: Recheck-Anteil normal → ok
+    assert m.gone_guard(20, 80, 0, 5, 0.5, final=False) == ok
+    # noch keine Kontrollgruppe, Recheck-Anteil hoch → warten, am Ende bremsen
+    assert m.gone_guard(200, 0, 0, 10, 0.5, final=False) == wait
+    assert m.gone_guard(200, 0, 0, 10, 0.5, final=True) == trip
+
+
 def test_scheduler_time_share_with_unequal_costs():
     """Neu kostet 4,5 s, Recheck 1,3 s — Zeitanteil soll ~70 % bleiben."""
     t = {True: 0.0, False: 0.0}
@@ -188,7 +201,9 @@ def test_run_backlog_does_not_starve_recheck(monkeypatch, tmp_path):
     monkeypatch.setattr(m, "BscSession", lambda: None)
 
     sitemap = [lurl(str(100000 + i)) for i in range(5000)]       # alles neu
-    gone_new = {u.listing_id for u in sitemap[:300]}              # vorne tote
+    # vorne jede dritte tot — real sind es ~0 % (Läufe 2026-11-01..03:
+    # 0 von je ~1.800 neuen), mehr als die Hälfte hieße: Erkennung kaputt
+    gone_new = {u.listing_id for u in sitemap[:300:3]}
     cands = [{"external_id": str(i), "source_url": url_for(str(i)), "price": 350000,
               "last_seen": "2026-05-18"} for i in range(1, 3001)]
     gone_rc = {str(i) for i in range(1, 3001) if i % 8 == 0}     # 12,5 % gelöscht
@@ -252,4 +267,56 @@ def test_run_guard_stops_mass_stale(monkeypatch, tmp_path):
     monkeypatch.setattr(m, "_mark_stale_rpc", lambda: 0)
 
     assert m.main() == 1
+    assert stale == []
+
+
+def _guard_run(monkeypatch, tmp_path, new_gone: bool):
+    """Wie 2026-11-01: vorne in der Recheck-Schlange 400 alte, wirklich
+    gelöschte Inserate, dahinter lebende; dazu neue aus der Sitemap."""
+    clock = Clock()
+    monkeypatch.setattr(m, "time", clock)
+    monkeypatch.setenv("SUPABASE_URL", "http://x")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "k")
+    monkeypatch.setenv("BSC_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("SKIP_PHASH", "1")
+    for k in ("MAX_LISTINGS", "DRY_RUN", "FORCE_REFETCH", "DEFER_MARKET_POSITION",
+              "RECHECK_SHARE", "RECHECK_PER_RUN", "RECHECK_MAX_GONE_SHARE"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(m, "BscSession", lambda: None)
+    sitemap = [lurl(str(100000 + i)) for i in range(400)]
+    cands = [{"external_id": str(i), "source_url": url_for(str(i)), "price": 350000}
+             for i in range(1, 1001)]
+    dead_rc = {str(i) for i in range(1, 401)}
+    monkeypatch.setattr(m, "discover_all_listings", lambda s: sitemap)
+    monkeypatch.setattr(m, "lookup_known_ids", lambda ids: (set(), set()))
+    monkeypatch.setattr(m, "recheck_candidates", lambda age, lim: cands[:lim])
+
+    def fake_check(session, item):
+        lid = item.listing_id
+        clock.t += 0.3
+        if lid in dead_rc or (new_gone and int(lid) >= 100000):
+            return STATUS_ARCHIVED, None
+        p = detail.ParsedListing.__new__(detail.ParsedListing)
+        p.listing_id, p.price, p.media, p.detail_url = lid, 350000.0, [], item.detail_url
+        return STATUS_ACTIVE, p
+
+    monkeypatch.setattr(m, "check_detail", fake_check)
+    stale = []
+    monkeypatch.setattr(m, "mark_stale_ids", lambda ids: stale.extend(ids) or len(ids))
+    monkeypatch.setattr(m, "touch_ids", lambda ids: len(ids))
+    monkeypatch.setattr(m, "upsert_listings",
+                        lambda b: {"inserted": len(b), "updated": 0, "failed": []})
+    monkeypatch.setattr(m, "_mark_stale_rpc", lambda: 0)
+    return m.main(), stale, dead_rc
+
+
+def test_run_old_dead_block_is_retired_not_braked(monkeypatch, tmp_path):
+    rc, stale, dead_rc = _guard_run(monkeypatch, tmp_path, new_gone=False)
+    assert rc == 0
+    assert set(stale) == dead_rc
+
+
+def test_run_guard_trips_when_new_listings_also_look_gone(monkeypatch, tmp_path):
+    rc, stale, _ = _guard_run(monkeypatch, tmp_path, new_gone=True)
+    assert rc == 1
     assert stale == []
