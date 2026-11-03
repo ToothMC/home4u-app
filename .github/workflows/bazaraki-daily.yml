@@ -13,13 +13,14 @@ name: Daily Bazaraki Crawl
 # App Router), die Inserate stehen im RSC-Flight-Payload des HTML statt im
 # DOM. httpx genügt für Liste UND Detail — siehe bazaraki-crawler/src/flight.py.
 
+# ABGESCHALTET seit 2026-11-03: Bazaraki sperrt unseren Indexer gezielt —
+# 403 nur für die Kennung "Home4U-Indexer", derselbe Anschluss mit anderem
+# User-Agent bekommt 200. Das ist ein Nein, das wir respektieren: kein
+# Zeitplan mehr, und nicht mit getarntem User-Agent wieder einschalten.
+# Erst wieder starten, wenn Bazaraki zugestimmt hat.
 on:
-  schedule:
-    # 4× täglich alle 6h (00, 06, 12, 18 UTC). Pro Lauf max 90min Wall-Clock
-    # via MAX_RUNTIME_S; Streaming-Architektur persistiert nach jedem Subtype.
-    # Mehrere kürzere Läufe statt ein 5h-Marathon: jeder grün, Daten landen
-    # inkrementell, kein Datenverlust bei Job-Cancel.
-    - cron: "0 0,6,12,18 * * *"
+  # schedule:
+  #   - cron: "0 0,6,12,18 * * *"
   workflow_dispatch:
     inputs:
       cities:

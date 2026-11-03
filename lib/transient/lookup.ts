@@ -18,6 +18,8 @@ import {
 } from "./bazaraki-search";
 
 export const TRANSIENT_LIMIT_DEFAULT = 5;
+/** Live-Abfrage bei Bazaraki. Aus, siehe findTransientMatches. */
+export const TRANSIENT_BAZARAKI_ENABLED = false;
 /** Index-Treffer-Schwelle, ab der wir Transient zumischen. Wird von
  *  findMatchesForSession() aus Spec §5.1 gelesen (N_MIN = 3). */
 export const TRANSIENT_TRIGGER_BELOW = 3;
@@ -51,6 +53,11 @@ export async function findTransientMatches(
   profile: SearchProfile,
   limit = TRANSIENT_LIMIT_DEFAULT,
 ): Promise<TransientCandidate[]> {
+  // Abgeschaltet seit 2026-11-03: Bazaraki sperrt unseren Indexer gezielt.
+  // Diese Live-Suche ginge mit Browser-User-Agent durch — genau das tun wir
+  // nicht. Erst wieder einschalten, wenn Bazaraki zugestimmt hat.
+  if (!TRANSIENT_BAZARAKI_ENABLED) return [];
+
   const sb = createSupabaseServiceClient();
   if (!sb) return [];
 

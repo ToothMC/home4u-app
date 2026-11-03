@@ -29,8 +29,10 @@ const STALE_DAYS = parseInt(process.env.STALE_DAYS ?? "14", 10);
 // typischen Tagesdurchsatzes — ein partieller Lauf reicht, ein toter Crawler
 // triggert den Abort. Inzident 2026-05-06: bazaraki schaffte 6 Tage in Folge
 // nur ~100-600/Tag statt ~19k.
+// bazaraki fehlt seit 2026-11-03 bewusst: Bazaraki sperrt unseren Indexer,
+// der Crawler ist aus. Ohne frische Sichtungen würde der Sweep dort nur noch
+// abbrechen (Gate "zu wenige in 24h gesehen") und den Job rot halten.
 const SOURCES: Array<{ source: string; minRecentSeen: number }> = [
-  { source: "bazaraki", minRecentSeen: 5000 },
   { source: "index_cy", minRecentSeen: 5000 },
   { source: "cyprus_real_estate", minRecentSeen: 200 },
   { source: "bsc", minRecentSeen: 1000 },
